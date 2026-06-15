@@ -53,6 +53,35 @@ export interface Item {
   effect?: string;
   /** Item ids this item is built from (resolved from `component_items`). */
   componentIds: number[];
+  /** The full in-game shop card (stat block + passive/active abilities), for hover display. */
+  card?: ItemCard;
+}
+
+/** A run of card prose; `highlight` marks the in-game `<span class="highlight">` emphasis. */
+export interface TextSegment {
+  text: string;
+  highlight?: boolean;
+}
+
+/** One stat line on the shop card, e.g. value "+30%", label "Weapon Damage". */
+export interface CardStat {
+  label: string;
+  value: string;
+  /** An elevated/important property — the headline numbers of the section. */
+  strong?: boolean;
+}
+
+/** A section of the shop card: the passive stat block, or a passive/active ability. */
+export interface CardSection {
+  kind: 'innate' | 'passive' | 'active';
+  /** Ability description, parsed into plain/highlighted runs (absent for the stat block). */
+  text?: TextSegment[];
+  stats: CardStat[];
+}
+
+/** The shop card content assembled from the items asset's tooltip_sections + properties. */
+export interface ItemCard {
+  sections: CardSection[];
 }
 
 /** One node from /v1/analytics/item-flow-stats — an item bought within a phase column. */

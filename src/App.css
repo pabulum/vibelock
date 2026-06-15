@@ -282,6 +282,109 @@ body {
   color: var(--muted);
 }
 
+/* Hover shop card (portal-positioned; fixed to the viewport). */
+.itemcard {
+  position: fixed;
+  z-index: 50;
+  width: 300px;
+  max-height: calc(100vh - 16px);
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
+  pointer-events: none; /* a tooltip — never steals the cursor */
+  color: var(--text);
+  /* Portaled to document.body, so it's outside .app and won't inherit its font. */
+  font: 12.5px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+.itemcard .ic-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  color: #fff;
+}
+.itemcard .ic-head img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.4));
+}
+.itemcard .ic-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.itemcard .ic-name {
+  font-weight: 700;
+  font-size: 14px;
+}
+.itemcard .ic-sub {
+  font-size: 11px;
+  opacity: 0.85;
+}
+.itemcard .ic-sec {
+  padding: 8px 10px;
+  border-top: 1px solid var(--line);
+}
+.itemcard .ic-sec.active {
+  background: rgba(111, 177, 255, 0.06);
+}
+.itemcard .ic-kind {
+  display: inline-block;
+  margin-bottom: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.itemcard .ic-text {
+  margin: 0;
+  color: var(--text);
+}
+.itemcard .ic-text.plain {
+  color: var(--muted);
+}
+.itemcard .ic-text strong {
+  color: #fff;
+  font-weight: 700;
+}
+.itemcard .ic-stats {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.itemcard .ic-sec.innate .ic-stats {
+  margin-top: 0;
+}
+.itemcard .ic-stats li {
+  color: var(--muted);
+}
+.itemcard .ic-stats li.strong {
+  color: var(--text);
+}
+.itemcard .ic-stats .v {
+  display: inline-block;
+  min-width: 38px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.itemcard .ic-stats li.strong .v {
+  color: var(--accent);
+}
+.itemcard .ic-comp {
+  padding: 7px 10px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .banner {
   margin: 16px 22px;
   padding: 12px 16px;

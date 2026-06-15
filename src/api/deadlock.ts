@@ -4,13 +4,17 @@
 import type {
   Ability,
   AbilityOrderRow,
+  CardSection,
+  CardStat,
   Hero,
   HeroCounterRow,
   Item,
+  ItemCard,
   ItemFlowStats,
   ItemStat,
   Patch,
   SlotType,
+  TextSegment,
 } from '../types';
 
 const BASE = 'https://api.deadlock-api.com';
@@ -85,7 +89,7 @@ let itemsPromise: Promise<Map<number, Item>> | null = null;
 export function getItems(): Promise<Map<number, Item>> {
   if (itemsPromise) return itemsPromise;
   itemsPromise = (async () => {
-    const cacheKey = 'dl.items.v3';
+    const cacheKey = 'dl.items.v4';
     const hit = cached<Item[]>(cacheKey);
     const list = hit ?? buildItemList(await getRawItems());
     if (!hit) putCache(cacheKey, list);
@@ -160,7 +164,81 @@ function buildItemList(raw: RawItem[]): Item[] {
       componentIds: (i.component_items ?? [])
         .map((cn) => idByClass.get(cn))
         .filter((id): id is number => id !== undefined),
+      card: buildCard(i),
     }));
+}
+
+// Assemble the in-game shop card: each tooltip_section names property keys (and an
+// optional prose loc_string), which we resolve against the item's `properties` map.
+function buildCard(i: RawItem): ItemCard | undefined {
+  const props = i.properties ?? {};
+  const sections: CardSection[] = [];
+
+  for (const sec of i.tooltip_sections ?? []) {
+    const kind: CardSection['kind'] =
+      sec.section_type === 'innate' ? 'innate' : sec.section_type === 'active' ? 'active' : 'passive';
+    const stats: CardStat[] = [];
+    let text: TextSegment[] | undefined;
+
+    for (const sa of sec.section_attributes ?? []) {
+      if (sa.loc_string && !text) text = parseLoc(sa.loc_string);
+      // Bonuses in the stat block read as buffs, so sign them; ability props (cooldown…) don't.
+      const sign = kind === 'innate';
+      for (const key of sa.properties ?? []) pushStat(stats, props[key], false, sign);
+      for (const key of sa.elevated_properties ?? []) pushStat(stats, props[key], true, sign);
+      for (const key of sa.important_properties ?? []) pushStat(stats, props[key], true, sign);
+    }
+
+    if (text?.length || stats.length) sections.push({ kind, text, stats });
+  }
+
+  return sections.length ? { sections } : undefined;
+}
+
+function pushStat(out: CardStat[], p: RawProp | undefined, strong: boolean, sign: boolean): void {
+  if (!p) return;
+  const raw = p.value;
+  if (raw === undefined || raw === null) return;
+  const s = String(raw).trim();
+  if (!s) return;
+  // disable_value / 0 means the stat is inactive for this item — skip it.
+  if (p.disable_value !== undefined && s === String(p.disable_value)) return;
+  const label = (p.label ?? '').trim();
+  if (!label) return; // label-less props are values inlined into the prose (e.g. thresholds)
+
+  const numeric = /^-?\d+(?:\.\d+)?$/.test(s);
+  if (numeric && Number(s) === 0) return;
+  const n = numeric ? Number(s) : NaN;
+  let value = (numeric ? String(n) : s) + (p.postfix ?? '');
+  if (sign && numeric && n > 0) value = `+${value}`;
+  out.push({ label, value, strong });
+}
+
+// loc_string carries markup: inline <svg> damage-type icons (drop them) and
+// <span class="highlight"> emphasis (keep, flagged). Everything else is stripped.
+function parseLoc(s: string): TextSegment[] {
+  const noSvg = s.replace(/<svg[\s\S]*?<\/svg>/gi, ' ');
+  const re = /<span[^>]*class="highlight"[^>]*>([\s\S]*?)<\/span>/gi;
+  const segs: TextSegment[] = [];
+  const add = (chunk: string, highlight: boolean) => {
+    const clean = chunk.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ');
+    if (clean !== '') segs.push({ text: clean, highlight });
+  };
+
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(noSvg))) {
+    add(noSvg.slice(last, m.index), false);
+    add(m[1], true);
+    last = re.lastIndex;
+  }
+  add(noSvg.slice(last), false);
+
+  if (segs.length) {
+    segs[0].text = segs[0].text.replace(/^ /, '');
+    segs[segs.length - 1].text = segs[segs.length - 1].text.replace(/ $/, '');
+  }
+  return segs.filter((seg) => seg.text !== '');
 }
 
 // Human labels for the headline stats of items that lack a prose description.
@@ -348,10 +426,25 @@ interface RawItem {
   image?: string;
   description?: { desc?: string } | string | null;
   is_active_item?: boolean;
+  properties?: Record<string, RawProp>;
   tooltip_sections?: Array<{
-    section_attributes?: Array<{ elevated_properties?: string[] }>;
+    section_type?: string | null;
+    section_attributes?: Array<{
+      loc_string?: string;
+      properties?: string[];
+      elevated_properties?: string[];
+      important_properties?: string[];
+    }>;
   }>;
   component_items?: string[];
+}
+
+interface RawProp {
+  value?: string | number;
+  postfix?: string;
+  label?: string;
+  /** When `value` equals this, the stat is inactive for the item and not shown. */
+  disable_value?: string;
 }
 
 interface RawPatch {

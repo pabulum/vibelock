@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
+import { createPortal } from 'react-dom';
 import './App.css';
 import {
   getAbilities,
@@ -341,7 +350,7 @@ export default function App() {
             </p>
           ) : (
             <div className="counter-grid">
-              {counters?.map((c) => <CounterCard key={c.item.id} c={c} />)}
+              {counters?.map((c) => <CounterCard key={c.item.id} c={c} items={items} />)}
             </div>
           )}
           <p className="hint">
@@ -377,14 +386,14 @@ export default function App() {
 
               <h3 className="grouphdr core">Build</h3>
               {phase.core.length ? (
-                phase.core.map((b) => <ItemRow key={b.item.id} b={b} />)
+                phase.core.map((b) => <ItemRow key={b.item.id} b={b} items={items} />)
               ) : (
                 <p className="empty">No clear staple here.</p>
               )}
 
               <h3 className="grouphdr situational">Situational swaps</h3>
               {phase.situational.length ? (
-                phase.situational.map((b) => <ItemRow key={b.item.id} b={b} muted />)
+                phase.situational.map((b) => <ItemRow key={b.item.id} b={b} items={items} muted />)
               ) : (
                 <p className="empty">—</p>
               )}
@@ -529,10 +538,10 @@ function MatchupChip({
   );
 }
 
-function CounterCard({ c }: { c: CounterItem }) {
+function CounterCard({ c, items }: { c: CounterItem; items: Map<number, Item> | null }) {
   const color = SLOT_COLORS[c.item.slot] ?? SLOT_COLORS.unknown;
   return (
-    <div className="counter" style={{ borderLeftColor: color }}>
+    <ItemHover item={c.item} items={items} className="counter" style={{ borderLeftColor: color }}>
       <div className="icon" style={{ background: color }}>
         {c.item.image ? <img src={c.item.image} alt="" loading="lazy" /> : null}
       </div>
@@ -550,18 +559,27 @@ function CounterCard({ c }: { c: CounterItem }) {
           <span className="pick">{c.phaseLabel}</span>
         </div>
       </div>
-    </div>
+    </ItemHover>
   );
 }
 
-function ItemRow({ b, muted = false }: { b: BuildItem; muted?: boolean }) {
+function ItemRow({
+  b,
+  items,
+  muted = false,
+}: {
+  b: BuildItem;
+  items: Map<number, Item> | null;
+  muted?: boolean;
+}) {
   const color = SLOT_COLORS[b.item.slot] ?? SLOT_COLORS.unknown;
   const reason = b.transient && b.transientReason ? b.transientReason : null;
   return (
-    <div
+    <ItemHover
+      item={b.item}
+      items={items}
       className={`item ${muted ? 'muted' : ''} ${b.transient ? 'transient' : ''}`}
       style={{ borderLeftColor: color }}
-      title={reason ? `${reason} — ${b.why}` : b.why}
     >
       <div className="icon" style={{ background: color }}>
         {b.item.image ? <img src={b.item.image} alt="" loading="lazy" /> : null}
@@ -587,7 +605,115 @@ function ItemRow({ b, muted = false }: { b: BuildItem; muted?: boolean }) {
         </div>
         <div className="why">{reason ? <span className="reason">{reason}</span> : b.why}</div>
       </div>
+    </ItemHover>
+  );
+}
+
+// A row/cell that reveals the item's full shop card on hover. It *is* the styled
+// element (className/style passed through), so there's no extra wrapper. The card is
+// rendered in a portal (anchored to this element's rect) so the row can't clip it.
+function ItemHover({
+  item,
+  items,
+  className,
+  style,
+  children,
+}: {
+  item: Item;
+  items: Map<number, Item> | null;
+  className?: string;
+  style?: CSSProperties;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  return (
+    <div
+      ref={ref}
+      className={className}
+      style={style}
+      onMouseEnter={() => ref.current && setAnchor(ref.current.getBoundingClientRect())}
+      onMouseLeave={() => setAnchor(null)}
+    >
+      {children}
+      {anchor && <ItemCard item={item} items={items} anchor={anchor} />}
     </div>
+  );
+}
+
+const CARD_GAP = 10;
+
+function ItemCard({
+  item,
+  items,
+  anchor,
+}: {
+  item: Item;
+  items: Map<number, Item> | null;
+  anchor: DOMRect;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Render off-screen first, then measure to flip left/right and clamp vertically.
+  const [pos, setPos] = useState({ left: -9999, top: -9999 });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const { offsetWidth: w, offsetHeight: h } = el;
+    const left =
+      anchor.right + CARD_GAP + w <= window.innerWidth
+        ? anchor.right + CARD_GAP
+        : Math.max(8, anchor.left - CARD_GAP - w);
+    const top = Math.max(8, Math.min(anchor.top, window.innerHeight - 8 - h));
+    setPos({ left, top });
+  }, [anchor]);
+
+  const color = SLOT_COLORS[item.slot] ?? SLOT_COLORS.unknown;
+  const components = item.componentIds
+    .map((id) => items?.get(id)?.name)
+    .filter((n): n is string => !!n);
+
+  return createPortal(
+    <div ref={ref} className="itemcard" style={{ left: pos.left, top: pos.top, borderColor: color }}>
+      <div className="ic-head" style={{ background: color }}>
+        {item.image && <img src={item.image} alt="" />}
+        <div className="ic-title">
+          <span className="ic-name">{item.name}</span>
+          <span className="ic-sub">
+            T{item.tier} · {item.cost.toLocaleString()} souls
+          </span>
+        </div>
+      </div>
+
+      {item.card?.sections.map((s, i) => (
+        <div className={`ic-sec ${s.kind}`} key={i}>
+          {s.kind !== 'innate' && (
+            <span className="ic-kind">{s.kind === 'active' ? 'Active' : 'Passive'}</span>
+          )}
+          {s.text && s.text.length > 0 && (
+            <p className="ic-text">
+              {s.text.map((seg, j) =>
+                seg.highlight ? <strong key={j}>{seg.text}</strong> : <span key={j}>{seg.text}</span>,
+              )}
+            </p>
+          )}
+          {s.stats.length > 0 && (
+            <ul className="ic-stats">
+              {s.stats.map((st, j) => (
+                <li key={j} className={st.strong ? 'strong' : undefined}>
+                  <span className="v">{st.value}</span> {st.label}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+
+      {!item.card && item.effect && <p className="ic-text plain">{item.effect}</p>}
+      {components.length > 0 && (
+        <div className="ic-comp">Builds from: {components.join(', ')}</div>
+      )}
+    </div>,
+    document.body,
   );
 }
 
