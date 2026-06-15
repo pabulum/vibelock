@@ -1,0 +1,603 @@
+import { useEffect, useMemo, useState } from 'react';
+import './App.css';
+import {
+  getAbilities,
+  getAbilityOrder,
+  getHeroCounters,
+  getHeroes,
+  getItemFlowStats,
+  getItems,
+  getItemStats,
+  getPatches,
+  type TimeWindow,
+} from './api/deadlock';
+import { assembleArchetypes, pickSignatures } from './lib/archetypes';
+import { SLOT_CAP, SLOT_COLORS } from './lib/buildGenerator';
+import { computeCounters } from './lib/counters';
+import { heroMatchups } from './lib/matchups';
+import { RANK_TIERS, rankFloorLabel, tierToMinBadge } from './lib/ranks';
+import { bestSkillBuild } from './lib/skills';
+import type {
+  Ability,
+  ArchetypeKey,
+  ArchetypeSet,
+  BuildItem,
+  CounterItem,
+  Hero,
+  HeroCounterRow,
+  Matchup,
+  Patch,
+  Item,
+  SkillBuild,
+} from './types';
+
+// Distinct colors for a hero's four abilities.
+const ABILITY_COLORS = ['#6fb1ff', '#e0a23c', '#5fc08a', '#cc6db1'];
+
+/** Time window for a chosen patch index (null = last 30 days). Patches are newest-first. */
+function windowFor(patches: Patch[], idx: number | null): TimeWindow {
+  if (idx === null || !patches[idx]) return {};
+  return {
+    minUnixTimestamp: patches[idx].ts,
+    maxUnixTimestamp: idx > 0 ? patches[idx - 1].ts : undefined,
+  };
+}
+
+export default function App() {
+  const [heroes, setHeroes] = useState<Hero[]>([]);
+  const [items, setItems] = useState<Map<number, Item> | null>(null);
+  const [patches, setPatches] = useState<Patch[]>([]);
+  const [heroId, setHeroId] = useState<number | null>(null);
+  const [tier, setTier] = useState<number>(11); // default Eternus
+  const [patchIdx, setPatchIdx] = useState<number | null>(null); // null = last 30 days
+  const [enemies, setEnemies] = useState<number[]>([]);
+
+  const [archetypeSet, setArchetypeSet] = useState<ArchetypeSet | null>(null);
+  const [archKey, setArchKey] = useState<ArchetypeKey>('all');
+  const [counterMatrix, setCounterMatrix] = useState<HeroCounterRow[] | null>(null);
+  const [abilities, setAbilities] = useState<Map<number, Ability> | null>(null);
+  const [skillBuild, setSkillBuild] = useState<SkillBuild | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [counters, setCounters] = useState<CounterItem[] | null>(null);
+  const [countersLoading, setCountersLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load assets once.
+  useEffect(() => {
+    Promise.all([getHeroes(), getItems(), getPatches(), getAbilities()])
+      .then(([h, i, p, a]) => {
+        setHeroes(h);
+        setItems(i);
+        setPatches(p);
+        setAbilities(a);
+        if (h.length) setHeroId(h[0].id);
+      })
+      .catch((e) => setError(String(e)));
+  }, []);
+
+  const hero = useMemo(() => heroes.find((h) => h.id === heroId) ?? null, [heroes, heroId]);
+  const minBadge = tierToMinBadge(tier);
+
+  // Generate builds, split by archetype for flex heroes.
+  useEffect(() => {
+    if (!hero || !items) return;
+    const ctrl = new AbortController();
+    setLoading(true);
+    setError(null);
+
+    const window = windowFor(patches, patchIdx);
+    const flowFor = (includeItemIds?: number[]) =>
+      getItemFlowStats({ heroId: hero.id, minBadge, ...window, includeItemIds, signal: ctrl.signal });
+
+    (async () => {
+      // Base population + buy times (for buy-order), in parallel.
+      const [base, stats] = await Promise.all([
+        flowFor(),
+        getItemStats({ heroId: hero.id, minBadge, ...window, signal: ctrl.signal }),
+      ]);
+      const buyTimes = new Map(stats.map((s) => [s.item_id, s.avg_buy_time_s]));
+      const sellTimes = new Map(stats.map((s) => [s.item_id, s.avg_sell_time_s]));
+
+      // Condition on each archetype's signature item, plus the "bought both" overlap.
+      const sig = pickSignatures(base, items);
+      const [gun, spirit, both] = await Promise.all([
+        sig.gun ? flowFor([sig.gun]) : Promise.resolve(undefined),
+        sig.spirit ? flowFor([sig.spirit]) : Promise.resolve(undefined),
+        sig.gun && sig.spirit ? flowFor([sig.gun, sig.spirit]) : Promise.resolve(undefined),
+      ]);
+      if (ctrl.signal.aborted) return;
+
+      const set = assembleArchetypes(
+        hero,
+        rankFloorLabel(tier),
+        items,
+        buyTimes,
+        sellTimes,
+        { all: base, gun, spirit, both },
+        sig,
+      );
+      setArchetypeSet(set);
+      setArchKey(set.archetypes[0].key); // best win rate (or "all")
+    })()
+      .catch((e) => !ctrl.signal.aborted && setError(String(e)))
+      .finally(() => !ctrl.signal.aborted && setLoading(false));
+
+    return () => ctrl.abort();
+  }, [hero, items, minBadge, tier, patchIdx, patches]);
+
+  const activeArchetype =
+    archetypeSet?.archetypes.find((a) => a.key === archKey) ?? archetypeSet?.archetypes[0] ?? null;
+  const build = activeArchetype?.build ?? null;
+
+  // Compute counters vs the chosen enemies.
+  useEffect(() => {
+    if (!hero || !items || enemies.length === 0) {
+      setCounters(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    setCountersLoading(true);
+    const window = windowFor(patches, patchIdx);
+    const base = { heroId: hero.id, minBadge, ...window, signal: ctrl.signal };
+
+    Promise.all([getItemStats(base), getItemStats({ ...base, enemyHeroIds: enemies })])
+      .then(([baseStats, vsStats]) => {
+        if (!ctrl.signal.aborted) setCounters(computeCounters(baseStats, vsStats, items));
+      })
+      .catch((e) => !ctrl.signal.aborted && setError(String(e)))
+      .finally(() => !ctrl.signal.aborted && setCountersLoading(false));
+
+    return () => ctrl.abort();
+  }, [hero, items, enemies, minBadge, patchIdx, patches]);
+
+  // The counter matrix is hero-independent, so fetch once per rank/patch and filter by hero.
+  useEffect(() => {
+    if (!items) return;
+    const ctrl = new AbortController();
+    getHeroCounters({ minBadge, ...windowFor(patches, patchIdx), signal: ctrl.signal })
+      .then((m) => !ctrl.signal.aborted && setCounterMatrix(m))
+      .catch((e) => !ctrl.signal.aborted && setError(String(e)));
+    return () => ctrl.abort();
+  }, [items, minBadge, patchIdx, patches]);
+
+  const matchups = useMemo(
+    () => (counterMatrix && hero ? heroMatchups(counterMatrix, hero.id) : null),
+    [counterMatrix, hero],
+  );
+
+  // The hero's abilities in in-game slot order (signature1→4), as ability ids.
+  const slotOrder = useMemo(() => {
+    if (!hero || !abilities) return [];
+    const byClass = new Map<string, number>();
+    for (const a of abilities.values()) byClass.set(a.className, a.id);
+    return hero.signatureClasses
+      .map((c) => byClass.get(c))
+      .filter((id): id is number => id !== undefined);
+  }, [hero, abilities]);
+
+  // Skill (ability upgrade) build, conditioned on the active archetype so gun/spirit
+  // builds get their own order (they differ — and the spirit order often wins more).
+  const activeSignatureId = activeArchetype?.signature?.id;
+  useEffect(() => {
+    if (!hero) return;
+    const ctrl = new AbortController();
+    getAbilityOrder({
+      heroId: hero.id,
+      minBadge,
+      includeItemIds: activeSignatureId ? [activeSignatureId] : undefined,
+      ...windowFor(patches, patchIdx),
+      signal: ctrl.signal,
+    })
+      .then((rows) => !ctrl.signal.aborted && setSkillBuild(bestSkillBuild(rows)))
+      .catch((e) => !ctrl.signal.aborted && setError(String(e)));
+    return () => ctrl.abort();
+  }, [hero, minBadge, patchIdx, patches, activeSignatureId]);
+
+  const toggleEnemy = (id: number) =>
+    setEnemies((e) => (e.includes(id) ? e.filter((x) => x !== id) : [...e, id]));
+
+  const patchLabel = patchIdx === null ? 'last 30 days' : patches[patchIdx]?.title;
+  const enemyNames = enemies.map((id) => heroes.find((h) => h.id === id)?.name ?? '?').join(', ');
+  const lowPopulation = build !== null && build.population.matches < 400;
+
+  return (
+    <div className="app">
+      <header className="topbar">
+        <div className="brand">
+          <span className="logo">◆</span> Deadlock Build Lab
+        </div>
+        <div className="controls">
+          <label>
+            Hero
+            <select value={heroId ?? ''} onChange={(e) => setHeroId(Number(e.target.value))}>
+              {heroes.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Rank floor
+            <select value={tier} onChange={(e) => setTier(Number(e.target.value))}>
+              {[...RANK_TIERS].reverse().map((t) => (
+                <option key={t.tier} value={t.tier}>
+                  {rankFloorLabel(t.tier)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Patch
+            <select
+              value={patchIdx ?? ''}
+              onChange={(e) => setPatchIdx(e.target.value === '' ? null : Number(e.target.value))}
+            >
+              <option value="">Last 30 days</option>
+              {patches.map((p, i) => (
+                <option key={p.ts} value={i}>
+                  {p.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </header>
+
+      {error && <div className="banner error">⚠ {error}</div>}
+
+      <div className="top">
+        <div className="top-left">
+      {build && (
+        <div className="meta">
+          <strong>{build.hero.name}</strong>
+          {archetypeSet?.flex && activeArchetype ? ` · ${activeArchetype.label}` : ''} ·{' '}
+          {build.rankLabel} · {patchLabel} · {build.population.matches.toLocaleString()} matches ·
+          avg game {Math.round(build.population.avgDurationS / 60)} min ·{' '}
+          <span className={build.standingSlots > SLOT_CAP ? 'warn' : undefined}>
+            {build.standingSlots}/{SLOT_CAP} standing slots
+          </span>
+          {loading && <span className="spin"> · refreshing…</span>}
+          {lowPopulation && <span className="warn"> · ⚠ low sample, treat as noisy</span>}
+        </div>
+      )}
+
+      {archetypeSet?.flex && (
+        <div className="archetypes">
+          <span className="lbl">Build style</span>
+          {archetypeSet.archetypes.map((a) => (
+            <button
+              key={a.key}
+              className={`archtab ${a.key === archKey ? 'active' : ''}`}
+              onClick={() => setArchKey(a.key)}
+              title={a.signature ? `players who built ${a.signature.name}` : 'every build, blended'}
+            >
+              <span className="atlabel">{a.label}</span>
+              <span className="atmeta">
+                {(a.winRate * 100).toFixed(0)}% WR · {(a.share * 100).toFixed(0)}% of games
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {archetypeSet && <div className="identity">{archetypeSet.note}</div>}
+
+      {matchups && (matchups.tough.length > 0 || matchups.favorable.length > 0) && (
+        <div className="matchups">
+          {matchups.tough.length > 0 && (
+            <div className="mrow">
+              <span className="lbl tough">Tough vs</span>
+              {matchups.tough.map((m) => (
+                <MatchupChip
+                  key={m.enemyHeroId}
+                  m={m}
+                  tough
+                  hero={heroes.find((h) => h.id === m.enemyHeroId)}
+                  active={enemies.includes(m.enemyHeroId)}
+                  onClick={() => toggleEnemy(m.enemyHeroId)}
+                />
+              ))}
+            </div>
+          )}
+          {matchups.favorable.length > 0 && (
+            <div className="mrow">
+              <span className="lbl fav">Favored vs</span>
+              {matchups.favorable.map((m) => (
+                <MatchupChip
+                  key={m.enemyHeroId}
+                  m={m}
+                  hero={heroes.find((h) => h.id === m.enemyHeroId)}
+                  active={enemies.includes(m.enemyHeroId)}
+                  onClick={() => toggleEnemy(m.enemyHeroId)}
+                />
+              ))}
+            </div>
+          )}
+          <p className="hint">
+            Win rate when this hero is on the enemy team (whole-game, not lane-only). Click one to add
+            it below and see what to build against it.
+          </p>
+        </div>
+      )}
+
+      <CounterPicker
+        heroes={heroes}
+        enemies={enemies}
+        onAdd={(id) => setEnemies((e) => (e.includes(id) ? e : [...e, id]))}
+        onRemove={(id) => setEnemies((e) => e.filter((x) => x !== id))}
+      />
+
+      {enemies.length > 0 && (
+        <section className="counters">
+          <h2>
+            Counters <span className="sub">items that gain win rate vs {enemyNames}</span>
+            {countersLoading && <span className="spin"> · loading…</span>}
+          </h2>
+          {counters && counters.length === 0 ? (
+            <p className="empty">
+              No items clear the sample threshold for this matchup
+              {patchIdx !== null ? ' on this patch (try Last 30 days)' : ''}.
+            </p>
+          ) : (
+            <div className="counter-grid">
+              {counters?.map((c) => <CounterCard key={c.item.id} c={c} />)}
+            </div>
+          )}
+          <p className="hint">
+            Raw win-rate delta vs your baseline — sorted by gain, thin samples flagged. Tip: one
+            threat at a time (e.g. your lane opponent) reads cleaner than the whole enemy team, which
+            blends gun and spirit answers together.
+          </p>
+        </section>
+      )}
+        </div>
+
+        <div className="top-right">
+          {skillBuild && abilities && (
+            <SkillOrder skill={skillBuild} abilities={abilities} slotOrder={slotOrder} />
+          )}
+        </div>
+      </div>
+
+      {loading && !build && <div className="banner">Loading build…</div>}
+
+      {build && (
+        <main className="phases">
+          {build.phases.map((phase) => (
+            <section className="phase" key={phase.column}>
+              <h2>
+                {phase.label} <span className="time">{phase.timeLabel}</span>
+              </h2>
+              <div className="budget">
+                {phase.core.length}/{phase.targetItems} items ·{' '}
+                {Math.round(phase.coreSouls).toLocaleString()} /{' '}
+                {Math.round(phase.soulBudget).toLocaleString()} souls
+              </div>
+
+              <h3 className="grouphdr core">Build</h3>
+              {phase.core.length ? (
+                phase.core.map((b) => <ItemRow key={b.item.id} b={b} />)
+              ) : (
+                <p className="empty">No clear staple here.</p>
+              )}
+
+              <h3 className="grouphdr situational">Situational swaps</h3>
+              {phase.situational.length ? (
+                phase.situational.map((b) => <ItemRow key={b.item.id} b={b} muted />)
+              ) : (
+                <p className="empty">—</p>
+              )}
+            </section>
+          ))}
+        </main>
+      )}
+
+      <footer className="foot">
+        Data: deadlock-api.com · build win rates are <em>adjusted</em> for net-worth-at-buy; counter
+        deltas are raw (no adjusted rate available), so lean on the larger samples.
+      </footer>
+    </div>
+  );
+}
+
+function CounterPicker({
+  heroes,
+  enemies,
+  onAdd,
+  onRemove,
+}: {
+  heroes: Hero[];
+  enemies: number[];
+  onAdd: (id: number) => void;
+  onRemove: (id: number) => void;
+}) {
+  return (
+    <div className="enemies">
+      <span className="lbl">Counters vs</span>
+      {enemies.map((id) => {
+        const h = heroes.find((x) => x.id === id);
+        return (
+          <button className="chip" key={id} onClick={() => onRemove(id)} title="remove">
+            {h?.name ?? id} ✕
+          </button>
+        );
+      })}
+      <select
+        value=""
+        onChange={(e) => {
+          if (e.target.value) onAdd(Number(e.target.value));
+        }}
+      >
+        <option value="">+ add enemy…</option>
+        {heroes
+          .filter((h) => !enemies.includes(h.id))
+          .map((h) => (
+            <option key={h.id} value={h.id}>
+              {h.name}
+            </option>
+          ))}
+      </select>
+    </div>
+  );
+}
+
+function SkillOrder({
+  skill,
+  abilities,
+  slotOrder,
+}: {
+  skill: SkillBuild;
+  abilities: Map<number, Ability>;
+  slotOrder: number[];
+}) {
+  // Rows in in-game slot order; fall back to upgrade order if slots are unknown.
+  const present = new Set(skill.order);
+  const rows = (slotOrder.length ? slotOrder : skill.maxPriority).filter((id) => present.has(id));
+  const colorOf = (id: number) => ABILITY_COLORS[rows.indexOf(id) % ABILITY_COLORS.length];
+  const maxLabel = ['max 1st', 'max 2nd', 'max 3rd', 'max 4th'];
+
+  return (
+    <section className="skills">
+      <h2>
+        Skill order{' '}
+        <span className="sub">
+          {(skill.winRate * 100).toFixed(0)}% WR · n={skill.sample.toLocaleString()}
+        </span>
+      </h2>
+      <div className="skill-grid" style={{ ['--steps' as string]: skill.order.length }}>
+        {rows.map((id) => {
+          const a = abilities.get(id);
+          const color = colorOf(id);
+          const ri = skill.maxPriority.indexOf(id);
+          return (
+            <div className="skill-row" key={id}>
+              <div className="srow-label" style={{ borderColor: color }}>
+                {a?.image && <img src={a.image} alt="" loading="lazy" />}
+                <div className="srow-info">
+                  <span className="aname">{a?.name ?? id}</span>
+                  <span className="amax">{maxLabel[ri] ?? `max ${ri + 1}`}</span>
+                </div>
+              </div>
+              <div className="srow-cells">
+                {skill.order.map((stepId, i) => {
+                  const on = stepId === id;
+                  return (
+                    <span
+                      key={i}
+                      className={`pip ${on ? 'on' : ''}`}
+                      style={on ? { background: color } : undefined}
+                      title={on ? `point ${i + 1}` : undefined}
+                    >
+                      {on ? i + 1 : ''}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function MatchupChip({
+  m,
+  hero,
+  active,
+  onClick,
+  tough = false,
+}: {
+  m: Matchup;
+  hero?: Hero;
+  active: boolean;
+  onClick: () => void;
+  tough?: boolean;
+}) {
+  return (
+    <button
+      className={`mchip ${tough ? 'tough' : 'fav'} ${active ? 'active' : ''}`}
+      onClick={onClick}
+      title={`${hero?.name ?? '?'}: ${(m.winRate * 100).toFixed(0)}% win rate (${m.delta >= 0 ? '+' : ''}${(m.delta * 100).toFixed(0)} vs avg), n=${m.sample.toLocaleString()}${m.laneCsDelta < -10 ? ` · you average ${Math.round(m.laneCsDelta)} CS in lane` : ''}`}
+    >
+      {hero?.image && <img src={hero.image} alt="" loading="lazy" />}
+      <span className="mname">{hero?.name ?? m.enemyHeroId}</span>
+      <span className="mwr">{(m.winRate * 100).toFixed(0)}%</span>
+      {active && <span className="madd">✓</span>}
+    </button>
+  );
+}
+
+function CounterCard({ c }: { c: CounterItem }) {
+  const color = SLOT_COLORS[c.item.slot] ?? SLOT_COLORS.unknown;
+  return (
+    <div className="counter" style={{ borderLeftColor: color }}>
+      <div className="icon" style={{ background: color }}>
+        {c.item.image ? <img src={c.item.image} alt="" loading="lazy" /> : null}
+      </div>
+      <div className="body">
+        <div className="line1">
+          <span className="name">{c.item.name}</span>
+          <span className="delta">+{(c.delta * 100).toFixed(1)}</span>
+        </div>
+        <div className="line2">
+          <span className="wr">{(c.winRate * 100).toFixed(0)}% WR</span>
+          <span className={`n ${c.lowSample ? 'low' : ''}`}>
+            n={c.sample.toLocaleString()}
+            {c.lowSample ? ' ⚠' : ''}
+          </span>
+          <span className="pick">{c.phaseLabel}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ItemRow({ b, muted = false }: { b: BuildItem; muted?: boolean }) {
+  const color = SLOT_COLORS[b.item.slot] ?? SLOT_COLORS.unknown;
+  const reason = b.transient && b.transientReason ? b.transientReason : null;
+  return (
+    <div
+      className={`item ${muted ? 'muted' : ''} ${b.transient ? 'transient' : ''}`}
+      style={{ borderLeftColor: color }}
+      title={reason ? `${reason} — ${b.why}` : b.why}
+    >
+      <div className="icon" style={{ background: color }}>
+        {b.item.image ? <img src={b.item.image} alt="" loading="lazy" /> : null}
+      </div>
+      <div className="body">
+        <div className="line1">
+          <span className="name">
+            {!muted && (
+              <span className={`role role-${b.transient ? 'temp' : b.role}`}>
+                {b.transient ? 'TEMP' : roleLabel(b.role)}
+              </span>
+            )}
+            {b.item.name}
+          </span>
+          <span className="cost">{b.item.cost.toLocaleString()}</span>
+        </div>
+        <div className="line2">
+          <span className="wr" style={{ color: wrColor(b.adjustedWinRate) }}>
+            {(b.adjustedWinRate * 100).toFixed(0)}% WR
+          </span>
+          <span className="pick">{(b.pickRate * 100).toFixed(0)}% pick</span>
+          <span className="n">n={b.sample.toLocaleString()}</span>
+        </div>
+        <div className="why">{reason ? <span className="reason">{reason}</span> : b.why}</div>
+      </div>
+    </div>
+  );
+}
+
+function wrColor(wr: number): string {
+  if (wr >= 0.56) return '#54c66b';
+  if (wr >= 0.52) return '#a6cf57';
+  if (wr >= 0.48) return '#d8c14a';
+  return '#d87a7a';
+}
+
+function roleLabel(role: BuildItem['role']): string {
+  return role === 'universal' ? 'CORE' : 'VALUE';
+}
