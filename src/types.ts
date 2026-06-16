@@ -163,6 +163,8 @@ export interface BuildPhase {
   soulBudget: number;
   /** Souls the recommended core costs. */
   coreSouls: number;
+  /** Souls the core spends per category — what the build invests in weapon/vitality/spirit. */
+  categorySouls: Record<'weapon' | 'vitality' | 'spirit', number>;
   /** The recommended build for this phase, in buy order. */
   core: BuildItem[];
   /** Optional swaps/flex, annotated. */

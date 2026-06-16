@@ -17,11 +17,13 @@
 import type {
   BuildItem,
   BuildPhase,
+  BuildRole,
   FlowNode,
   GeneratedBuild,
   Hero,
   Item,
   ItemFlowStats,
+  SlotType,
 } from '../types';
 
 const PHASE_META = [
@@ -40,6 +42,11 @@ const SOUL_SLACK = 1.15; // allow 15% over the soul budget before stopping
 const SITUATIONAL_MAX = 5;
 const SELL_BEFORE_S = 1500; // a cheap item sold before ~25 min is a placeholder
 export const SLOT_CAP = 12; // 9 base + 3 flex slots (unlocked via Walker kills)
+
+// Categories we budget across, in fill order. Weapon is filled last on purpose: it's
+// the plurality buy most phases, so giving the reactively-bought categories (greens,
+// then spirit) first claim on the budget stops weapon from starving them of a slot.
+const FILL_ORDER: Array<'weapon' | 'vitality' | 'spirit'> = ['vitality', 'spirit', 'weapon'];
 
 /**
  * Pure: turns one (unlocked) flow response into a phased build. `buyTimes`/`sellTimes`
@@ -150,36 +157,34 @@ function buildPhase(
   const targetItems = Math.max(1, Math.round(buys / reached));
   const soulBudget = candidates.reduce((a, c) => a + c.sample * c.item.cost, 0) / reached;
 
-  // Stage A: every-game core. Stage B: best-win-rate value picks.
-  const universal = candidates
-    .filter((c) => c.pickRate >= UNIVERSAL_PICK)
-    .sort((a, b) => b.pickRate - a.pickRate);
-  const chosen = new Set(universal.map((c) => c.item.id));
-  const valuePool = candidates
-    .filter((c) => !chosen.has(c.item.id) && c.adjustedWinRate >= baselineWinRate + VALUE_EDGE)
-    .sort((a, b) => b.adjustedWinRate - a.adjustedWinRate);
+  // Split the phase's item count across weapon/vitality/spirit in the same proportion
+  // real players of this hero invest souls. Without this the build is category-blind:
+  // defensive items are bought reactively, so they miss the pick-rate and win-rate
+  // gates and the budget gets spent entirely on weapon/spirit — e.g. zero greens in lane.
+  const catCounts = allocateCategoryCounts(categorySoulShare(candidates), targetItems);
 
+  const chosen = new Set<number>();
   const core: BuildItem[] = [];
   let coreSouls = 0;
-  const fits = (c: BuildItem) =>
-    core.length < targetItems && coreSouls + c.item.cost <= soulBudget * SOUL_SLACK;
 
-  for (const c of universal) {
-    if (!fits(c)) break;
-    core.push({ ...c, role: 'universal' });
-    coreSouls += c.item.cost;
-    chosen.add(c.item.id);
-  }
-  for (const c of valuePool) {
-    if (core.length >= targetItems) break;
-    if (!fits(c)) continue; // a cheaper value pick may still fit
-    core.push({ ...c, role: 'value' });
-    coreSouls += c.item.cost;
-    chosen.add(c.item.id);
+  for (const slot of FILL_ORDER) {
+    let want = catCounts[slot];
+    if (want <= 0) continue;
+    for (const c of categoryPriority(candidates, slot, baselineWinRate, chosen)) {
+      if (want <= 0) break;
+      if (coreSouls + c.item.cost > soulBudget * SOUL_SLACK) continue; // a cheaper pick may still fit
+      const role: BuildRole = c.pickRate >= UNIVERSAL_PICK ? 'universal' : 'value';
+      core.push({ ...c, role });
+      coreSouls += c.item.cost;
+      chosen.add(c.item.id);
+      want--;
+    }
   }
 
-  const situational = valuePool
-    .filter((c) => !chosen.has(c.item.id))
+  // Situational: the best leftover value picks across every category.
+  const situational = candidates
+    .filter((c) => !chosen.has(c.item.id) && c.adjustedWinRate >= baselineWinRate + VALUE_EDGE)
+    .sort((a, b) => b.adjustedWinRate - a.adjustedWinRate)
     .slice(0, SITUATIONAL_MAX)
     .map<BuildItem>((c) => ({ ...c, role: 'situational' }));
 
@@ -194,10 +199,85 @@ function buildPhase(
     targetItems,
     soulBudget,
     coreSouls,
+    categorySouls: categorySouls(core),
     // Order by buy time so top-to-bottom reads as buy order.
     core: core.sort((a, b) => buyTime(a) - buyTime(b)).map(withWhy),
     situational: situational.map(withWhy), // already strongest-first by win rate
   };
+}
+
+/** Fraction of phase souls real players put into each category (weapon/vitality/spirit). */
+function categorySoulShare(candidates: BuildItem[]): Record<SlotType, number> {
+  const souls: Record<SlotType, number> = { weapon: 0, vitality: 0, spirit: 0, unknown: 0 };
+  let total = 0;
+  for (const c of candidates) {
+    const s = c.sample * c.item.cost;
+    souls[c.item.slot] += s;
+    total += s;
+  }
+  if (total > 0) for (const k of Object.keys(souls) as SlotType[]) souls[k] /= total;
+  return souls;
+}
+
+/**
+ * Turn category soul shares into whole item counts that sum to `total`, using the
+ * largest-remainder method (so e.g. a 14% vitality share of a 5-item phase still
+ * rounds up to one guaranteed green rather than vanishing to zero).
+ */
+function allocateCategoryCounts(
+  share: Record<SlotType, number>,
+  total: number,
+): Record<'weapon' | 'vitality' | 'spirit', number> {
+  const rows = FILL_ORDER.map((slot) => {
+    const exact = share[slot] * total;
+    return { slot, n: Math.floor(exact), rem: exact - Math.floor(exact) };
+  });
+  let left = total - rows.reduce((a, r) => a + r.n, 0);
+  for (const r of [...rows].sort((a, b) => b.rem - a.rem)) {
+    if (left <= 0) break;
+    r.n++;
+    left--;
+  }
+  return Object.fromEntries(rows.map((r) => [r.slot, r.n])) as Record<
+    'weapon' | 'vitality' | 'spirit',
+    number
+  >;
+}
+
+/**
+ * One category's candidates, best-first: every-game staples (by pick rate), then value
+ * picks (by win rate), then — so a guaranteed category is never empty — the rest by
+ * pick rate. Items already taken (or in another category) are skipped.
+ */
+function categoryPriority(
+  candidates: BuildItem[],
+  slot: SlotType,
+  baselineWinRate: number,
+  chosen: Set<number>,
+): BuildItem[] {
+  const pool = candidates.filter((c) => c.item.slot === slot);
+  const byPick = (a: BuildItem, b: BuildItem) => b.pickRate - a.pickRate;
+  const universal = pool.filter((c) => c.pickRate >= UNIVERSAL_PICK).sort(byPick);
+  const value = pool
+    .filter((c) => c.pickRate < UNIVERSAL_PICK && c.adjustedWinRate >= baselineWinRate + VALUE_EDGE)
+    .sort((a, b) => b.adjustedWinRate - a.adjustedWinRate);
+  const rest = pool.filter((c) => !universal.includes(c) && !value.includes(c)).sort(byPick);
+
+  const ordered: BuildItem[] = [];
+  const seen = new Set<number>(chosen);
+  for (const c of [...universal, ...value, ...rest]) {
+    if (seen.has(c.item.id)) continue;
+    seen.add(c.item.id);
+    ordered.push(c);
+  }
+  return ordered;
+}
+
+/** Souls the chosen core spends per shown category. */
+function categorySouls(core: BuildItem[]): Record<'weapon' | 'vitality' | 'spirit', number> {
+  const out = { weapon: 0, vitality: 0, spirit: 0 };
+  for (const b of core) if (b.item.slot in out) out[b.item.slot as 'weapon' | 'vitality' | 'spirit'] += b.item.cost;
+  return out;
 }
 
 function toCandidate(n: FlowNode, reached: number, items: Map<number, Item>): BuildItem | null {

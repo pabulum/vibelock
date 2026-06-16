@@ -1,4 +1,4 @@
-# Deadlock Build Lab
+# Vibelock
 
 A local, data-driven build generator for [Deadlock](https://store.steampowered.com/app/1422450/Deadlock/).
 Pick a hero and a rank floor and it produces a **phased, annotated item build** (Lane → Early mid →
@@ -105,11 +105,18 @@ into one (the highest-WR items may never be bought together). The generator buil
    60–70% of builds necessarily co-occur, so co-occurrence is baked in for free. (An earlier version
    conditioned each phase on the prior build via `locked_item_ids`, but locking 3 exact items matched
    <2% of games and emptied later phases — over-engineering for what pick rate already gives.)
-3. **Two-stage fill** — universal core first, then value picks (best adjusted win rate above the
-   baseline) until the budget is spent. Strong-but-rare leftovers become situational swaps.
+3. **Category-balanced fill** — the phase's item count is split across weapon / vitality / spirit in
+   the same proportion real players of this hero invest souls (each candidate's `cost × pick mass`),
+   then each category is filled best-first: every-game staples by pick rate, then value picks (best
+   adjusted win rate above baseline), then most-bought as a floor so a guaranteed category is never
+   empty. This is what keeps **defensive items in the build**: greens are bought reactively, so they
+   miss the pick-rate and win-rate gates, and a category-blind fill spent the whole budget on
+   weapon/spirit (Vyper lane: 0% vitality before, ~17% after — matching real play). Strong-but-rare
+   leftovers become situational swaps.
 4. **Buy-order** — items within a phase are sorted by average buy time (`item-stats.avg_buy_time_s`),
    so top-to-bottom reads as buy order.
 
+Each phase shows a **souls bar** of its weapon/vitality/spirit split so the balance reads at a glance.
 Each generate is 2 parallel API calls (flow + buy times), ~1s.
 
 ### The honest caveat

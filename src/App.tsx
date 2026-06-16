@@ -213,7 +213,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <span className="logo">◆</span> Deadlock Build Lab
+          <span className="logo">◆</span> Vibelock
         </div>
         <div className="controls">
           <label>
@@ -383,6 +383,7 @@ export default function App() {
                 {Math.round(phase.coreSouls).toLocaleString()} /{' '}
                 {Math.round(phase.soulBudget).toLocaleString()} souls
               </div>
+              <CategoryBar split={phase.categorySouls} />
 
               <h3 className="grouphdr core">Build</h3>
               {phase.core.length ? (
@@ -406,6 +407,38 @@ export default function App() {
         Data: deadlock-api.com · build win rates are <em>adjusted</em> for net-worth-at-buy; counter
         deltas are raw (no adjusted rate available), so lean on the larger samples.
       </footer>
+    </div>
+  );
+}
+
+// A thin stacked bar of the souls this phase's build invests per category — the
+// "soul investment" split, so a weapon-leaning build that still buys defense reads
+// at a glance and the greens aren't lost among the orange/purple.
+function CategoryBar({ split }: { split: Record<'weapon' | 'vitality' | 'spirit', number> }) {
+  const total = split.weapon + split.vitality + split.spirit;
+  if (total <= 0) return null;
+  const segs: Array<['weapon' | 'vitality' | 'spirit', string]> = [
+    ['weapon', 'Weapon'],
+    ['vitality', 'Vitality'],
+    ['spirit', 'Spirit'],
+  ];
+  return (
+    <div className="catbar" title="Souls this build invests per category">
+      {segs.map(([slot, label]) => {
+        const souls = split[slot];
+        if (souls <= 0) return null;
+        const pct = Math.round((souls / total) * 100);
+        return (
+          <span
+            key={slot}
+            className="catseg"
+            style={{ width: `${(souls / total) * 100}%`, background: SLOT_COLORS[slot] }}
+            title={`${label}: ${souls.toLocaleString()} souls (${pct}%)`}
+          >
+            {pct >= 12 ? `${pct}%` : ''}
+          </span>
+        );
+      })}
     </div>
   );
 }
