@@ -210,6 +210,48 @@ export interface ArchetypeSet {
   archetypes: Archetype[];
 }
 
+/** One row from /v1/analytics/hero-build-stats — a community build's outcomes at a rank. */
+export interface HeroBuildStatRow {
+  hero_build_id: number;
+  wins: number;
+  losses: number;
+  matches: number;
+}
+
+/** A player-authored build from /v1/builds, reduced to the items it recommends. */
+export interface CommunityBuild {
+  id: number;
+  name: string;
+  authorId: number;
+  version: number;
+  /** Unix seconds the build was last edited. */
+  updatedAt: number;
+  /** Distinct item ids the build lists (resolved against our items map; abilities dropped). */
+  itemIds: number[];
+}
+
+/** A community build joined to its win-rate stats and scored against our generated build. */
+export interface RankedCommunityBuild {
+  build: CommunityBuild;
+  /** Raw win rate among matches in the chosen rank/patch window (no adjusted rate available). */
+  winRate: number;
+  matches: number;
+  /** Jaccard overlap of item sets with our generated build, 0–1 (used for ranking). */
+  similarity: number;
+  /** How many of our build's items this build also lists (the legible, displayed number). */
+  shared: number;
+}
+
+/** The two community builds worth surfacing for the current hero/rank/patch + our build. */
+export interface CommunityMatch {
+  /** Highest win rate in the rank/patch window. */
+  best: RankedCommunityBuild | null;
+  /** Closest item set to our generated build. */
+  aligned: RankedCommunityBuild | null;
+  /** True when the best-performing build is also the closest to ours (strong signal). */
+  agree: boolean;
+}
+
 /** A game patch, used to time-box the analytics window. */
 export interface Patch {
   title: string;

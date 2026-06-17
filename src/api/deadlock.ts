@@ -6,7 +6,9 @@ import type {
   AbilityOrderRow,
   CardSection,
   CardStat,
+  CommunityBuild,
   Hero,
+  HeroBuildStatRow,
   HeroCounterRow,
   Item,
   ItemCard,
@@ -22,12 +24,27 @@ const BASE = 'https://api.deadlock-api.com';
 // Assets (heroes/items) change rarely; cache them in module scope + localStorage.
 const ASSET_TTL_MS = 24 * 60 * 60 * 1000;
 
-async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(url, { signal });
+async function getJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`${res.status} ${res.statusText} for ${url}`);
   }
   return res.json() as Promise<T>;
+}
+
+// Analytics endpoints recompute server-side and return small payloads, but a cold
+// query can take several seconds. Cache each response in-memory (session-scoped) by
+// URL, so revisiting a hero/rank/patch — or two effects asking for the same query —
+// costs one round trip, not N. Cleared on reload; assets use the longer-lived cache.
+const analyticsCache = new Map<string, Promise<unknown>>();
+
+function getAnalytics<T>(url: string): Promise<T> {
+  const hit = analyticsCache.get(url);
+  if (hit) return hit as Promise<T>;
+  const p = getJson<T>(url);
+  analyticsCache.set(url, p);
+  p.catch(() => analyticsCache.delete(url)); // never cache a failure
+  return p;
 }
 
 function cached<T>(key: string): T | null {
@@ -127,7 +144,6 @@ export interface AbilityOrderQuery extends TimeWindow {
   minMatches?: number;
   /** Restrict to players who bought these items (used to match the build archetype). */
   includeItemIds?: number[];
-  signal?: AbortSignal;
 }
 
 export function getAbilityOrder(q: AbilityOrderQuery): Promise<AbilityOrderRow[]> {
@@ -138,7 +154,7 @@ export function getAbilityOrder(q: AbilityOrderQuery): Promise<AbilityOrderRow[]
   });
   if (q.includeItemIds?.length) params.set('include_item_ids', q.includeItemIds.join(','));
   applyWindow(params, q);
-  return getJson<AbilityOrderRow[]>(`${BASE}/v1/analytics/ability-order-stats?${params}`, q.signal);
+  return getAnalytics<AbilityOrderRow[]>(`${BASE}/v1/analytics/ability-order-stats?${params}`);
 }
 
 function normalizeSlot(s: string | null | undefined): SlotType {
@@ -313,7 +329,6 @@ export interface FlowQuery extends TimeWindow {
   lockedColumns?: number[];
   /** Restrict the population to players who bought all of these items (archetype split). */
   includeItemIds?: number[];
-  signal?: AbortSignal;
 }
 
 export function getItemFlowStats(q: FlowQuery): Promise<ItemFlowStats> {
@@ -328,7 +343,7 @@ export function getItemFlowStats(q: FlowQuery): Promise<ItemFlowStats> {
   }
   if (q.includeItemIds?.length) params.set('include_item_ids', q.includeItemIds.join(','));
   applyWindow(params, q);
-  return getJson<ItemFlowStats>(`${BASE}/v1/analytics/item-flow-stats?${params}`, q.signal);
+  return getAnalytics<ItemFlowStats>(`${BASE}/v1/analytics/item-flow-stats?${params}`);
 }
 
 export interface ItemStatsQuery extends TimeWindow {
@@ -337,7 +352,6 @@ export interface ItemStatsQuery extends TimeWindow {
   /** Filter to matches where any of these heroes were on the enemy team. */
   enemyHeroIds?: number[];
   minMatches?: number;
-  signal?: AbortSignal;
 }
 
 export function getItemStats(q: ItemStatsQuery): Promise<ItemStat[]> {
@@ -348,13 +362,65 @@ export function getItemStats(q: ItemStatsQuery): Promise<ItemStat[]> {
   });
   if (q.enemyHeroIds?.length) params.set('enemy_hero_ids', q.enemyHeroIds.join(','));
   applyWindow(params, q);
-  return getJson<ItemStat[]>(`${BASE}/v1/analytics/item-stats?${params}`, q.signal);
+  return getAnalytics<ItemStat[]>(`${BASE}/v1/analytics/item-stats?${params}`);
+}
+
+// Win rate of each player-authored build, over matches in the window at/above the rank
+// floor. `min_average_badge` filters by the *match's* average badge (both teams) — i.e.
+// how the build performs at that rank, not the author's rank.
+export function getHeroBuildStats(q: ItemStatsQuery): Promise<HeroBuildStatRow[]> {
+  const params = new URLSearchParams({
+    min_average_badge: String(q.minBadge),
+    min_matches: String(q.minMatches ?? 20),
+  });
+  applyWindow(params, q);
+  return getAnalytics<HeroBuildStatRow[]>(
+    `${BASE}/v1/analytics/hero-build-stats/${q.heroId}?${params}`,
+  );
+}
+
+// The community builds for a hero, latest version of each, most-favorited first, reduced
+// to the items each recommends (mod entries that resolve to a known item; abilities drop).
+export async function getCommunityBuilds(heroId: number): Promise<CommunityBuild[]> {
+  const params = new URLSearchParams({
+    hero_id: String(heroId),
+    only_latest: 'true',
+    sort_by: 'favorites',
+    sort_direction: 'desc',
+    limit: '200',
+  });
+  const [raw, items] = await Promise.all([
+    getAnalytics<RawBuildEnvelope[]>(`${BASE}/v1/builds?${params}`),
+    getItems(),
+  ]);
+  return raw
+    .map((env) => parseCommunityBuild(env, items))
+    .filter((b): b is CommunityBuild => b !== null);
+}
+
+function parseCommunityBuild(env: RawBuildEnvelope, items: Map<number, Item>): CommunityBuild | null {
+  const hb = env.hero_build;
+  if (!hb) return null;
+  const ids = new Set<number>();
+  for (const cat of hb.details?.mod_categories ?? []) {
+    for (const mod of cat.mods ?? []) {
+      if (mod.ability_id !== undefined && items.has(mod.ability_id)) ids.add(mod.ability_id);
+    }
+  }
+  if (ids.size === 0) return null;
+  return {
+    id: hb.hero_build_id,
+    name: hb.name ?? `Build ${hb.hero_build_id}`,
+    authorId: hb.author_account_id ?? 0,
+    version: hb.version ?? 0,
+    updatedAt: hb.last_updated_timestamp ?? hb.publish_timestamp ?? 0,
+    itemIds: [...ids],
+  };
 }
 
 export interface CounterMatrixQuery extends TimeWindow {
   minBadge: number;
   minMatches?: number;
-  signal?: AbortSignal;
 }
 
 // hero-counter-stats ignores hero filters and returns the whole hero-vs-hero matrix,
@@ -365,7 +431,7 @@ export function getHeroCounters(q: CounterMatrixQuery): Promise<HeroCounterRow[]
     min_matches: String(q.minMatches ?? 100),
   });
   applyWindow(params, q);
-  return getJson<HeroCounterRow[]>(`${BASE}/v1/analytics/hero-counter-stats?${params}`, q.signal);
+  return getAnalytics<HeroCounterRow[]>(`${BASE}/v1/analytics/hero-counter-stats?${params}`);
 }
 
 let patchesPromise: Promise<Patch[]> | null = null;
@@ -452,4 +518,16 @@ interface RawPatch {
   name?: string;
   pub_date?: string;
   timestamp?: number;
+}
+
+interface RawBuildEnvelope {
+  hero_build?: {
+    hero_build_id: number;
+    name?: string;
+    author_account_id?: number;
+    version?: number;
+    last_updated_timestamp?: number;
+    publish_timestamp?: number;
+    details?: { mod_categories?: Array<{ mods?: Array<{ ability_id?: number }> }> };
+  };
 }

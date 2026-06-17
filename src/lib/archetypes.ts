@@ -54,8 +54,6 @@ export interface ArchetypeFlows {
   all: ItemFlowStats;
   gun?: ItemFlowStats;
   spirit?: ItemFlowStats;
-  /** Population that bought BOTH signatures — used to measure archetype overlap. */
-  both?: ItemFlowStats;
 }
 
 /** Build each archetype from its (already-fetched) conditioned flow. Pure. */
@@ -94,8 +92,12 @@ export function assembleArchetypes(
   const spirit = make('spirit', 'Spirit', flows.spirit, sig.spirit);
 
   const inRange = (a: Archetype) => a.share >= FLEX_MIN_SHARE && a.share <= FLEX_MAX_SHARE;
-  // Distinctness: how much of the smaller camp also bought the other signature.
-  const bothShare = flows.both?.baseline ? flows.both.baseline.matches / baseMatches : 0;
+  // Distinctness: how much of the smaller camp also bought the other signature. The
+  // count of players who bought BOTH is already in the gun flow — the spirit
+  // signature's node there counts gun-buyers who also bought it — so there's no need
+  // for a separate query conditioned on both.
+  const bothMatches = flows.gun && sig.spirit ? sumPlayers(flows.gun, sig.spirit) : 0;
+  const bothShare = bothMatches / baseMatches;
   const overlap = gun && spirit ? bothShare / Math.min(gun.share, spirit.share) : 1;
 
   const bothViable = !!gun && !!spirit && inRange(gun) && inRange(spirit);
@@ -140,4 +142,9 @@ function pct(x: number): string {
 function winRateOf(flow: ItemFlowStats): number {
   const decided = flow.baseline.wins + flow.baseline.losses;
   return decided > 0 ? flow.baseline.wins / decided : 0;
+}
+
+/** Total players who bought `itemId`, summed across phase columns (one buy per game). */
+function sumPlayers(flow: ItemFlowStats, itemId: number): number {
+  return flow.nodes.reduce((a, n) => (n.item_id === itemId ? a + n.players : a), 0);
 }

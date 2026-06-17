@@ -201,6 +201,174 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.community {
+  padding: 10px 22px 2px;
+}
+.community h2 {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+.community h2 .sub {
+  font-weight: 400;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.crows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.crow {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  flex: 0 1 300px;
+  min-width: 0;
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel2);
+  font-size: 12.5px;
+}
+.crow.agree {
+  border-color: var(--accent);
+  background: #1b2735;
+}
+.crow .ctag {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+.crow.agree .ctag {
+  color: var(--accent);
+}
+.crow .cname {
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crow .cstats {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.crow .cfoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 1px;
+}
+.crow .cwr {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.crow .cmeta {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+}
+.crow .cid {
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+.crow .cid:hover {
+  border-color: var(--accent);
+  background: #1b2735;
+}
+
+/* Hover preview of a community build's items (portaled to body). */
+.buildprev {
+  position: fixed;
+  z-index: 50;
+  width: 268px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  color: var(--text);
+  /* Portaled to document.body, so it's outside .app and won't inherit its font. */
+  font: 12.5px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+.buildprev .bp-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+.buildprev .bp-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.buildprev .bp-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--accent);
+  flex: 0 0 auto;
+}
+.buildprev .bp-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.buildprev .bp-item {
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  border: 1px solid;
+  overflow: hidden;
+  opacity: 0.4;
+  filter: grayscale(0.5);
+}
+.buildprev .bp-item.shared {
+  opacity: 1;
+  filter: none;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.buildprev .bp-item.missing {
+  opacity: 1;
+  filter: none;
+  box-shadow: 0 0 0 1px #e0b341;
+}
+.buildprev .bp-sub {
+  margin: 9px 0 5px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #e0b341;
+}
+.buildprev .bp-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.buildprev .bp-foot {
+  margin-top: 7px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
 .enemies {
   display: flex;
   align-items: center;

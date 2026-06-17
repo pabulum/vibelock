@@ -12,6 +12,8 @@ import './App.css';
 import {
   getAbilities,
   getAbilityOrder,
+  getCommunityBuilds,
+  getHeroBuildStats,
   getHeroCounters,
   getHeroes,
   getItemFlowStats,
@@ -22,6 +24,7 @@ import {
 } from './api/deadlock';
 import { assembleArchetypes, pickSignatures } from './lib/archetypes';
 import { SLOT_CAP, SLOT_COLORS } from './lib/buildGenerator';
+import { matchCommunityBuilds } from './lib/communityBuilds';
 import { computeCounters } from './lib/counters';
 import { heroMatchups } from './lib/matchups';
 import { RANK_TIERS, rankFloorLabel, tierToMinBadge } from './lib/ranks';
@@ -31,12 +34,15 @@ import type {
   ArchetypeKey,
   ArchetypeSet,
   BuildItem,
+  CommunityBuild,
   CounterItem,
   Hero,
+  HeroBuildStatRow,
   HeroCounterRow,
   Matchup,
   Patch,
   Item,
+  RankedCommunityBuild,
   SkillBuild,
 } from './types';
 
@@ -69,6 +75,10 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [counters, setCounters] = useState<CounterItem[] | null>(null);
   const [countersLoading, setCountersLoading] = useState(false);
+  const [community, setCommunity] = useState<{
+    builds: CommunityBuild[];
+    stats: HeroBuildStatRow[];
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Load assets once.
@@ -96,23 +106,23 @@ export default function App() {
 
     const window = windowFor(patches, patchIdx);
     const flowFor = (includeItemIds?: number[]) =>
-      getItemFlowStats({ heroId: hero.id, minBadge, ...window, includeItemIds, signal: ctrl.signal });
+      getItemFlowStats({ heroId: hero.id, minBadge, ...window, includeItemIds });
 
     (async () => {
       // Base population + buy times (for buy-order), in parallel.
       const [base, stats] = await Promise.all([
         flowFor(),
-        getItemStats({ heroId: hero.id, minBadge, ...window, signal: ctrl.signal }),
+        getItemStats({ heroId: hero.id, minBadge, ...window }),
       ]);
       const buyTimes = new Map(stats.map((s) => [s.item_id, s.avg_buy_time_s]));
       const sellTimes = new Map(stats.map((s) => [s.item_id, s.avg_sell_time_s]));
 
-      // Condition on each archetype's signature item, plus the "bought both" overlap.
+      // Condition on each archetype's signature item. The gun/spirit overlap (for the
+      // flex/hybrid decision) is read out of the gun flow itself, so no extra query.
       const sig = pickSignatures(base, items);
-      const [gun, spirit, both] = await Promise.all([
+      const [gun, spirit] = await Promise.all([
         sig.gun ? flowFor([sig.gun]) : Promise.resolve(undefined),
         sig.spirit ? flowFor([sig.spirit]) : Promise.resolve(undefined),
-        sig.gun && sig.spirit ? flowFor([sig.gun, sig.spirit]) : Promise.resolve(undefined),
       ]);
       if (ctrl.signal.aborted) return;
 
@@ -122,7 +132,7 @@ export default function App() {
         items,
         buyTimes,
         sellTimes,
-        { all: base, gun, spirit, both },
+        { all: base, gun, spirit },
         sig,
       );
       setArchetypeSet(set);
@@ -147,7 +157,7 @@ export default function App() {
     const ctrl = new AbortController();
     setCountersLoading(true);
     const window = windowFor(patches, patchIdx);
-    const base = { heroId: hero.id, minBadge, ...window, signal: ctrl.signal };
+    const base = { heroId: hero.id, minBadge, ...window };
 
     Promise.all([getItemStats(base), getItemStats({ ...base, enemyHeroIds: enemies })])
       .then(([baseStats, vsStats]) => {
@@ -163,7 +173,7 @@ export default function App() {
   useEffect(() => {
     if (!items) return;
     const ctrl = new AbortController();
-    getHeroCounters({ minBadge, ...windowFor(patches, patchIdx), signal: ctrl.signal })
+    getHeroCounters({ minBadge, ...windowFor(patches, patchIdx) })
       .then((m) => !ctrl.signal.aborted && setCounterMatrix(m))
       .catch((e) => !ctrl.signal.aborted && setError(String(e)));
     return () => ctrl.abort();
@@ -195,12 +205,51 @@ export default function App() {
       minBadge,
       includeItemIds: activeSignatureId ? [activeSignatureId] : undefined,
       ...windowFor(patches, patchIdx),
-      signal: ctrl.signal,
     })
       .then((rows) => !ctrl.signal.aborted && setSkillBuild(bestSkillBuild(rows)))
       .catch((e) => !ctrl.signal.aborted && setError(String(e)));
     return () => ctrl.abort();
   }, [hero, minBadge, patchIdx, patches, activeSignatureId]);
+
+  // Community builds + their win rate at this rank/patch. Joined and scored against the
+  // generated build in a memo below, so changing the active archetype re-scores without
+  // refetching.
+  useEffect(() => {
+    if (!hero) return;
+    const ctrl = new AbortController();
+    Promise.all([
+      getCommunityBuilds(hero.id),
+      getHeroBuildStats({ heroId: hero.id, minBadge, ...windowFor(patches, patchIdx) }),
+    ])
+      .then(([builds, stats]) => !ctrl.signal.aborted && setCommunity({ builds, stats }))
+      .catch((e) => !ctrl.signal.aborted && setError(String(e)));
+    return () => ctrl.abort();
+  }, [hero, minBadge, patchIdx, patches]);
+
+  // Items the generated build recommends (core picks across phases) — the set we match
+  // community builds against.
+  // Core + situational, deduped: community builds list situational picks too, so
+  // comparing only our core would understate the overlap.
+  const ourItemIds = useMemo(
+    () =>
+      build
+        ? [
+            ...new Set(
+              build.phases.flatMap((p) => [...p.core, ...p.situational]).map((b) => b.item.id),
+            ),
+          ]
+        : [],
+    [build],
+  );
+  const ourIdSet = useMemo(() => new Set(ourItemIds), [ourItemIds]);
+
+  const communityMatch = useMemo(
+    () =>
+      community && ourItemIds.length
+        ? matchCommunityBuilds(community.builds, community.stats, ourItemIds)
+        : null,
+    [community, ourItemIds],
+  );
 
   const toggleEnemy = (id: number) =>
     setEnemies((e) => (e.includes(id) ? e.filter((x) => x !== id) : [...e, id]));
@@ -291,6 +340,52 @@ export default function App() {
       )}
 
       {archetypeSet && <div className="identity">{archetypeSet.note}</div>}
+
+      {communityMatch && (communityMatch.best || communityMatch.aligned) && (
+        <section className="community">
+          <h2>
+            Community check <span className="sub">player builds at {build?.rankLabel}</span>
+          </h2>
+          <div className="crows">
+            {communityMatch.agree && communityMatch.best ? (
+              <CommunityRow
+                tag="Top build = closest to ours ✓"
+                rb={communityMatch.best}
+                ourCount={ourItemIds.length}
+                ourIds={ourIdSet}
+                items={items}
+                agree
+              />
+            ) : (
+              <>
+                {communityMatch.best && (
+                  <CommunityRow
+                    tag="Best win rate"
+                    rb={communityMatch.best}
+                    ourCount={ourItemIds.length}
+                    ourIds={ourIdSet}
+                    items={items}
+                  />
+                )}
+                {communityMatch.aligned && (
+                  <CommunityRow
+                    tag="Most like ours"
+                    rb={communityMatch.aligned}
+                    ourCount={ourItemIds.length}
+                    ourIds={ourIdSet}
+                    items={items}
+                  />
+                )}
+              </>
+            )}
+          </div>
+          <p className="hint">
+            Raw win rate over the selected rank/patch (no adjusted rate exists for whole builds, so
+            lean on the larger samples). “shares N” = how many of our build’s picks it also lists;
+            hover to preview its items, click <code>#id</code> to copy it for the in-game search.
+          </p>
+        </section>
+      )}
 
       {matchups && (matchups.tough.length > 0 || matchups.favorable.length > 0) && (
         <div className="matchups">
@@ -748,6 +843,153 @@ function ItemCard({
     </div>,
     document.body,
   );
+}
+
+function CommunityRow({
+  tag,
+  rb,
+  ourCount,
+  ourIds,
+  items,
+  agree = false,
+}: {
+  tag: string;
+  rb: RankedCommunityBuild;
+  ourCount: number;
+  ourIds: Set<number>;
+  items: Map<number, Item> | null;
+  agree?: boolean;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const copyId = () => {
+    navigator.clipboard?.writeText(String(rb.build.id)).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    }, () => {});
+  };
+
+  return (
+    <div
+      ref={ref}
+      className={`crow ${agree ? 'agree' : ''}`}
+      onMouseEnter={() => ref.current && setAnchor(ref.current.getBoundingClientRect())}
+      onMouseLeave={() => setAnchor(null)}
+    >
+      <span className="ctag">{tag}</span>
+      <span className="cname" title={rb.build.name}>
+        {rb.build.name}
+      </span>
+      <div className="cstats">
+        <span className="cwr" style={{ color: wrColor(rb.winRate) }}>
+          {(rb.winRate * 100).toFixed(0)}% WR
+        </span>
+        <span className="cmeta">n={rb.matches.toLocaleString()}</span>
+        <span className="cmeta">
+          shares {rb.shared}/{ourCount}
+        </span>
+      </div>
+      <div className="cfoot">
+        <span className="cmeta">updated {fmtDate(rb.build.updatedAt)}</span>
+        <button
+          className="cid"
+          onClick={copyId}
+          title="Copy build ID — paste into the in-game build search"
+        >
+          {copied ? 'copied ✓' : `#${rb.build.id}`}
+        </button>
+      </div>
+      {anchor && items && (
+        <BuildPreview build={rb.build} items={items} ourIds={ourIds} anchor={anchor} />
+      )}
+    </div>
+  );
+}
+
+// On-hover preview of a community build's items (slot-colored icons, our shared picks
+// highlighted). Portaled + anchored like the item card so the row can't clip it, and
+// kept off the default view so the page stays glanceable.
+function BuildPreview({
+  build,
+  items,
+  ourIds,
+  anchor,
+}: {
+  build: CommunityBuild;
+  items: Map<number, Item>;
+  ourIds: Set<number>;
+  anchor: DOMRect;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: -9999, top: -9999 });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const { offsetWidth: w, offsetHeight: h } = el;
+    const left = Math.max(8, Math.min(anchor.left, window.innerWidth - 8 - w));
+    const top =
+      anchor.bottom + CARD_GAP + h <= window.innerHeight
+        ? anchor.bottom + CARD_GAP
+        : Math.max(8, anchor.top - CARD_GAP - h);
+    setPos({ left, top });
+  }, [anchor]);
+
+  const theirSet = new Set(build.itemIds);
+  // Their items, shared-with-ours first so the overlap reads at a glance.
+  const resolved = build.itemIds
+    .map((id) => items.get(id))
+    .filter((i): i is Item => !!i)
+    .sort(
+      (a, b) =>
+        Number(ourIds.has(b.id)) - Number(ourIds.has(a.id)) ||
+        a.slot.localeCompare(b.slot) ||
+        a.cost - b.cost,
+    );
+  // Items we recommend that this build doesn't list at all.
+  const missing = [...ourIds]
+    .filter((id) => !theirSet.has(id))
+    .map((id) => items.get(id))
+    .filter((i): i is Item => !!i)
+    .sort((a, b) => a.slot.localeCompare(b.slot) || a.cost - b.cost);
+  const shared = ourIds.size - missing.length;
+
+  const icon = (i: Item, cls: string) => (
+    <span
+      key={i.id}
+      className={`bp-item ${cls}`}
+      title={i.name}
+      style={{ borderColor: SLOT_COLORS[i.slot] ?? SLOT_COLORS.unknown }}
+    >
+      {i.image ? <img src={i.image} alt="" loading="lazy" /> : null}
+    </span>
+  );
+
+  return createPortal(
+    <div ref={ref} className="buildprev" style={{ left: pos.left, top: pos.top }}>
+      <div className="bp-head">
+        <span className="bp-name">{build.name}</span>
+        <span className="bp-id">#{build.id}</span>
+      </div>
+      <div className="bp-grid">{resolved.map((i) => icon(i, ourIds.has(i.id) ? 'shared' : ''))}</div>
+      {missing.length > 0 && (
+        <>
+          <div className="bp-sub">Only in our build ({missing.length})</div>
+          <div className="bp-grid">{missing.map((i) => icon(i, 'missing'))}</div>
+        </>
+      )}
+      <div className="bp-foot">
+        {shared} of your {ourIds.size} picks shared
+        {missing.length > 0 ? ` · ${missing.length} only in ours` : ''}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function fmtDate(unixS: number): string {
+  return unixS ? new Date(unixS * 1000).toISOString().slice(0, 10) : '—';
 }
 
 function wrColor(wr: number): string {
