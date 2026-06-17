@@ -7,12 +7,17 @@
 
 import type { AbilityOrderRow, SkillBuild } from '../types';
 
-const MIN_SAMPLE = 50; // ignore orders below this many players
+/** Confidence floor: we trust the most-common order only above this many players. */
+export const MIN_SAMPLE = 50;
 
 export function bestSkillBuild(rows: AbilityOrderRow[]): SkillBuild | null {
-  const usable = rows.filter((r) => r.players >= MIN_SAMPLE && r.abilities.length > 0);
-  const pool = usable.length ? usable : rows.filter((r) => r.abilities.length > 0);
-  if (!pool.length) return null;
+  const withAbilities = rows.filter((r) => r.abilities.length > 0);
+  if (!withAbilities.length) return null;
+
+  // Prefer orders that clear the confidence floor; if none do, still surface the most
+  // common one rather than showing nothing — but flag it as a thin sample.
+  const usable = withAbilities.filter((r) => r.players >= MIN_SAMPLE);
+  const pool = usable.length ? usable : withAbilities;
 
   // Most common order — the meta-standard skill build.
   const r = pool.reduce((best, cur) => (cur.players > best.players ? cur : best));
@@ -23,6 +28,7 @@ export function bestSkillBuild(rows: AbilityOrderRow[]): SkillBuild | null {
     maxPriority: maxOrder(r.abilities),
     winRate: decided > 0 ? r.wins / decided : 0,
     sample: r.players,
+    lowSample: r.players < MIN_SAMPLE,
   };
 }
 

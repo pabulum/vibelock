@@ -72,7 +72,7 @@ let heroesPromise: Promise<Hero[]> | null = null;
 export function getHeroes(): Promise<Hero[]> {
   if (heroesPromise) return heroesPromise;
   heroesPromise = (async () => {
-    const cacheKey = 'dl.heroes.v2';
+    const cacheKey = 'dl.heroes.v3';
     const hit = cached<Hero[]>(cacheKey);
     if (hit) return hit;
     const raw = await getJson<RawHero[]>(`${BASE}/v1/assets/heroes?only_active=true`);
@@ -82,6 +82,7 @@ export function getHeroes(): Promise<Hero[]> {
         id: h.id,
         name: h.name,
         image: h.images?.icon_hero_card ?? h.image,
+        tagline: h.description?.role?.trim() || undefined,
         signatureClasses: [1, 2, 3, 4]
           .map((n) => h.items?.[`signature${n}`])
           .filter((c): c is string => typeof c === 'string'),
@@ -477,6 +478,7 @@ interface RawHero {
   name: string;
   image?: string;
   images?: { icon_hero_card?: string };
+  description?: { role?: string };
   items?: Record<string, string>;
 }
 

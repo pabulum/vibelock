@@ -6,6 +6,7 @@
   --text: #e6e9ee;
   --muted: #98a2b3;
   --accent: #6fb1ff;
+  --purple: #9b6dd1; /* Deadlock spirit purple */
 }
 
 * {
@@ -39,13 +40,135 @@ body {
 }
 
 .brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
   font-size: 17px;
   font-weight: 700;
   letter-spacing: 0.2px;
 }
-.brand .logo {
+.brandname {
+  flex: 0 0 auto;
+}
+/* Selected hero's flavor line — small, italic, muted. */
+.tagline {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 400;
+  font-style: italic;
+  color: var(--muted);
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tagline::before {
+  content: '“';
+}
+.tagline::after {
+  content: '”';
+}
+@media (max-width: 760px) {
+  .tagline {
+    display: none;
+  }
+}
+
+/* Shuffling brand mark: an angular crystal-shard gem masked over a real item icon. */
+.shufmark {
+  position: relative;
+  flex: 0 0 auto;
+  display: block;
+  background: linear-gradient(135deg, #241b35, #2b2444);
+  /* Asymmetric beveled-shard silhouette — deliberately off the usual square/circle. */
+  clip-path: polygon(28% 0%, 100% 8%, 86% 72%, 58% 100%, 0% 84%, 10% 30%);
+  filter: drop-shadow(0 0 6px rgba(155, 109, 209, 0.4));
+}
+.shufmark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  animation: shufin 0.55s ease;
+}
+.shufmark-fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
   color: var(--accent);
-  margin-right: 4px;
+  font-size: 0.66em;
+}
+@keyframes shufin {
+  from {
+    opacity: 0;
+    transform: scale(1.3) rotate(-10deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+}
+
+/* Indeterminate loading strip riding the bottom edge of the sticky header. */
+.loadstrip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  overflow: hidden;
+}
+.loadstrip::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 35%;
+  background: linear-gradient(90deg, transparent, var(--purple), transparent);
+  animation: loadslide 2.3s ease-in-out infinite;
+}
+@keyframes loadslide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(385%);
+  }
+}
+
+/* Centered cold-load state — the shuffling mark bobbing over a label. */
+.loadstate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 64px 22px;
+  color: var(--muted);
+}
+.loadstate .shufmark {
+  animation: loadbob 1.7s ease-in-out infinite;
+}
+.loadstate .loadlabel {
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+@keyframes loadbob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shufmark img,
+  .loadstrip::before,
+  .loadstate .shufmark {
+    animation: none;
+  }
 }
 
 .controls {
@@ -77,9 +200,6 @@ body {
 }
 .meta strong {
   color: var(--text);
-}
-.spin {
-  color: var(--accent);
 }
 .warn {
   color: #e0b341;
@@ -566,34 +686,8 @@ body {
   color: #f0b8b8;
 }
 
-.top {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
-  padding-right: 22px;
-}
-.top-left {
-  flex: 1 1 0;
-  min-width: 0;
-}
-.top-right {
-  flex: 0 0 430px;
-}
-@media (max-width: 980px) {
-  .top {
-    display: block;
-    padding-right: 0;
-  }
-  .top-right {
-    width: auto;
-  }
-  .skills {
-    margin: 8px 22px 0 !important;
-  }
-}
-
 .skills {
-  margin: 8px 0 0;
+  margin: 10px 22px 2px;
   padding: 11px 14px;
   background: var(--panel);
   border: 1px solid var(--line);

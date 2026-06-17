@@ -6,6 +6,8 @@ export interface Hero {
   name: string;
   /** Square portrait, when available. */
   image?: string;
+  /** Short flavor role line, e.g. "Lights up enemies and watches them burn" (may be absent). */
+  tagline?: string;
   /** The 4 signature ability class names, in in-game slot order (1→4). */
   signatureClasses: string[];
 }
@@ -38,6 +40,8 @@ export interface SkillBuild {
   maxPriority: number[];
   winRate: number;
   sample: number;
+  /** The most-common order didn't clear the confidence floor — treat as noisy. */
+  lowSample: boolean;
 }
 
 export interface Item {

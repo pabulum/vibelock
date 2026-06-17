@@ -72,6 +72,7 @@ export default function App() {
   const [counterMatrix, setCounterMatrix] = useState<HeroCounterRow[] | null>(null);
   const [abilities, setAbilities] = useState<Map<number, Ability> | null>(null);
   const [skillBuild, setSkillBuild] = useState<SkillBuild | null>(null);
+  const [skillLoading, setSkillLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [counters, setCounters] = useState<CounterItem[] | null>(null);
   const [countersLoading, setCountersLoading] = useState(false);
@@ -200,14 +201,26 @@ export default function App() {
   useEffect(() => {
     if (!hero) return;
     const ctrl = new AbortController();
-    getAbilityOrder({
-      heroId: hero.id,
-      minBadge,
-      includeItemIds: activeSignatureId ? [activeSignatureId] : undefined,
-      ...windowFor(patches, patchIdx),
-    })
-      .then((rows) => !ctrl.signal.aborted && setSkillBuild(bestSkillBuild(rows)))
-      .catch((e) => !ctrl.signal.aborted && setError(String(e)));
+    setSkillLoading(true);
+    const base = { heroId: hero.id, minBadge, ...windowFor(patches, patchIdx) };
+
+    (async () => {
+      // Prefer the order players ran *with* this archetype's signature item — but that
+      // slice is narrow, so at a high rank floor on one patch it can come back empty.
+      // Fall back to the hero's overall order so we always have something to show.
+      const conditioned = await getAbilityOrder({
+        ...base,
+        includeItemIds: activeSignatureId ? [activeSignatureId] : undefined,
+      });
+      let build = bestSkillBuild(conditioned);
+      if (!build && activeSignatureId) {
+        build = bestSkillBuild(await getAbilityOrder(base));
+      }
+      if (!ctrl.signal.aborted) setSkillBuild(build);
+    })()
+      .catch((e) => !ctrl.signal.aborted && setError(String(e)))
+      .finally(() => !ctrl.signal.aborted && setSkillLoading(false));
+
     return () => ctrl.abort();
   }, [hero, minBadge, patchIdx, patches, activeSignatureId]);
 
@@ -257,12 +270,20 @@ export default function App() {
   const patchLabel = patchIdx === null ? 'last 30 days' : patches[patchIdx]?.title;
   const enemyNames = enemies.map((id) => heroes.find((h) => h.id === id)?.name ?? '?').join(', ');
   const lowPopulation = build !== null && build.population.matches < 400;
+  // Any data in flight — drives the single loading strip under the header. `!items`
+  // covers the very first paint, before the assets effect has resolved.
+  const busy = loading || countersLoading || skillLoading || (!items && !error);
+  // The brand mark's icon is a function of the current selection, so it flips to a new
+  // item on each action (hero/rank/patch/build-style/enemy change) and is otherwise still.
+  const shuffleSeed = `${heroId}|${tier}|${patchIdx}|${archKey}|${enemies.join(',')}`;
 
   return (
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <span className="logo">◆</span> Vibelock
+          <ShuffleMark items={items} seed={shuffleSeed} />
+          <span className="brandname">Vibelock</span>
+          {hero?.tagline && <span className="tagline">{hero.tagline}</span>}
         </div>
         <div className="controls">
           <label>
@@ -300,12 +321,11 @@ export default function App() {
             </select>
           </label>
         </div>
+        {busy && <div className="loadstrip" aria-hidden="true" />}
       </header>
 
       {error && <div className="banner error">⚠ {error}</div>}
 
-      <div className="top">
-        <div className="top-left">
       {build && (
         <div className="meta">
           <strong>{build.hero.name}</strong>
@@ -315,7 +335,6 @@ export default function App() {
           <span className={build.standingSlots > SLOT_CAP ? 'warn' : undefined}>
             {build.standingSlots}/{SLOT_CAP} standing slots
           </span>
-          {loading && <span className="spin"> · refreshing…</span>}
           {lowPopulation && <span className="warn"> · ⚠ low sample, treat as noisy</span>}
         </div>
       )}
@@ -340,6 +359,12 @@ export default function App() {
       )}
 
       {archetypeSet && <div className="identity">{archetypeSet.note}</div>}
+
+      {abilities && skillBuild ? (
+        <SkillOrder skill={skillBuild} abilities={abilities} slotOrder={slotOrder} />
+      ) : (
+        hero && !skillLoading && <SkillEmpty />
+      )}
 
       {communityMatch && (communityMatch.best || communityMatch.aligned) && (
         <section className="community">
@@ -436,7 +461,6 @@ export default function App() {
         <section className="counters">
           <h2>
             Counters <span className="sub">items that gain win rate vs {enemyNames}</span>
-            {countersLoading && <span className="spin"> · loading…</span>}
           </h2>
           {counters && counters.length === 0 ? (
             <p className="empty">
@@ -455,16 +479,13 @@ export default function App() {
           </p>
         </section>
       )}
-        </div>
 
-        <div className="top-right">
-          {skillBuild && abilities && (
-            <SkillOrder skill={skillBuild} abilities={abilities} slotOrder={slotOrder} />
-          )}
-        </div>
-      </div>
-
-      {loading && !build && <div className="banner">Loading build…</div>}
+      {((loading && !build) || (!items && !error)) && (
+        <LoadingState
+          items={items}
+          label={items ? `Crunching ${hero?.name ?? 'match'} data…` : 'Loading game assets…'}
+        />
+      )}
 
       {build && (
         <main className="phases">
@@ -503,6 +524,77 @@ export default function App() {
         deltas are raw (no adjusted rate available), so lean on the larger samples.
       </footer>
     </div>
+  );
+}
+
+// The brand mark: a diamond gem that shows a real item icon (masked to the diamond
+// silhouette so any source icon reads as one cohesive logo). The icon is derived from
+// `seed`, so it changes only when the user takes an action (new hero/rank/patch/style)
+// — no timer ticking away. Falls back to a static ◆ until the items asset loads.
+// Doubles as the (static, bobbing) spinner in <LoadingState>.
+function ShuffleMark({
+  items,
+  size = 36,
+  seed = '',
+}: {
+  items: Map<number, Item> | null;
+  size?: number;
+  seed?: string;
+}) {
+  const pool = useMemo(
+    () => (items ? [...items.values()].filter((i) => i.image) : []),
+    [items],
+  );
+  // A per-mount salt so the same selection doesn't always map to the same icon across
+  // reloads, while staying stable within a session.
+  const salt = useState(() => Math.random().toString(36).slice(2))[0];
+
+  const item = pool.length ? pool[hashIndex(seed + salt, pool.length)] : null;
+  return (
+    <span className="shufmark" style={{ width: size, height: size }}>
+      {item?.image ? (
+        <img key={item.id} src={item.image} alt="" />
+      ) : (
+        <span className="shufmark-fallback">◆</span>
+      )}
+    </span>
+  );
+}
+
+/** Stable FNV-1a hash of a string into [0, mod) — used to pick the brand icon. */
+function hashIndex(s: string, mod: number): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h) % mod;
+}
+
+// First-paint / cold-query state: the shuffling mark, gently bobbing, over a label.
+// Replaces the old "Loading build…" / "refreshing…" text so loading reads as one thing.
+function LoadingState({ items, label }: { items: Map<number, Item> | null; label: string }) {
+  return (
+    <div className="loadstate">
+      <ShuffleMark items={items} size={46} />
+      <span className="loadlabel">{label}</span>
+    </div>
+  );
+}
+
+// Shown when no skill order clears the sample threshold (high rank + narrow patch). We
+// render this instead of nothing so the panel never silently disappears.
+function SkillEmpty() {
+  return (
+    <section className="skills">
+      <h2>
+        Skill order <span className="sub">not enough games on this filter</span>
+      </h2>
+      <p className="empty">
+        No upgrade order has a confident sample here. Try <strong>Last 30 days</strong> or a lower
+        rank floor.
+      </p>
+    </section>
   );
 }
 
@@ -600,6 +692,7 @@ function SkillOrder({
         Skill order{' '}
         <span className="sub">
           {(skill.winRate * 100).toFixed(0)}% WR · n={skill.sample.toLocaleString()}
+          {skill.lowSample && <span className="warn"> · ⚠ thin sample</span>}
         </span>
       </h2>
       <div className="skill-grid" style={{ ['--steps' as string]: skill.order.length }}>
