@@ -6,6 +6,7 @@ import {
   useState,
   type CSSProperties,
   type ReactNode,
+  type Ref,
 } from 'react';
 import { createPortal } from 'react-dom';
 import './App.css';
@@ -58,6 +59,74 @@ function windowFor(patches: Patch[], idx: number | null): TimeWindow {
   };
 }
 
+const REDUCED =
+  typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Drives a panel's `--settle` (0 = crisp, ~0.9 = fully veiled). While its query is in
+// flight the frosted veil eases in, then *trickles* toward a floor on a curve scaled to
+// how long that panel took to load last time — so it reads as honest progress toward
+// "present". Crucially it never fully clears on the timer alone: only the real
+// completion snaps it to 0, so it can't lie that a piece is ready before its data lands.
+// Each panel learns its own timing (an EMA), so a slow cold query and a fast cached one
+// settle at the rate they actually arrive. Writes the var imperatively (no re-render).
+function useSettle<T extends HTMLElement>(loading: boolean) {
+  const ref = useRef<T>(null);
+  const estMs = useRef(900); // EMA of this panel's load time
+  const startedAt = useRef(0);
+  const raf = useRef(0);
+
+  useEffect(() => {
+    cancelAnimationFrame(raf.current);
+    const setVar = (k: string, v: number) => ref.current?.style.setProperty(k, v.toFixed(3));
+
+    if (loading) {
+      startedAt.current = performance.now();
+      if (REDUCED) {
+        setVar('--settle', 0.85); // a calm, unreadable static veil — no animated trickle
+        return;
+      }
+      const tick = () => {
+        const t = performance.now() - startedAt.current;
+        const rampIn = Math.min(t / 240, 1); // ease the veil in so instant loads barely flash
+        const progress = Math.min(t / estMs.current, 1);
+        const decay = (1 - progress) ** 2; // 1 → 0 as we approach the expected finish
+        // Stays heavy enough to keep the content unreadable the whole time; the trickle is
+        // only a gentle "developing" hint, never a slide back to legible.
+        setVar('--settle', 0.95 * rampIn * (0.82 + 0.18 * decay));
+        raf.current = requestAnimationFrame(tick);
+      };
+      tick();
+    } else if (startedAt.current) {
+      const dur = performance.now() - startedAt.current;
+      estMs.current = estMs.current * 0.7 + dur * 0.3; // learn the timing for next time
+      startedAt.current = 0;
+      if (REDUCED) {
+        setVar('--settle', 0);
+        return;
+      }
+      // The reveal: blur resolves into focus while a brief purple glow pulses — the
+      // "this piece just landed" punch.
+      const from = Number(ref.current?.style.getPropertyValue('--settle')) || 0;
+      const t0 = performance.now();
+      const DUR = 560;
+      const tick = () => {
+        const k = Math.min((performance.now() - t0) / DUR, 1);
+        setVar('--settle', from * (1 - k) ** 3); // ease-out to crisp
+        setVar('--flash', k < 0.28 ? k / 0.28 : Math.max(0, 1 - (k - 0.28) / 0.72)); // pulse
+        if (k < 1) raf.current = requestAnimationFrame(tick);
+        else {
+          setVar('--settle', 0);
+          setVar('--flash', 0);
+        }
+      };
+      tick();
+    }
+    return () => cancelAnimationFrame(raf.current);
+  }, [loading]);
+
+  return ref;
+}
+
 export default function App() {
   const [heroes, setHeroes] = useState<Hero[]>([]);
   const [items, setItems] = useState<Map<number, Item> | null>(null);
@@ -70,6 +139,7 @@ export default function App() {
   const [archetypeSet, setArchetypeSet] = useState<ArchetypeSet | null>(null);
   const [archKey, setArchKey] = useState<ArchetypeKey>('all');
   const [counterMatrix, setCounterMatrix] = useState<HeroCounterRow[] | null>(null);
+  const [matrixLoading, setMatrixLoading] = useState(false);
   const [abilities, setAbilities] = useState<Map<number, Ability> | null>(null);
   const [skillBuild, setSkillBuild] = useState<SkillBuild | null>(null);
   const [skillLoading, setSkillLoading] = useState(false);
@@ -80,6 +150,7 @@ export default function App() {
     builds: CommunityBuild[];
     stats: HeroBuildStatRow[];
   } | null>(null);
+  const [communityLoading, setCommunityLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Load assets once.
@@ -174,9 +245,11 @@ export default function App() {
   useEffect(() => {
     if (!items) return;
     const ctrl = new AbortController();
+    setMatrixLoading(true);
     getHeroCounters({ minBadge, ...windowFor(patches, patchIdx) })
       .then((m) => !ctrl.signal.aborted && setCounterMatrix(m))
-      .catch((e) => !ctrl.signal.aborted && setError(String(e)));
+      .catch((e) => !ctrl.signal.aborted && setError(String(e)))
+      .finally(() => !ctrl.signal.aborted && setMatrixLoading(false));
     return () => ctrl.abort();
   }, [items, minBadge, patchIdx, patches]);
 
@@ -230,12 +303,14 @@ export default function App() {
   useEffect(() => {
     if (!hero) return;
     const ctrl = new AbortController();
+    setCommunityLoading(true);
     Promise.all([
       getCommunityBuilds(hero.id),
       getHeroBuildStats({ heroId: hero.id, minBadge, ...windowFor(patches, patchIdx) }),
     ])
       .then(([builds, stats]) => !ctrl.signal.aborted && setCommunity({ builds, stats }))
-      .catch((e) => !ctrl.signal.aborted && setError(String(e)));
+      .catch((e) => !ctrl.signal.aborted && setError(String(e)))
+      .finally(() => !ctrl.signal.aborted && setCommunityLoading(false));
     return () => ctrl.abort();
   }, [hero, minBadge, patchIdx, patches]);
 
@@ -272,10 +347,24 @@ export default function App() {
   const lowPopulation = build !== null && build.population.matches < 400;
   // Any data in flight — drives the single loading strip under the header. `!items`
   // covers the very first paint, before the assets effect has resolved.
-  const busy = loading || countersLoading || skillLoading || (!items && !error);
+  const busy =
+    loading ||
+    countersLoading ||
+    skillLoading ||
+    communityLoading ||
+    matrixLoading ||
+    (!items && !error);
   // The brand mark's icon is a function of the current selection, so it flips to a new
   // item on each action (hero/rank/patch/build-style/enemy change) and is otherwise still.
   const shuffleSeed = `${heroId}|${tier}|${patchIdx}|${archKey}|${enemies.join(',')}`;
+
+  // Per-piece "developing" veils — each tracks its own query so panels settle as their
+  // data actually lands, independently of the single strip in the header.
+  const buildRef = useSettle<HTMLElement>(loading);
+  const skillRef = useSettle<HTMLElement>(skillLoading);
+  const communityRef = useSettle<HTMLElement>(communityLoading);
+  const matrixRef = useSettle<HTMLDivElement>(matrixLoading);
+  const countersRef = useSettle<HTMLElement>(countersLoading);
 
   return (
     <div className="app">
@@ -361,13 +450,18 @@ export default function App() {
       {archetypeSet && <div className="identity">{archetypeSet.note}</div>}
 
       {abilities && skillBuild ? (
-        <SkillOrder skill={skillBuild} abilities={abilities} slotOrder={slotOrder} />
+        <SkillOrder
+          skill={skillBuild}
+          abilities={abilities}
+          slotOrder={slotOrder}
+          settleRef={skillRef}
+        />
       ) : (
         hero && !skillLoading && <SkillEmpty />
       )}
 
       {communityMatch && (communityMatch.best || communityMatch.aligned) && (
-        <section className="community">
+        <section className="community" ref={communityRef}>
           <h2>
             Community check <span className="sub">player builds at {build?.rankLabel}</span>
           </h2>
@@ -413,7 +507,7 @@ export default function App() {
       )}
 
       {matchups && (matchups.tough.length > 0 || matchups.favorable.length > 0) && (
-        <div className="matchups">
+        <div className="matchups" ref={matrixRef}>
           {matchups.tough.length > 0 && (
             <div className="mrow">
               <span className="lbl tough">Tough vs</span>
@@ -458,7 +552,7 @@ export default function App() {
       />
 
       {enemies.length > 0 && (
-        <section className="counters">
+        <section className="counters" ref={countersRef}>
           <h2>
             Counters <span className="sub">items that gain win rate vs {enemyNames}</span>
           </h2>
@@ -488,7 +582,7 @@ export default function App() {
       )}
 
       {build && (
-        <main className="phases">
+        <main className="phases" ref={buildRef}>
           {build.phases.map((phase) => (
             <section className="phase" key={phase.column}>
               <h2>
@@ -675,10 +769,12 @@ function SkillOrder({
   skill,
   abilities,
   slotOrder,
+  settleRef,
 }: {
   skill: SkillBuild;
   abilities: Map<number, Ability>;
   slotOrder: number[];
+  settleRef?: Ref<HTMLElement>;
 }) {
   // Rows in in-game slot order; fall back to upgrade order if slots are unknown.
   const present = new Set(skill.order);
@@ -687,7 +783,7 @@ function SkillOrder({
   const maxLabel = ['max 1st', 'max 2nd', 'max 3rd', 'max 4th'];
 
   return (
-    <section className="skills">
+    <section className="skills" ref={settleRef}>
       <h2>
         Skill order{' '}
         <span className="sub">

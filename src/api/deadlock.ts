@@ -24,12 +24,65 @@ const BASE = 'https://api.deadlock-api.com';
 // Assets (heroes/items) change rarely; cache them in module scope + localStorage.
 const ASSET_TTL_MS = 24 * 60 * 60 * 1000;
 
-async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`${res.status} ${res.statusText} for ${url}`);
+const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const MAX_RETRIES = 3;
+
+// How long to wait before retrying a 429. The API signals its limit with standard
+// `ratelimit-*` headers (analytics endpoints allow 200 requests / 60s per IP), but a
+// browser only sees `retry-after` / `ratelimit-reset` cross-origin if the server
+// allow-lists them — so treat those as a hint and otherwise back off exponentially.
+function retryAfterMs(res: Response, attempt: number): number {
+  for (const h of ['retry-after', 'ratelimit-reset']) {
+    const v = Number(res.headers.get(h));
+    if (Number.isFinite(v) && v > 0) return Math.min(v * 1000, 30_000);
   }
-  return res.json() as Promise<T>;
+  return Math.min(8000, 400 * 2 ** attempt) + Math.random() * 300; // jittered backoff
+}
+
+async function getJson<T>(url: string): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url);
+    if (res.status === 429 && attempt < MAX_RETRIES) {
+      await delay(retryAfterMs(res, attempt));
+      continue;
+    }
+    if (!res.ok) {
+      throw new Error(`${res.status} ${res.statusText} for ${url}`);
+    }
+    return res.json() as Promise<T>;
+  }
+}
+
+// Cap how many analytics requests are in flight at once. A single session stays well
+// under the 200/60s limit in normal use, but clicking quickly through heroes/ranks
+// fans out enough parallel queries (archetype splits, locked paths, counters) to burst
+// past it; the cap spreads a burst over time instead of firing it all at once.
+const MAX_INFLIGHT = 5;
+let inflight = 0;
+const queue: Array<() => void> = [];
+
+function pump(): void {
+  if (inflight >= MAX_INFLIGHT) return;
+  const next = queue.shift();
+  if (!next) return;
+  inflight++;
+  next();
+}
+
+// Run `task` once a concurrency slot frees up, releasing it (and pumping the queue)
+// when the task settles either way.
+function throttle<T>(task: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    queue.push(() =>
+      task()
+        .then(resolve, reject)
+        .finally(() => {
+          inflight--;
+          pump();
+        }),
+    );
+    pump();
+  });
 }
 
 // Analytics endpoints recompute server-side and return small payloads, but a cold
@@ -41,7 +94,7 @@ const analyticsCache = new Map<string, Promise<unknown>>();
 function getAnalytics<T>(url: string): Promise<T> {
   const hit = analyticsCache.get(url);
   if (hit) return hit as Promise<T>;
-  const p = getJson<T>(url);
+  const p = throttle(() => getJson<T>(url));
   analyticsCache.set(url, p);
   p.catch(() => analyticsCache.delete(url)); // never cache a failure
   return p;

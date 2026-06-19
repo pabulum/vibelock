@@ -171,6 +171,60 @@ body {
   }
 }
 
+/* ---- Per-piece "developing" load cue --------------------------------------
+   While a query is in flight, each content box wears a frosted veil — a heavy
+   backdrop blur (content illegible) with a soft-light-blended gaussian grain.
+   `--settle`/`--flash` (0 = crisp ↔ ~0.95 = fully veiled / glow strength) are set
+   in JS on the *section* and inherit down, so the veil lands on the individual
+   boxes (each .phase, .crow, .mchip — not one band over the whole section). When
+   the data arrives the blur resolves into focus and `--flash` pulses a purple
+   glow, so each box visibly snaps into being as it becomes up to date. */
+.skills,
+.counters,
+.phase,
+.crow,
+.mchip {
+  position: relative;
+}
+.skills::after,
+.counters::after,
+.phase::after,
+.crow::after,
+.mchip::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none; /* clicks/hovers pass straight through to the content */
+  border-radius: inherit;
+  opacity: var(--settle, 0); /* 0 ⇒ invisible, nothing painted */
+  -webkit-backdrop-filter: blur(calc(var(--settle, 0) * 32px)) saturate(0.8);
+  backdrop-filter: blur(calc(var(--settle, 0) * 32px)) saturate(0.8);
+  /* Grayscale gaussian grain, soft-light-blended into the blur so it reads as part
+     of the image and only darkens it — never a bright gray film on top. */
+  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0.33 0.33 0.33 0 -0.1 0.33 0.33 0.33 0 -0.1 0.33 0.33 0.33 0 -0.1 0 0 0 0 0.5'/></filter><rect width='160' height='160' filter='url(%23g)'/></svg>");
+  background-size: 160px 160px;
+  background-repeat: repeat;
+  mix-blend-mode: soft-light;
+}
+/* Purple "just landed" glow — a soft bloom (no hard frame), pulsed by --flash. */
+.skills::before,
+.counters::before,
+.phase::before,
+.crow::before,
+.mchip::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  border-radius: inherit;
+  opacity: var(--flash, 0);
+  box-shadow:
+    0 0 22px 1px rgba(155, 109, 209, 0.45),
+    inset 0 0 30px rgba(155, 109, 209, 0.3);
+}
+
 .controls {
   display: flex;
   gap: 14px;
