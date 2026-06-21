@@ -230,8 +230,15 @@ export interface CommunityBuild {
   version: number;
   /** Unix seconds the build was last edited. */
   updatedAt: number;
-  /** Distinct item ids the build lists (resolved against our items map; abilities dropped). */
+  /** All distinct item ids the build lists, core + situational (resolved; abilities dropped). */
   itemIds: number[];
+  /**
+   * Distinct items from non-situational sections (categories the author did not flag
+   * `optional`). Similarity ranks on these, so a build that marks its situational tail keeps a
+   * tight core and scores high, while one that dumps everything into un-flagged sections is
+   * (deliberately) deranked.
+   */
+  coreItemIds: number[];
 }
 
 /** A community build joined to its win-rate stats and scored against our generated build. */
@@ -240,10 +247,12 @@ export interface RankedCommunityBuild {
   /** Raw win rate among matches in the chosen rank/patch window (no adjusted rate available). */
   winRate: number;
   matches: number;
-  /** Jaccard overlap of item sets with our generated build, 0–1 (used for ranking). */
+  /** Jaccard overlap of our *core* with their *core* item set, 0–1 (used for ranking). */
   similarity: number;
-  /** How many of our build's items this build also lists (the legible, displayed number). */
+  /** How many of our core items appear in their core (the legible, displayed number). */
   shared: number;
+  /** How many of our situational picks they also flag situational (secondary, not ranked). */
+  situShared: number;
 }
 
 /** The two community builds worth surfacing for the current hero/rank/patch + our build. */

@@ -316,27 +316,34 @@ export default function App() {
 
   // Items the generated build recommends (core picks across phases) — the set we match
   // community builds against.
-  // Core + situational, deduped: community builds list situational picks too, so
-  // comparing only our core would understate the overlap.
-  const ourItemIds = useMemo(
-    () =>
-      build
-        ? [
-            ...new Set(
-              build.phases.flatMap((p) => [...p.core, ...p.situational]).map((b) => b.item.id),
-            ),
-          ]
-        : [],
+  // Compare like-for-like: our core ranks against their core, our situational against
+  // theirs (secondary). The full set still drives preview highlighting.
+  const ourCoreIds = useMemo(
+    () => (build ? [...new Set(build.phases.flatMap((p) => p.core.map((b) => b.item.id)))] : []),
     [build],
   );
-  const ourIdSet = useMemo(() => new Set(ourItemIds), [ourItemIds]);
+  const ourSituationalIds = useMemo(() => {
+    if (!build) return [];
+    const core = new Set(build.phases.flatMap((p) => p.core.map((b) => b.item.id)));
+    return [...new Set(build.phases.flatMap((p) => p.situational.map((b) => b.item.id)))].filter(
+      (id) => !core.has(id),
+    );
+  }, [build]);
+  const ourIdSet = useMemo(
+    () => new Set([...ourCoreIds, ...ourSituationalIds]),
+    [ourCoreIds, ourSituationalIds],
+  );
+  const ourSplit = useMemo(
+    () => ({ coreCount: ourCoreIds.length, situCount: ourSituationalIds.length }),
+    [ourCoreIds, ourSituationalIds],
+  );
 
   const communityMatch = useMemo(
     () =>
-      community && ourItemIds.length
-        ? matchCommunityBuilds(community.builds, community.stats, ourItemIds)
+      community && (ourCoreIds.length || ourSituationalIds.length)
+        ? matchCommunityBuilds(community.builds, community.stats, ourCoreIds, ourSituationalIds)
         : null,
-    [community, ourItemIds],
+    [community, ourCoreIds, ourSituationalIds],
   );
 
   const toggleEnemy = (id: number) =>
@@ -415,96 +422,102 @@ export default function App() {
 
       {error && <div className="banner error">⚠ {error}</div>}
 
-      {build && (
-        <div className="meta">
-          <strong>{build.hero.name}</strong>
-          {archetypeSet?.flex && activeArchetype ? ` · ${activeArchetype.label}` : ''} ·{' '}
-          {build.rankLabel} · {patchLabel} · {build.population.matches.toLocaleString()} matches ·
-          avg game {Math.round(build.population.avgDurationS / 60)} min ·{' '}
-          <span className={build.standingSlots > SLOT_CAP ? 'warn' : undefined}>
-            {build.standingSlots}/{SLOT_CAP} standing slots
-          </span>
-          {lowPopulation && <span className="warn"> · ⚠ low sample, treat as noisy</span>}
-        </div>
-      )}
+      <div className="topflow">
+        {abilities && skillBuild ? (
+          <SkillOrder
+            skill={skillBuild}
+            abilities={abilities}
+            slotOrder={slotOrder}
+            settleRef={skillRef}
+          />
+        ) : (
+          hero && !skillLoading && <SkillEmpty />
+        )}
 
-      {archetypeSet?.flex && (
-        <div className="archetypes">
-          <span className="lbl">Build style</span>
-          {archetypeSet.archetypes.map((a) => (
-            <button
-              key={a.key}
-              className={`archtab ${a.key === archKey ? 'active' : ''}`}
-              onClick={() => setArchKey(a.key)}
-              title={a.signature ? `players who built ${a.signature.name}` : 'every build, blended'}
-            >
-              <span className="atlabel">{a.label}</span>
-              <span className="atmeta">
-                {(a.winRate * 100).toFixed(0)}% WR · {(a.share * 100).toFixed(0)}% of games
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {archetypeSet && <div className="identity">{archetypeSet.note}</div>}
-
-      {abilities && skillBuild ? (
-        <SkillOrder
-          skill={skillBuild}
-          abilities={abilities}
-          slotOrder={slotOrder}
-          settleRef={skillRef}
-        />
-      ) : (
-        hero && !skillLoading && <SkillEmpty />
-      )}
-
-      {communityMatch && (communityMatch.best || communityMatch.aligned) && (
-        <section className="community" ref={communityRef}>
-          <h2>
-            Community check <span className="sub">player builds at {build?.rankLabel}</span>
-          </h2>
-          <div className="crows">
-            {communityMatch.agree && communityMatch.best ? (
-              <CommunityRow
-                tag="Top build = closest to ours ✓"
-                rb={communityMatch.best}
-                ourCount={ourItemIds.length}
-                ourIds={ourIdSet}
-                items={items}
-                agree
-              />
-            ) : (
-              <>
-                {communityMatch.best && (
-                  <CommunityRow
-                    tag="Best win rate"
-                    rb={communityMatch.best}
-                    ourCount={ourItemIds.length}
-                    ourIds={ourIdSet}
-                    items={items}
-                  />
-                )}
-                {communityMatch.aligned && (
-                  <CommunityRow
-                    tag="Most like ours"
-                    rb={communityMatch.aligned}
-                    ourCount={ourItemIds.length}
-                    ourIds={ourIdSet}
-                    items={items}
-                  />
-                )}
-              </>
-            )}
+        {build && (
+          <div className="meta">
+            <strong>{build.hero.name}</strong>
+            {archetypeSet?.flex && activeArchetype ? ` · ${activeArchetype.label}` : ''} ·{' '}
+            {build.rankLabel} · {patchLabel} · {build.population.matches.toLocaleString()} matches ·
+            avg game {Math.round(build.population.avgDurationS / 60)} min ·{' '}
+            <span className={build.standingSlots > SLOT_CAP ? 'warn' : undefined}>
+              {build.standingSlots}/{SLOT_CAP} standing slots
+            </span>
+            {lowPopulation && <span className="warn"> · ⚠ low sample, treat as noisy</span>}
           </div>
-          <p className="hint">
-            Raw win rate over the selected rank/patch (no adjusted rate exists for whole builds, so
-            lean on the larger samples). “shares N” = how many of our build’s picks it also lists;
-            hover to preview its items, click <code>#id</code> to copy it for the in-game search.
-          </p>
-        </section>
-      )}
+        )}
+
+        {archetypeSet?.flex && (
+          <div className="archetypes">
+            <span className="lbl">Build style</span>
+            {archetypeSet.archetypes.map((a) => (
+              <button
+                key={a.key}
+                className={`archtab ${a.key === archKey ? 'active' : ''}`}
+                onClick={() => setArchKey(a.key)}
+                title={a.signature ? `players who built ${a.signature.name}` : 'every build, blended'}
+              >
+                <span className="atlabel">{a.label}</span>
+                <span className="atmeta">
+                  {(a.winRate * 100).toFixed(0)}% WR · {(a.share * 100).toFixed(0)}% of games
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {archetypeSet && <div className="identity">{archetypeSet.note}</div>}
+
+        {communityMatch && (communityMatch.best || communityMatch.aligned) && (
+          <section className="community" ref={communityRef}>
+            <h2>
+              Community check <span className="sub">player builds at {build?.rankLabel}</span>
+            </h2>
+            <div className="crows">
+              {communityMatch.agree && communityMatch.best ? (
+                <CommunityRow
+                  tag="Top build = closest to ours ✓"
+                  rb={communityMatch.best}
+                  our={ourSplit}
+                  ourIds={ourIdSet}
+                  items={items}
+                  agree
+                />
+              ) : (
+                <>
+                  {communityMatch.best && (
+                    <CommunityRow
+                      tag="Best win rate"
+                      rb={communityMatch.best}
+                      our={ourSplit}
+                      ourIds={ourIdSet}
+                      items={items}
+                    />
+                  )}
+                  {communityMatch.aligned && (
+                    <CommunityRow
+                      tag="Most like ours"
+                      rb={communityMatch.aligned}
+                      our={ourSplit}
+                      ourIds={ourIdSet}
+                      items={items}
+                    />
+                  )}
+                </>
+              )}
+            </div>
+            <p className="hint">
+              Raw win rate over the selected rank/patch (no adjusted rate exists for whole builds, so
+              lean on the larger samples). “% match” = overlap of our core picks with their core
+              (sections the author didn’t flag situational), which ranks “most like ours” — so
+              tightly organized builds rank above kitchen-sink ones. “core N/M” = our core picks they
+              also run; “flex N/M” = our situational picks they also flag situational (secondary, not
+              ranked). Hover to preview its items, click <code>#id</code> to copy it for the in-game
+              search.
+            </p>
+          </section>
+        )}
+      </div>
 
       {matchups && (matchups.tough.length > 0 || matchups.favorable.length > 0) && (
         <div className="matchups" ref={matrixRef}>
@@ -1037,14 +1050,14 @@ function ItemCard({
 function CommunityRow({
   tag,
   rb,
-  ourCount,
+  our,
   ourIds,
   items,
   agree = false,
 }: {
   tag: string;
   rb: RankedCommunityBuild;
-  ourCount: number;
+  our: { coreCount: number; situCount: number };
   ourIds: Set<number>;
   items: Map<number, Item> | null;
   agree?: boolean;
@@ -1052,6 +1065,9 @@ function CommunityRow({
   const ref = useRef<HTMLDivElement>(null);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const coreSize = rb.build.coreItemIds.length;
+  const total = rb.build.itemIds.length;
 
   const copyId = () => {
     navigator.clipboard?.writeText(String(rb.build.id)).then(() => {
@@ -1076,8 +1092,23 @@ function CommunityRow({
           {(rb.winRate * 100).toFixed(0)}% WR
         </span>
         <span className="cmeta">n={rb.matches.toLocaleString()}</span>
-        <span className="cmeta">
-          shares {rb.shared}/{ourCount}
+        <span
+          className="cmeta"
+          title={`Jaccard overlap of our core picks with their core (shared ÷ combined). Ranks “most like ours”; their core is ${coreSize} of ${total} items.`}
+        >
+          {(rb.similarity * 100).toFixed(0)}% match
+        </span>
+        <span
+          className="cmeta"
+          title={
+            `${rb.shared} of your ${our.coreCount} core picks are in their ${coreSize}-item core.` +
+            (our.situCount > 0
+              ? ` Flex: ${rb.situShared} of your ${our.situCount} situational picks appear in their situational list (${total - coreSize} items) — secondary, not ranked.`
+              : '')
+          }
+        >
+          core {rb.shared}/{our.coreCount}
+          {our.situCount > 0 && ` · flex ${rb.situShared}/${our.situCount}`}
         </span>
       </div>
       <div className="cfoot">

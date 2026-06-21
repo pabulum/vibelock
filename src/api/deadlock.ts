@@ -456,9 +456,14 @@ function parseCommunityBuild(env: RawBuildEnvelope, items: Map<number, Item>): C
   const hb = env.hero_build;
   if (!hb) return null;
   const ids = new Set<number>();
+  const coreIds = new Set<number>();
   for (const cat of hb.details?.mod_categories ?? []) {
+    const core = cat.optional !== true; // unmarked (null) counts as core; only `true` is situational
     for (const mod of cat.mods ?? []) {
-      if (mod.ability_id !== undefined && items.has(mod.ability_id)) ids.add(mod.ability_id);
+      const id = mod.ability_id;
+      if (id === undefined || !items.has(id)) continue;
+      ids.add(id);
+      if (core) coreIds.add(id);
     }
   }
   if (ids.size === 0) return null;
@@ -469,6 +474,7 @@ function parseCommunityBuild(env: RawBuildEnvelope, items: Map<number, Item>): C
     version: hb.version ?? 0,
     updatedAt: hb.last_updated_timestamp ?? hb.publish_timestamp ?? 0,
     itemIds: [...ids],
+    coreItemIds: [...coreIds],
   };
 }
 
@@ -583,6 +589,14 @@ interface RawBuildEnvelope {
     version?: number;
     last_updated_timestamp?: number;
     publish_timestamp?: number;
-    details?: { mod_categories?: Array<{ mods?: Array<{ ability_id?: number }> }> };
+    details?: {
+      mod_categories?: Array<{
+        name?: string | null;
+        // Author flag marking a section as situational. Set on ~a third of sections; null
+        // (the majority) means unmarked, which we treat as core. Only `true` demotes.
+        optional?: boolean | null;
+        mods?: Array<{ ability_id?: number }>;
+      }>;
+    };
   };
 }

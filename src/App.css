@@ -248,6 +248,14 @@ body {
   min-width: 150px;
 }
 
+/* Top region: the skill-order card floats into the top-right corner and the build
+   summary, style tabs, and community check flow up around it — so the card reads as a
+   tucked sidebar and nothing is left stretched across the window or gapped beside it.
+   flow-root contains the float so the sections below start cleanly underneath. */
+.topflow {
+  display: flow-root;
+}
+
 .meta {
   padding: 14px 22px 4px;
   color: var(--muted);
@@ -398,7 +406,7 @@ body {
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
-  flex: 0 1 300px;
+  flex: 0 1 360px;
   min-width: 0;
   padding: 7px 11px;
   border: 1px solid var(--line);
@@ -431,7 +439,7 @@ body {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 .crow .cfoot {
   display: flex;
@@ -741,11 +749,20 @@ body {
 }
 
 .skills {
-  margin: 10px 22px 2px;
+  float: right;
+  width: 400px;
+  margin: 4px 22px 10px 18px;
   padding: 11px 14px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 10px;
+}
+@media (max-width: 880px) {
+  .skills {
+    float: none;
+    width: auto;
+    margin: 10px 22px 2px;
+  }
 }
 .skills h2 {
   margin: 0 0 9px;
@@ -764,7 +781,7 @@ body {
 }
 .skill-row {
   display: grid;
-  grid-template-columns: 116px 1fr;
+  grid-template-columns: 104px 1fr;
   align-items: center;
   gap: 8px;
 }
@@ -803,7 +820,7 @@ body {
 }
 .srow-cells {
   display: grid;
-  grid-template-columns: repeat(var(--steps, 16), minmax(14px, 1fr));
+  grid-template-columns: repeat(var(--steps, 16), minmax(12px, 1fr));
   gap: 2px;
 }
 .pip {
