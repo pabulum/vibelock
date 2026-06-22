@@ -27,6 +27,7 @@ import { assembleArchetypes, pickSignatures } from './lib/archetypes';
 import { rerankBuildForComp, SLOT_CAP, SLOT_COLORS } from './lib/buildGenerator';
 import { matchCommunityBuilds } from './lib/communityBuilds';
 import { computeItemCounters } from './lib/counters';
+import { bestImbueTargets } from './lib/imbue';
 import { heroMatchups } from './lib/matchups';
 import { RANK_TIERS, rankFloorLabel, tierToMinBadge } from './lib/ranks';
 import { bestSkillBuild } from './lib/skills';
@@ -43,6 +44,7 @@ import type {
   Hero,
   HeroBuildStatRow,
   HeroCounterRow,
+  ImbueTarget,
   Matchup,
   Patch,
   Item,
@@ -385,6 +387,15 @@ export default function App() {
     for (const c of counters ?? []) m.set(c.item.id, c);
     return m;
   }, [counters]);
+  // The plurality ability each imbue item gets imbued onto, from the hero's community builds —
+  // surfaced as a tag on imbue items in the build (the most important choice for those items).
+  const imbueByItem = useMemo(
+    () =>
+      community && abilities
+        ? bestImbueTargets(community.builds, abilities, slotOrder)
+        : new Map<number, ImbueTarget>(),
+    [community, abilities, slotOrder],
+  );
   const countersByPhase = useMemo(() => {
     const m = new Map<string, ItemCounters[]>();
     for (const c of counters ?? []) {
@@ -683,6 +694,7 @@ export default function App() {
                       baseline={displayBuild.population.baselineWinRate}
                       counter={counterByItem.get(b.item.id)}
                       enemiesById={enemiesById}
+                      imbue={imbueByItem.get(b.item.id)}
                     />
                   ))
                 ) : (
@@ -698,6 +710,7 @@ export default function App() {
                     baseline={displayBuild.population.baselineWinRate}
                     counter={counterByItem.get(b.item.id)}
                     enemiesById={enemiesById}
+                    imbue={imbueByItem.get(b.item.id)}
                     muted
                   />
                 ))}
@@ -1149,6 +1162,7 @@ function ItemTags({
   reason,
   counter,
   enemiesById,
+  imbue,
   weakEdge,
   swapFor,
   swapLabel = 'swap for',
@@ -1159,6 +1173,8 @@ function ItemTags({
   reason?: string | null;
   counter?: ItemCounters;
   enemiesById?: Map<number, Hero>;
+  /** For an imbue-type item: the ability most authors imbue it onto (a "→ ability" chip). */
+  imbue?: ImbueTarget;
   weakEdge?: number;
   swapFor?: ItemRef;
   /** Wording for the swap tag — "swap for" (situational) vs "in for" (drop this for a counter). */
@@ -1175,11 +1191,27 @@ function ItemTags({
   const gap = rawWr !== undefined && adjWr !== undefined ? rawWr - adjWr : 0;
   const state = gap >= STATE_GAP ? 'winmore' : gap <= -STATE_GAP ? 'comeback' : undefined;
   const hasTags =
-    !!reason || bubbles.length > 0 || weakEdge !== undefined || !!swapFor || !!coreLater || !!state;
+    !!reason ||
+    bubbles.length > 0 ||
+    !!imbue ||
+    weakEdge !== undefined ||
+    !!swapFor ||
+    !!coreLater ||
+    !!state;
   if (!hasTags) return null;
   return (
     <div className="tags">
       {reason && <span className="reason">{reason}</span>}
+      {imbue && (
+        <span
+          className="rel imbue"
+          style={imbue.colorIndex >= 0 ? { borderColor: ABILITY_COLORS[imbue.colorIndex] } : undefined}
+          title={`${Math.round(imbue.share * 100)}% of the ${imbue.sample} community builds that set a target imbue this onto ${imbue.ability.name}`}
+        >
+          {imbue.ability.image && <img src={imbue.ability.image} alt="" loading="lazy" />}
+          imbue → {imbue.ability.name}
+        </span>
+      )}
       {bubbles.map((m) => (
         <CounterBubble key={m.enemyHeroId} mark={m} hero={enemiesById!.get(m.enemyHeroId)} />
       ))}
@@ -1281,6 +1313,7 @@ function ItemRow({
   baseline,
   counter,
   enemiesById,
+  imbue,
   muted = false,
 }: {
   b: BuildItem;
@@ -1291,6 +1324,8 @@ function ItemRow({
   counter?: ItemCounters;
   /** Selected enemies by id, for resolving the counter chip's portraits. */
   enemiesById?: Map<number, Hero>;
+  /** For an imbue-type item: the ability most authors imbue it onto. */
+  imbue?: ImbueTarget;
   muted?: boolean;
 }) {
   const color = SLOT_COLORS[b.item.slot] ?? SLOT_COLORS.unknown;
@@ -1336,6 +1371,7 @@ function ItemRow({
           reason={reason}
           counter={counter}
           enemiesById={enemiesById}
+          imbue={imbue}
           weakEdge={!counter && b.weakVsComp ? b.compEdge : undefined}
           swapFor={b.swapFor}
           coreLater={b.coreLater}

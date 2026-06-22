@@ -958,6 +958,21 @@ body {
   background: #233326;
   color: #79c98f;
 }
+/* Imbue target: which ability authors imbue this item onto (left edge tinted to the ability,
+   matching the skill grid's color). */
+.rel.imbue {
+  gap: 4px;
+  padding-left: 3px;
+  background: #251f2e;
+  color: #b79ad6;
+  border-left: 2px solid #6c5a86;
+}
+.rel.imbue img {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  object-fit: cover;
+}
 
 /* "win more" (raw≫adj, leans on a lead) vs "comeback" (adj≫raw, holds up when behind). */
 .statetag {

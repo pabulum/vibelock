@@ -275,6 +275,27 @@ export interface CommunityBuild {
    * (deliberately) deranked.
    */
   coreItemIds: number[];
+  /**
+   * Authored imbue choices: which ability each imbue-type item was imbued onto. Only mods
+   * that actually set a target are kept (authors often leave it null), so this is sparse.
+   */
+  imbueTargets: Array<{ itemId: number; abilityId: number }>;
+}
+
+/**
+ * The ability players most commonly imbue an imbue-type item onto, aggregated across a hero's
+ * community builds. It's author popularity (the only place the choice is recorded) — there's
+ * no analytics endpoint that breaks win rate down by imbue target — so it's the same epistemic
+ * class as the skill order, not an adjusted win rate.
+ */
+export interface ImbueTarget {
+  ability: { id: number; name: string; image?: string };
+  /** The ability's index in the hero's slot order (0–3), for its color; −1 if unknown. */
+  colorIndex: number;
+  /** Plurality share among the builds that set a target for this item (0–1). */
+  share: number;
+  /** How many builds set a target for this item — the denominator behind `share`. */
+  sample: number;
 }
 
 /** A community build joined to its win-rate stats and scored against our generated build. */

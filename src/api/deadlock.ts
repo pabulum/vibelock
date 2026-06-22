@@ -490,6 +490,7 @@ function parseCommunityBuild(env: RawBuildEnvelope, items: Map<number, Item>): C
   if (!hb) return null;
   const ids = new Set<number>();
   const coreIds = new Set<number>();
+  const imbueTargets: Array<{ itemId: number; abilityId: number }> = [];
   for (const cat of hb.details?.mod_categories ?? []) {
     const core = cat.optional !== true; // unmarked (null) counts as core; only `true` is situational
     for (const mod of cat.mods ?? []) {
@@ -497,6 +498,11 @@ function parseCommunityBuild(env: RawBuildEnvelope, items: Map<number, Item>): C
       if (id === undefined || !items.has(id)) continue;
       ids.add(id);
       if (core) coreIds.add(id);
+      // Only imbue-type items carry a target; most mods leave it null. Keep the raw pair —
+      // resolving the target id to an ability happens where the abilities map is loaded.
+      if (mod.imbue_target_ability_id) {
+        imbueTargets.push({ itemId: id, abilityId: mod.imbue_target_ability_id });
+      }
     }
   }
   if (ids.size === 0) return null;
@@ -508,6 +514,7 @@ function parseCommunityBuild(env: RawBuildEnvelope, items: Map<number, Item>): C
     updatedAt: hb.last_updated_timestamp ?? hb.publish_timestamp ?? 0,
     itemIds: [...ids],
     coreItemIds: [...coreIds],
+    imbueTargets,
   };
 }
 
@@ -628,7 +635,7 @@ interface RawBuildEnvelope {
         // Author flag marking a section as situational. Set on ~a third of sections; null
         // (the majority) means unmarked, which we treat as core. Only `true` demotes.
         optional?: boolean | null;
-        mods?: Array<{ ability_id?: number }>;
+        mods?: Array<{ ability_id?: number; imbue_target_ability_id?: number | null }>;
       }>;
     };
   };
