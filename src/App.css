@@ -896,6 +896,10 @@ body {
   background: #2f3340;
   color: #9aa6bb;
 }
+.role-need {
+  background: #143a36;
+  color: #74d6c4;
+}
 /* The row's third line: counter bubbles / weak flag / transient note. */
 .tags {
   display: flex;

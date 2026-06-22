@@ -1678,6 +1678,7 @@ function wrColor(wr: number): string {
 function roleLabel(role: BuildItem['role']): string {
   if (role === 'universal') return 'CORE';
   if (role === 'filler') return 'FILLER';
+  if (role === 'need') return 'SUSTAIN'; // the only NeedKind we classify
   return 'VALUE';
 }
 

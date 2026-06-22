@@ -23,6 +23,7 @@ import type {
   Hero,
   Item,
   ItemFlowStats,
+  NeedKind,
   SlotType,
 } from '../types';
 
@@ -45,10 +46,31 @@ const COMEBACK_RESERVE = 2; // situational slots held for the best comeback pick
 const SELL_BEFORE_S = 1500; // a cheap item sold before ~25 min is a placeholder
 export const SLOT_CAP = 12; // 9 base + 3 flex slots (unlocked via Walker kills)
 
+// --- Need-aware situational pick (see NeedKind) ---
+// A need like sustain is bought by most players but split across substitutes (Extra Regen /
+// Restorative Shot / Healing Rite), so no single item clears the pick-rate core bar; and it's
+// usually win-rate *neutral* (buyers and non-buyers win alike — it's QOL, not an edge), so it
+// also misses the situational value gate. The honest home is therefore neither: we surface the
+// plurality item as a **conditional situational pick** ("most players grab one") when the need
+// is near-universal, one item clearly leads it, and it isn't a trap (buyers don't underperform).
+// We never force it into *core* — a genuine every-game sustain item (Abrams' Extra Regen, 94%)
+// already clears the pick bar on its own and lands in core through the normal fill.
+const NEED_DEMAND_FLOOR = 0.55; // Σ of a need's member pick rates this high ⇒ a near-universal need
+const NEED_PLURALITY = 0.4; // ...and its lead item must own ≥40% of that demand to name one
+const NEED_MAX_TIER = 2; // ...and we only count cheap *pickups* (≤T2): a T3+ item that happens to
+// heal (Headhunter, Leech) is a scaling buy, not the reactive sustain a player grabs to hold a lane
+const NEED_MAX_WR_DROP = 0.03; // ...and skip it if buyers win this far below baseline (a trap, not QOL)
+
 // Categories we budget across, in fill order. Weapon is filled last on purpose: it's
 // the plurality buy most phases, so giving the reactively-bought categories (greens,
 // then spirit) first claim on the budget stops weapon from starving them of a slot.
 const FILL_ORDER: Array<'weapon' | 'vitality' | 'spirit'> = ['vitality', 'spirit', 'weapon'];
+
+/** Options for {@link generateBuild}. */
+export interface BuildOptions {
+  /** Guarantee a slot for the plurality answer to a near-universal need (default true). */
+  needs?: boolean;
+}
 
 /**
  * Pure: turns one (unlocked) flow response into a phased build. `buyTimes`/`sellTimes`
@@ -61,12 +83,13 @@ export function generateBuild(
   flow: ItemFlowStats,
   buyTimes: Map<number, number>,
   sellTimes: Map<number, number>,
+  opts: BuildOptions = {},
 ): GeneratedBuild {
   const baseWins = flow.baseline.wins + flow.baseline.losses;
   const baselineWinRate = baseWins > 0 ? flow.baseline.wins / baseWins : 0.5;
 
   const phases = PHASE_META.map((_, col) =>
-    buildPhase(col, flow, items, baselineWinRate, buyTimes),
+    buildPhase(col, flow, items, baselineWinRate, buyTimes, opts),
   );
 
   dedupeAcrossPhases(phases);
@@ -242,6 +265,7 @@ function buildPhase(
   items: Map<number, Item>,
   baselineWinRate: number,
   buyTimes: Map<number, number>,
+  opts: BuildOptions,
 ): BuildPhase {
   // reached_per_column is the correct denominator for an unlocked query: players
   // who were still buying in this phase.
@@ -305,9 +329,22 @@ function buildPhase(
     .sort((a, b) => b.adjustedWinRate - a.adjustedWinRate)
     .map<BuildItem>((c) => ({ ...c, role: 'situational' }));
 
+  // Conditional need pick: when a near-universal, win-rate-neutral need (sustain) is split across
+  // substitutes so its lead item missed both the core and the value gates above, surface that
+  // item here as a flagged optional pickup — "most players grab one; no win-rate cost" — rather
+  // than forcing it into the every-game core. Skipped when it's already in the build.
+  if (opts.needs !== false) {
+    const need = dominantNeed(candidates, 'sustain', baselineWinRate);
+    if (need && !chosen.has(need.item.id) && !situational.some((s) => s.item.id === need.item.id)) {
+      situational.unshift({ ...need, role: 'need', why: 'optional lane sustain — most players grab one' });
+      if (situational.length > SITUATIONAL_MAX) situational.pop(); // keep the cap; drops the weakest WR pick
+    }
+  }
+
   const buyTime = (b: BuildItem) => buyTimes.get(b.item.id) ?? Number.POSITIVE_INFINITY;
-  // The "why" is what the item does — the WR/pick numbers are already on the row.
-  const withWhy = (b: BuildItem) => ({ ...b, why: b.item.effect ?? '' });
+  // The "why" is what the item does — the WR/pick numbers are already on the row — unless a pick
+  // set its own rationale (the conditional need note above), which we keep.
+  const withWhy = (b: BuildItem) => ({ ...b, why: b.why || b.item.effect || '' });
 
   return {
     column: col,
@@ -359,6 +396,27 @@ function allocateCategoryCounts(
     'weapon' | 'vitality' | 'spirit',
     number
   >;
+}
+
+/**
+ * The single item to surface for a cross-slot need this phase, or undefined to stay quiet.
+ * Fires only when the need is near-universal by *summed* member pick (a union proxy: the items
+ * are substitutes, so few players buy two) yet its lead item is below the core pick bar (so the
+ * normal fill would drop it), clearly leads the need (so naming one item isn't arbitrary), and
+ * isn't a trap (its buyers don't win well below baseline). When the lead is already a core pick,
+ * the demand is split with no clear leader, or it's a loser, returns undefined — the value/
+ * pick-rate fill handles it (or, honestly, nothing should be surfaced).
+ */
+function dominantNeed(candidates: BuildItem[], need: NeedKind, baselineWinRate: number): BuildItem | undefined {
+  const members = candidates.filter((c) => c.item.need === need && c.item.tier <= NEED_MAX_TIER);
+  if (members.length === 0) return undefined;
+  const demand = members.reduce((a, c) => a + c.pickRate, 0);
+  if (demand < NEED_DEMAND_FLOOR) return undefined; // not a near-universal need for this hero
+  const lead = members.reduce((best, c) => (c.pickRate > best.pickRate ? c : best));
+  if (lead.pickRate >= UNIVERSAL_PICK) return undefined; // already a core pick — don't relabel it
+  if (lead.pickRate < NEED_PLURALITY * demand) return undefined; // genuinely split — don't name one
+  if (lead.rawWinRate < baselineWinRate - NEED_MAX_WR_DROP) return undefined; // a trap, not QOL
+  return lead;
 }
 
 /**

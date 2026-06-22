@@ -14,6 +14,18 @@ export interface Hero {
 
 export type SlotType = 'weapon' | 'vitality' | 'spirit' | 'unknown';
 
+/**
+ * A cross-slot "need" an item primarily fills, derived from its *headline* (elevated/important)
+ * properties — orthogonal to `slot` (sustain spans weapon/vitality/spirit: Restorative Shot is
+ * weapon, Mystic Regeneration is spirit). Used to guarantee a near-universal need a slot even
+ * when buyers split across substitutes so no single item clears the core pick bar.
+ *
+ * Only `sustain` is classified. Resist and mobility are also fragmented needs in the data, but
+ * they're matchup/hero-dependent (anti-CC, armor vs a given enemy damage type), so they're left
+ * out on purpose — surfacing them belongs with the counters lens, not the universal core.
+ */
+export type NeedKind = 'sustain';
+
 /** A hero ability (the items asset lists these as type "ability"). */
 export interface Ability {
   id: number;
@@ -57,6 +69,8 @@ export interface Item {
   effect?: string;
   /** Item ids this item is built from (resolved from `component_items`). */
   componentIds: number[];
+  /** The cross-slot need this item primarily fills (see {@link NeedKind}); absent for most items. */
+  need?: NeedKind;
   /** The full in-game shop card (stat block + passive/active abilities), for hover display. */
   card?: ItemCard;
 }
@@ -140,8 +154,10 @@ export interface ItemRef {
 }
 
 /** Why an item is in the build. `filler` = pulled in to meet a category's soul-share
- * quota, but it didn't clear the value gate — don't dress it up as a value pick. */
-export type BuildRole = 'universal' | 'value' | 'situational' | 'filler';
+ * quota, but it didn't clear the value gate — don't dress it up as a value pick. `need` =
+ * guaranteed a slot because it's the plurality answer to a near-universal need (see
+ * {@link NeedKind}), not because its own pick rate or win rate cleared a gate. */
+export type BuildRole = 'universal' | 'value' | 'situational' | 'filler' | 'need';
 
 export interface BuildItem {
   item: Item;

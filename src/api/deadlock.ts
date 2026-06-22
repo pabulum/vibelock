@@ -14,6 +14,7 @@ import type {
   ItemCard,
   ItemFlowStats,
   ItemStat,
+  NeedKind,
   Patch,
   SlotType,
   TextSegment,
@@ -160,7 +161,7 @@ let itemsPromise: Promise<Map<number, Item>> | null = null;
 export function getItems(): Promise<Map<number, Item>> {
   if (itemsPromise) return itemsPromise;
   itemsPromise = (async () => {
-    const cacheKey = 'dl.items.v4';
+    const cacheKey = 'dl.items.v5';
     const hit = cached<Item[]>(cacheKey);
     const list = hit ?? buildItemList(await getRawItems());
     if (!hit) putCache(cacheKey, list);
@@ -216,6 +217,37 @@ function normalizeSlot(s: string | null | undefined): SlotType {
   return 'unknown';
 }
 
+// Property keys that mark an item as *sustain* — self-healing of any mechanism: lifesteal,
+// active/triggered heals, passive & out-of-combat regen, and heal amplification. Deliberately
+// excludes anti-heal (HealAmp*Penalty*), barriers/shields (temporary HP, not healing), pure
+// max-HP (BonusHealth), and offensive %-of-health damage. An item counts only when one of these
+// is its *headline* stat (elevated/important), so incidental regen (Sprint Boots' move speed,
+// Extra Spirit's spirit power) doesn't read as a sustain pickup.
+const SUSTAIN_PROPS = new Set([
+  // lifesteal
+  'BulletLifestealPercent', 'AbilityLifestealPercentHero', 'AbilityLifestealPercentHeroPassive',
+  'LifestealHeal', 'LifestealHealPercent', 'LifestrikeHeal', 'LifestrikeHealPercent',
+  'HealthStealPctHero', 'ActiveBonusLifesteal', 'LowHealthLifeStealPercent', 'AssaultLifestealPercent',
+  // active / triggered heals
+  'Regeneration', 'RegenerationDuration', 'RegenDuration', 'TotalHealthRegen', 'HealAmount',
+  'HealInterval', 'HealRadius', 'HealOnActivate', 'HealOnSuccess', 'HealPercentAmount', 'HealPerStack',
+  'HealingPerCast', 'ParrySuccessHeal', 'HealOnVeil', 'HealOnKill', 'HealPercentPerHeadshot',
+  'HealFromHero', 'HealFromNPC', 'RespawnHealthPercent',
+  // passive / out-of-combat regen
+  'BonusHealthRegen', 'OutOfCombatHealthRegen', 'HealLifePercentOutOfCombat', 'HealOnLevelHealAmount',
+  // heal amplification
+  'HealAmpCastPercent', 'HealAmpRegenPercent',
+]);
+
+/** The cross-slot need an item primarily fills, from its headline (elevated/important) props. */
+function classifyNeed(i: RawItem): NeedKind | undefined {
+  for (const sec of i.tooltip_sections ?? [])
+    for (const sa of sec.section_attributes ?? [])
+      for (const key of [...(sa.elevated_properties ?? []), ...(sa.important_properties ?? [])])
+        if (SUSTAIN_PROPS.has(key)) return 'sustain';
+  return undefined;
+}
+
 // Items list `component_items` as class names; resolve them to ids so the build
 // can tell when one pick builds into another (a shared slot, not a second item).
 function buildItemList(raw: RawItem[]): Item[] {
@@ -234,6 +266,7 @@ function buildItemList(raw: RawItem[]): Item[] {
       componentIds: (i.component_items ?? [])
         .map((cn) => idByClass.get(cn))
         .filter((id): id is number => id !== undefined),
+      need: classifyNeed(i),
       card: buildCard(i),
     }));
 }
