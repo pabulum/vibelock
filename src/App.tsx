@@ -24,9 +24,9 @@ import {
   type TimeWindow,
 } from './api/deadlock';
 import { assembleArchetypes, pickSignatures } from './lib/archetypes';
-import { SLOT_CAP, SLOT_COLORS } from './lib/buildGenerator';
+import { rerankBuildForComp, SLOT_CAP, SLOT_COLORS } from './lib/buildGenerator';
 import { matchCommunityBuilds } from './lib/communityBuilds';
-import { computeCounters } from './lib/counters';
+import { computeItemCounters } from './lib/counters';
 import { heroMatchups } from './lib/matchups';
 import { RANK_TIERS, rankFloorLabel, tierToMinBadge } from './lib/ranks';
 import { bestSkillBuild } from './lib/skills';
@@ -35,8 +35,11 @@ import type {
   ArchetypeKey,
   ArchetypeSet,
   BuildItem,
+  BuildPhase,
   CommunityBuild,
-  CounterItem,
+  CounterMark,
+  ItemCounters,
+  ItemRef,
   Hero,
   HeroBuildStatRow,
   HeroCounterRow,
@@ -144,7 +147,8 @@ export default function App() {
   const [skillBuild, setSkillBuild] = useState<SkillBuild | null>(null);
   const [skillLoading, setSkillLoading] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [counters, setCounters] = useState<CounterItem[] | null>(null);
+  const [counters, setCounters] = useState<ItemCounters[] | null>(null);
+  const [compEdges, setCompEdges] = useState<Map<number, number> | null>(null);
   const [countersLoading, setCountersLoading] = useState(false);
   const [community, setCommunity] = useState<{
     builds: CommunityBuild[];
@@ -224,6 +228,7 @@ export default function App() {
   useEffect(() => {
     if (!hero || !items || enemies.length === 0) {
       setCounters(null);
+      setCompEdges(null);
       return;
     }
     const ctrl = new AbortController();
@@ -231,9 +236,21 @@ export default function App() {
     const window = windowFor(patches, patchIdx);
     const base = { heroId: hero.id, minBadge, ...window };
 
-    Promise.all([getItemStats(base), getItemStats({ ...base, enemyHeroIds: enemies })])
-      .then(([baseStats, vsStats]) => {
-        if (!ctrl.signal.aborted) setCounters(computeCounters(baseStats, vsStats, items));
+    // One query per enemy (not a combined `any-of` query) so each item keeps a per-enemy
+    // delta — that's what lets a row carry the portrait of the specific hero it answers.
+    Promise.all([
+      getItemStats(base),
+      Promise.all(
+        enemies.map((id) =>
+          getItemStats({ ...base, enemyHeroIds: [id] }).then((stats) => ({ enemyHeroId: id, stats })),
+        ),
+      ),
+    ])
+      .then(([baseStats, perEnemy]) => {
+        if (ctrl.signal.aborted) return;
+        const { counters: cs, edgeByItem } = computeItemCounters(baseStats, perEnemy, items);
+        setCounters(cs);
+        setCompEdges(edgeByItem);
       })
       .catch((e) => !ctrl.signal.aborted && setError(String(e)))
       .finally(() => !ctrl.signal.aborted && setCountersLoading(false));
@@ -351,6 +368,49 @@ export default function App() {
 
   const patchLabel = patchIdx === null ? 'last 30 days' : patches[patchIdx]?.title;
   const enemyNames = enemies.map((id) => heroes.find((h) => h.id === id)?.name ?? '?').join(', ');
+  const enemiesById = useMemo(() => {
+    const m = new Map<number, Hero>();
+    for (const id of enemies) {
+      const h = heroes.find((x) => x.id === id);
+      if (h) m.set(id, h);
+    }
+    return m;
+  }, [enemies, heroes]);
+  // Counters folded into the build: a per-item lookup to tag build rows that answer this
+  // comp (with the specific enemy portraits), plus a per-phase bucket (keyed by the same
+  // labels buildGenerator uses) for strong counter picks not already in the build.
+  const counterByItem = useMemo(() => {
+    const m = new Map<number, ItemCounters>();
+    for (const c of counters ?? []) m.set(c.item.id, c);
+    return m;
+  }, [counters]);
+  const countersByPhase = useMemo(() => {
+    const m = new Map<string, ItemCounters[]>();
+    for (const c of counters ?? []) {
+      const arr = m.get(c.phaseLabel);
+      if (arr) arr.push(c);
+      else m.set(c.phaseLabel, [c]);
+    }
+    return m;
+  }, [counters]);
+  // With a comp selected, re-rank the build for it: the comp decides which non-staples fill
+  // each phase's core slots, the role labels, and the order (category counts + staples held).
+  const displayBuild = useMemo(
+    () => (build && compEdges && enemies.length > 0 ? rerankBuildForComp(build, compEdges) : build),
+    [build, compEdges, enemies.length],
+  );
+  // Every item the build already shows anywhere — a counter pick in this set gets a tag
+  // in place rather than a duplicate "add" row (its buy-time phase can differ from where
+  // the build files it).
+  const buildItemIds = useMemo(
+    () =>
+      new Set(
+        (displayBuild?.phases ?? []).flatMap((p) =>
+          [...p.core, ...p.situational].map((b) => b.item.id),
+        ),
+      ),
+    [displayBuild],
+  );
   const lowPopulation = build !== null && build.population.matches < 400;
   // Any data in flight — drives the single loading strip under the header. `!items`
   // covers the very first paint, before the assets effect has resolved.
@@ -371,7 +431,6 @@ export default function App() {
   const skillRef = useSettle<HTMLElement>(skillLoading);
   const communityRef = useSettle<HTMLElement>(communityLoading);
   const matrixRef = useSettle<HTMLDivElement>(matrixLoading);
-  const countersRef = useSettle<HTMLElement>(countersLoading);
 
   return (
     <div className="app">
@@ -440,8 +499,9 @@ export default function App() {
             {archetypeSet?.flex && activeArchetype ? ` · ${activeArchetype.label}` : ''} ·{' '}
             {build.rankLabel} · {patchLabel} · {build.population.matches.toLocaleString()} matches ·
             avg game {Math.round(build.population.avgDurationS / 60)} min ·{' '}
-            <span className={build.standingSlots > SLOT_CAP ? 'warn' : undefined}>
-              {build.standingSlots}/{SLOT_CAP} standing slots
+            {(build.population.baselineWinRate * 100).toFixed(0)}% avg WR (rows show ± vs this) ·{' '}
+            <span className={(displayBuild ?? build).standingSlots > SLOT_CAP ? 'warn' : undefined}>
+              {(displayBuild ?? build).standingSlots}/{SLOT_CAP} standing slots
             </span>
             {lowPopulation && <span className="warn"> · ⚠ low sample, treat as noisy</span>}
           </div>
@@ -565,26 +625,12 @@ export default function App() {
       />
 
       {enemies.length > 0 && (
-        <section className="counters" ref={countersRef}>
-          <h2>
-            Counters <span className="sub">items that gain win rate vs {enemyNames}</span>
-          </h2>
-          {counters && counters.length === 0 ? (
-            <p className="empty">
-              No items clear the sample threshold for this matchup
-              {patchIdx !== null ? ' on this patch (try Last 30 days)' : ''}.
-            </p>
-          ) : (
-            <div className="counter-grid">
-              {counters?.map((c) => <CounterCard key={c.item.id} c={c} items={items} />)}
-            </div>
-          )}
-          <p className="hint">
-            Raw win-rate delta vs your baseline — sorted by gain, thin samples flagged. Tip: one
-            threat at a time (e.g. your lane opponent) reads cleaner than the whole enemy team, which
-            blends gun and spirit answers together.
-          </p>
-        </section>
+        <p className="counters-note">
+          The build below is re-ranked for {enemyNames}: picks that answer the comp rise and carry
+          the enemy portrait (hover any row for the per-hero gain); picks that are weak into it are
+          flagged <span className="weakcomp">▼</span>. Staples and category balance are kept. Counter
+          numbers are a <em>raw</em> win-rate delta — one threat at a time reads cleaner.
+        </p>
       )}
 
       {((loading && !build) || (!items && !error)) && (
@@ -594,35 +640,71 @@ export default function App() {
         />
       )}
 
-      {build && (
+      {displayBuild && (
         <main className="phases" ref={buildRef}>
-          {build.phases.map((phase) => (
-            <section className="phase" key={phase.column}>
-              <h2>
-                {phase.label} <span className="time">{phase.timeLabel}</span>
-              </h2>
-              <div className="budget">
-                {phase.core.length}/{phase.targetItems} items ·{' '}
-                {Math.round(phase.coreSouls).toLocaleString()} /{' '}
-                {Math.round(phase.soulBudget).toLocaleString()} souls
-              </div>
-              <CategoryBar split={phase.categorySouls} />
+          {displayBuild.phases.map((phase) => {
+            // Strong counter picks that file under this phase but aren't already in the build
+            // get mixed into the situational list (capped); ones already shown get a portrait
+            // tag in place instead, so nothing is duplicated and the page doesn't sprout
+            // separate counter sections.
+            const counterAdds = (countersByPhase.get(phase.label) ?? [])
+              .filter((c) => !buildItemIds.has(c.item.id))
+              .slice(0, COUNTER_ADDS_PER_PHASE);
+            return (
+              <section className="phase" key={phase.column}>
+                <h2>
+                  {phase.label} <span className="time">{phase.timeLabel}</span>
+                </h2>
+                <div className="budget">
+                  {phase.core.length}/{phase.targetItems} items ·{' '}
+                  {Math.round(phase.coreSouls).toLocaleString()} /{' '}
+                  {Math.round(phase.soulBudget).toLocaleString()} souls
+                </div>
+                <CategoryBar split={phase.categorySouls} />
 
-              <h3 className="grouphdr core">Build</h3>
-              {phase.core.length ? (
-                phase.core.map((b) => <ItemRow key={b.item.id} b={b} items={items} />)
-              ) : (
-                <p className="empty">No clear staple here.</p>
-              )}
+                <h3 className="grouphdr core">Build</h3>
+                {phase.core.length ? (
+                  phase.core.map((b) => (
+                    <ItemRow
+                      key={b.item.id}
+                      b={b}
+                      items={items}
+                      baseline={displayBuild.population.baselineWinRate}
+                      counter={counterByItem.get(b.item.id)}
+                      enemiesById={enemiesById}
+                    />
+                  ))
+                ) : (
+                  <p className="empty">No clear staple here.</p>
+                )}
 
-              <h3 className="grouphdr situational">Situational swaps</h3>
-              {phase.situational.length ? (
-                phase.situational.map((b) => <ItemRow key={b.item.id} b={b} items={items} muted />)
-              ) : (
-                <p className="empty">—</p>
-              )}
-            </section>
-          ))}
+                <h3 className="grouphdr situational">Situational swaps</h3>
+                {phase.situational.map((b) => (
+                  <ItemRow
+                    key={b.item.id}
+                    b={b}
+                    items={items}
+                    baseline={displayBuild.population.baselineWinRate}
+                    counter={counterByItem.get(b.item.id)}
+                    enemiesById={enemiesById}
+                    muted
+                  />
+                ))}
+                {counterAdds.map((c) => (
+                  <CounterAddRow
+                    key={c.item.id}
+                    c={c}
+                    items={items}
+                    enemiesById={enemiesById}
+                    swapFor={swapTargetFor(phase, c, displayBuild.population.baselineWinRate)}
+                  />
+                ))}
+                {phase.situational.length === 0 && counterAdds.length === 0 && (
+                  <p className="empty">—</p>
+                )}
+              </section>
+            );
+          })}
         </main>
       )}
 
@@ -868,26 +950,150 @@ function MatchupChip({
   );
 }
 
-function CounterCard({ c, items }: { c: CounterItem; items: Map<number, Item> | null }) {
-  const color = SLOT_COLORS[c.item.slot] ?? SLOT_COLORS.unknown;
+const COUNTER_ADDS_PER_PHASE = 3; // cap on counter-only picks folded into a phase's swaps
+const STATE_GAP = 0.035; // raw−adjusted WR gap that flags a "win more" / "comeback" pick
+const pct = (x: number) => `${Math.round(x * 100)}%`;
+
+/** One compact bubble: a single enemy's portrait + this item's edge vs that enemy. */
+function CounterBubble({ mark, hero }: { mark: CounterMark; hero?: Hero }) {
   return (
-    <ItemHover item={c.item} items={items} className="counter" style={{ borderLeftColor: color }}>
+    <span
+      className={`cbubble ${mark.lowSample ? 'low' : ''}`}
+      title={`vs ${hero?.name ?? '?'}: +${(mark.delta * 100).toFixed(1)} win rate${mark.lowSample ? ' (thin sample)' : ''}`}
+    >
+      {hero?.image && <img src={hero.image} alt={hero.name} loading="lazy" />}+
+      {(mark.delta * 100).toFixed(1)}
+    </span>
+  );
+}
+
+/** The row's third line: counter bubbles (one per enemy), a weak-vs-comp flag, and any
+ * transient note — or, when there's nothing comp-related to say, the item's effect text. */
+function ItemTags({
+  reason,
+  counter,
+  enemiesById,
+  weakEdge,
+  swapFor,
+  swapLabel = 'swap for',
+  coreLater,
+  rawWr,
+  adjWr,
+}: {
+  reason?: string | null;
+  counter?: ItemCounters;
+  enemiesById?: Map<number, Hero>;
+  weakEdge?: number;
+  swapFor?: ItemRef;
+  /** Wording for the swap tag — "swap for" (situational) vs "in for" (drop this for a counter). */
+  swapLabel?: string;
+  /** Phase label where this situational pick becomes core — shown as a "rush if ahead" tag. */
+  coreLater?: string;
+  /** Raw + adjusted win rate; their gap reveals a "win more" (raw≫adj) or "comeback" (adj≫raw) pick. */
+  rawWr?: number;
+  adjWr?: number;
+}) {
+  const bubbles = counter && enemiesById ? counter.marks : [];
+  // raw ≫ adj ⇒ the win rate leans on already being ahead ("win more"); adj ≫ raw ⇒ it holds
+  // up even when bought behind ("comeback"). Only flag a clear gap.
+  const gap = rawWr !== undefined && adjWr !== undefined ? rawWr - adjWr : 0;
+  const state = gap >= STATE_GAP ? 'winmore' : gap <= -STATE_GAP ? 'comeback' : undefined;
+  const hasTags =
+    !!reason || bubbles.length > 0 || weakEdge !== undefined || !!swapFor || !!coreLater || !!state;
+  if (!hasTags) return null;
+  return (
+    <div className="tags">
+      {reason && <span className="reason">{reason}</span>}
+      {bubbles.map((m) => (
+        <CounterBubble key={m.enemyHeroId} mark={m} hero={enemiesById!.get(m.enemyHeroId)} />
+      ))}
+      {weakEdge !== undefined && (
+        <span className="weakcomp" title="Weak into the selected comp">
+          ▼ {fmtDelta(weakEdge)}
+        </span>
+      )}
+      {coreLater && (
+        <span className="rel rush" title={`Core by ${coreLater} — buy early if you're ahead`}>
+          core by {coreLater} · rush if ahead
+        </span>
+      )}
+      {swapFor && (
+        <span className="rel swap" title={`${swapLabel} ${swapFor.name}`}>
+          {swapLabel} {swapFor.name}
+        </span>
+      )}
+      {state && (
+        <span
+          className={`statetag ${state}`}
+          title={
+            state === 'winmore'
+              ? `Win-more: raw ${pct(rawWr!)} ≫ adjusted ${pct(adjWr!)} — its win rate leans on already being ahead`
+              : `Comeback: adjusted ${pct(adjWr!)} ≫ raw ${pct(rawWr!)} — holds up even when bought behind`
+          }
+        >
+          {state === 'winmore' ? 'win more' : 'comeback'}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** A counter pick not already in the build, folded into its phase's swaps list. Headline
+ * number is the raw per-enemy delta (item-stats has no adjusted rate). */
+/** The core pick a counter item should swap in for: the weakest same-slot core item for this
+ * comp (lowest comp-aware score) — the one to drop to make room. */
+function swapTargetFor(phase: BuildPhase, c: ItemCounters, baseline: number): ItemRef | undefined {
+  // Only a non-staple core pick is a fair thing to drop for an experimental counter.
+  const slotCore = phase.core.filter((b) => b.item.slot === c.item.slot && b.role !== 'universal');
+  if (!slotCore.length) return undefined;
+  const sc = (b: BuildItem) => (b.compEdge ?? 0) + (b.adjustedWinRate - baseline);
+  const worst = slotCore.reduce((w, b) => (sc(b) < sc(w) ? b : w));
+  return { id: worst.item.id, name: worst.item.name };
+}
+
+function CounterAddRow({
+  c,
+  items,
+  enemiesById,
+  swapFor,
+}: {
+  c: ItemCounters;
+  items: Map<number, Item> | null;
+  enemiesById: Map<number, Hero>;
+  /** The core pick to drop to fit this counter in (same slot, weakest for the comp). */
+  swapFor?: ItemRef;
+}) {
+  const color = SLOT_COLORS[c.item.slot] ?? SLOT_COLORS.unknown;
+  const top = c.marks[0];
+  return (
+    <ItemHover
+      item={c.item}
+      items={items}
+      className="item muted counter-add"
+      style={{ borderLeftColor: color }}
+      counter={c}
+      enemiesById={enemiesById}
+    >
       <div className="icon" style={{ background: color }}>
         {c.item.image ? <img src={c.item.image} alt="" loading="lazy" /> : null}
       </div>
       <div className="body">
         <div className="line1">
           <span className="name">{c.item.name}</span>
-          <span className="delta">+{(c.delta * 100).toFixed(1)}</span>
+          <span className="cost">{c.item.cost.toLocaleString()}</span>
         </div>
         <div className="line2">
-          <span className="wr">{(c.winRate * 100).toFixed(0)}% WR</span>
-          <span className={`n ${c.lowSample ? 'low' : ''}`}>
-            n={c.sample.toLocaleString()}
-            {c.lowSample ? ' ⚠' : ''}
+          <span className="wr" style={{ color: deltaColor(top.delta) }}>
+            +{(top.delta * 100).toFixed(1)}
+            <span className="wrabs">{(top.winRate * 100).toFixed(0)}%</span>
           </span>
-          <span className="pick">{c.phaseLabel}</span>
+          <span className="pick">counters comp</span>
+          <span className={`n ${top.lowSample ? 'low' : ''}`}>
+            n={top.sample.toLocaleString()}
+            {top.lowSample ? ' ⚠' : ''}
+          </span>
         </div>
+        <ItemTags counter={c} enemiesById={enemiesById} swapFor={swapFor} swapLabel="in for" />
       </div>
     </ItemHover>
   );
@@ -896,10 +1102,19 @@ function CounterCard({ c, items }: { c: CounterItem; items: Map<number, Item> | 
 function ItemRow({
   b,
   items,
+  baseline,
+  counter,
+  enemiesById,
   muted = false,
 }: {
   b: BuildItem;
   items: Map<number, Item> | null;
+  /** Hero+rank baseline win rate; item WR is shown as a delta against it. */
+  baseline: number;
+  /** If this pick also gains win rate vs the selected comp, its per-enemy counter marks. */
+  counter?: ItemCounters;
+  /** Selected enemies by id, for resolving the counter chip's portraits. */
+  enemiesById?: Map<number, Hero>;
   muted?: boolean;
 }) {
   const color = SLOT_COLORS[b.item.slot] ?? SLOT_COLORS.unknown;
@@ -910,6 +1125,9 @@ function ItemRow({
       items={items}
       className={`item ${muted ? 'muted' : ''} ${b.transient ? 'transient' : ''}`}
       style={{ borderLeftColor: color }}
+      counter={counter}
+      enemiesById={enemiesById}
+      buildsToward={b.buildsToward}
     >
       <div className="icon" style={{ background: color }}>
         {b.item.image ? <img src={b.item.image} alt="" loading="lazy" /> : null}
@@ -927,13 +1145,27 @@ function ItemRow({
           <span className="cost">{b.item.cost.toLocaleString()}</span>
         </div>
         <div className="line2">
-          <span className="wr" style={{ color: wrColor(b.adjustedWinRate) }}>
-            {(b.adjustedWinRate * 100).toFixed(0)}% WR
+          <span
+            className="wr"
+            style={{ color: deltaColor(b.adjustedWinRate - baseline) }}
+            title={`${(b.adjustedWinRate * 100).toFixed(1)}% adjusted WR · hero avg ${(baseline * 100).toFixed(1)}%`}
+          >
+            {fmtDelta(b.adjustedWinRate - baseline)}
+            <span className="wrabs">{(b.adjustedWinRate * 100).toFixed(0)}%</span>
           </span>
           <span className="pick">{(b.pickRate * 100).toFixed(0)}% pick</span>
           <span className="n">n={b.sample.toLocaleString()}</span>
         </div>
-        <div className="why">{reason ? <span className="reason">{reason}</span> : b.why}</div>
+        <ItemTags
+          reason={reason}
+          counter={counter}
+          enemiesById={enemiesById}
+          weakEdge={!counter && b.weakVsComp ? b.compEdge : undefined}
+          swapFor={b.swapFor}
+          coreLater={b.coreLater}
+          rawWr={b.rawWinRate}
+          adjWr={b.adjustedWinRate}
+        />
       </div>
     </ItemHover>
   );
@@ -948,12 +1180,20 @@ function ItemHover({
   className,
   style,
   children,
+  counter,
+  enemiesById,
+  buildsToward,
 }: {
   item: Item;
   items: Map<number, Item> | null;
   className?: string;
   style?: CSSProperties;
   children: ReactNode;
+  /** When set, the hover card also shows this item's per-enemy counter breakdown. */
+  counter?: ItemCounters;
+  enemiesById?: Map<number, Hero>;
+  /** The item this builds toward (shown as an upgrade-path line in the hover card). */
+  buildsToward?: ItemRef;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
@@ -966,7 +1206,16 @@ function ItemHover({
       onMouseLeave={() => setAnchor(null)}
     >
       {children}
-      {anchor && <ItemCard item={item} items={items} anchor={anchor} />}
+      {anchor && (
+        <ItemCard
+          item={item}
+          items={items}
+          anchor={anchor}
+          counter={counter}
+          enemiesById={enemiesById}
+          buildsToward={buildsToward}
+        />
+      )}
     </div>
   );
 }
@@ -977,10 +1226,16 @@ function ItemCard({
   item,
   items,
   anchor,
+  counter,
+  enemiesById,
+  buildsToward,
 }: {
   item: Item;
   items: Map<number, Item> | null;
   anchor: DOMRect;
+  counter?: ItemCounters;
+  enemiesById?: Map<number, Hero>;
+  buildsToward?: ItemRef;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   // Render off-screen first, then measure to flip left/right and clamp vertically.
@@ -1014,6 +1269,28 @@ function ItemCard({
         </div>
       </div>
 
+      {counter && enemiesById && counter.marks.length > 0 && (
+        <div className="ic-counter">
+          <span className="ic-kind">Edge vs this comp</span>
+          <ul>
+            {counter.marks.map((m) => {
+              const h = enemiesById.get(m.enemyHeroId);
+              return (
+                <li key={m.enemyHeroId}>
+                  {h?.image && <img src={h.image} alt="" />}
+                  <span className="cn">{h?.name ?? `#${m.enemyHeroId}`}</span>
+                  <span className="cd">+{(m.delta * 100).toFixed(1)}</span>
+                  <span className="cw">
+                    {(m.winRate * 100).toFixed(0)}% WR{m.lowSample ? ' · thin' : ''}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="ic-note">Win-rate gain above the general matchup, vs each enemy.</p>
+        </div>
+      )}
+
       {item.card?.sections.map((s, i) => (
         <div className={`ic-sec ${s.kind}`} key={i}>
           {s.kind !== 'innate' && (
@@ -1041,6 +1318,9 @@ function ItemCard({
       {!item.card && item.effect && <p className="ic-text plain">{item.effect}</p>}
       {components.length > 0 && (
         <div className="ic-comp">Builds from: {components.join(', ')}</div>
+      )}
+      {buildsToward && (
+        <div className="ic-comp">Most build toward: {buildsToward.name}</div>
       )}
     </div>,
     document.body,
@@ -1220,5 +1500,21 @@ function wrColor(wr: number): string {
 }
 
 function roleLabel(role: BuildItem['role']): string {
-  return role === 'universal' ? 'CORE' : 'VALUE';
+  if (role === 'universal') return 'CORE';
+  if (role === 'filler') return 'FILLER';
+  return 'VALUE';
+}
+
+/** Win rate as a signed delta vs the hero baseline (e.g. "+7.2", "−0.7"). */
+function fmtDelta(d: number): string {
+  const v = d * 100;
+  return `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}`;
+}
+
+/** Color a WR delta: centered on the baseline, so 0 reads neutral, not "bad". */
+function deltaColor(d: number): string {
+  if (d >= 0.04) return '#54c66b';
+  if (d >= 0.02) return '#a6cf57';
+  if (d >= -0.02) return '#d8c14a';
+  return '#d87a7a';
 }

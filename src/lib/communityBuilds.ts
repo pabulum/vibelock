@@ -10,6 +10,11 @@ import type {
   RankedCommunityBuild,
 } from '../types';
 
+// A "best build" win rate is a claim, so it needs a real sample — otherwise a 3-game 100%
+// build is crowned "the meta". Builds below this are still rankable for *alignment* (which
+// doesn't lean on win rate), just not eligible to be the headline performer.
+const MIN_BEST_SAMPLE = 50;
+
 /**
  * Overlap of two item sets, 0–1 (intersection / union). Jaccard, not coverage, on
  * purpose: community builds list the author's whole menu (40+ items), so a kitchen-sink
@@ -82,11 +87,16 @@ export function matchCommunityBuilds(
   }
   if (ranked.length === 0) return { best: null, aligned: null, agree: false };
 
-  // Best win rate (break ties toward the larger sample); closest item set to ours.
-  const best = ranked.reduce((a, b) =>
-    b.winRate > a.winRate || (b.winRate === a.winRate && b.matches > a.matches) ? b : a,
-  );
+  // Best win rate among adequately-sampled builds (break ties toward the larger sample) —
+  // null when no community build has enough games to make a credible claim. Alignment
+  // ignores the floor: the closest item set to ours is useful regardless of its sample.
+  const sampled = ranked.filter((r) => r.matches >= MIN_BEST_SAMPLE);
+  const best = sampled.length
+    ? sampled.reduce((a, b) =>
+        b.winRate > a.winRate || (b.winRate === a.winRate && b.matches > a.matches) ? b : a,
+      )
+    : null;
   const aligned = ranked.reduce((a, b) => (b.similarity > a.similarity ? b : a));
 
-  return { best, aligned, agree: best.build.id === aligned.build.id };
+  return { best, aligned, agree: best?.build.id === aligned.build.id };
 }

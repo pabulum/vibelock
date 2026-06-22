@@ -133,8 +133,15 @@ export interface ItemFlowStats {
 
 // ---- Generated build shapes (our own, produced by buildGenerator) ----
 
-/** Why an item is in the build. */
-export type BuildRole = 'universal' | 'value' | 'situational';
+/** A lightweight pointer to another item, for relationship clues on a row. */
+export interface ItemRef {
+  id: number;
+  name: string;
+}
+
+/** Why an item is in the build. `filler` = pulled in to meet a category's soul-share
+ * quota, but it didn't clear the value gate — don't dress it up as a value pick. */
+export type BuildRole = 'universal' | 'value' | 'situational' | 'filler';
 
 export interface BuildItem {
   item: Item;
@@ -155,6 +162,19 @@ export interface BuildItem {
   transient?: boolean;
   /** Why it's transient, e.g. "builds into Burst Fire" or "often sold ~16:30". */
   transientReason?: string;
+  /** Set when a comp is selected: the item's signed win-rate edge vs that comp (centered on
+   * the matchup lean). Positive = answers the comp, negative = weak into it. */
+  compEdge?: number;
+  /** Convenience flag: this pick is notably weak vs the selected comp. */
+  weakVsComp?: boolean;
+  /** The item this most builds toward (component tree, ranked by how often players actually
+   * make the jump from the flow `edges`) — a "down payment on [Y]" clue. */
+  buildsToward?: ItemRef;
+  /** For a situational pick: the same-slot core item it can swap in for. */
+  swapFor?: ItemRef;
+  /** If this situational pick is *core* in a later phase: that phase's label — a "rush this if
+   * you're ahead; it's a core item by then" clue, not a true swap. */
+  coreLater?: string;
 }
 
 export interface BuildPhase {
@@ -311,17 +331,28 @@ export interface HeroMatchups {
   favorable: Matchup[];
 }
 
-/** An item that over/under-performs against a chosen enemy set. */
-export interface CounterItem {
-  item: Item;
-  /** Win rate when facing the enemies. */
+/** How much an item over-performs against one specific enemy hero. */
+export interface CounterMark {
+  enemyHeroId: number;
+  /** Raw win rate with this item when facing that enemy. */
   winRate: number;
-  /** Win rate − baseline win rate (the "counter" signal). */
+  /** The counter edge: the item's win-rate gain vs this enemy *above the general matchup
+   * lean*, so a merely-favorable matchup doesn't read as every item countering. */
   delta: number;
   /** Sample size behind `winRate`. */
   sample: number;
   /** True when the sample is thin enough to treat the delta with suspicion. */
   lowSample: boolean;
-  /** Average buy time, mapped to a phase label for context. */
+}
+
+/** An item that gains win rate against one or more of the selected enemies, with a
+ * per-enemy breakdown so each can be tagged with the specific hero's portrait. */
+export interface ItemCounters {
+  item: Item;
+  /** Average buy time, mapped to a phase label, so it can be filed under that phase. */
   phaseLabel: string;
+  /** Per-enemy gains, strongest first; only enemies the item actually beats appear. */
+  marks: CounterMark[];
+  /** Best single-enemy delta — used for ranking and the headline number. */
+  topDelta: number;
 }

@@ -40,6 +40,8 @@ const UNIVERSAL_PICK = 0.3; // ≥30% pick rate ⇒ "build it every game"
 const VALUE_EDGE = 0.02; // value/situational picks must beat the baseline by ≥2 pts
 const SOUL_SLACK = 1.15; // allow 15% over the soul budget before stopping
 const SITUATIONAL_MAX = 5;
+const COMEBACK_GAP = 0.035; // adj−raw this big ⇒ a reactive "hold up when behind" pick
+const COMEBACK_RESERVE = 2; // situational slots held for the best comeback picks (vs damage)
 const SELL_BEFORE_S = 1500; // a cheap item sold before ~25 min is a placeholder
 export const SLOT_CAP = 12; // 9 base + 3 flex slots (unlocked via Walker kills)
 
@@ -69,6 +71,8 @@ export function generateBuild(
 
   dedupeAcrossPhases(phases);
   const standingSlots = markTransient(phases, sellTimes);
+  annotateRelations(phases, flow, items);
+  annotateSlotRelations(phases);
 
   return {
     hero,
@@ -135,6 +139,103 @@ function mmss(s: number): string {
   return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 }
 
+const COST_BAND = 1.6; // a "swap" only makes sense between items of comparable cost
+function withinCostBand(a: number, b: number): boolean {
+  const hi = Math.max(a, b);
+  const lo = Math.min(a, b);
+  return lo > 0 && hi / lo <= COST_BAND;
+}
+
+/**
+ * Attach "learn about this item" relationship clues, mutating the phases' items:
+ *  - `buildsToward`: the item this is a component of, ranked by how often this hero's players
+ *    actually made that jump (flow `edges`), then by overall pick — i.e. its real upgrade.
+ *  - `swapFor` (situational only): the same-slot core pick whose cost is closest — the slot
+ *    this situational item is competing for.
+ */
+function annotateRelations(phases: BuildPhase[], flow: ItemFlowStats, items: Map<number, Item>): void {
+  // Edge weights: players who went from item X to item Y next, summed across columns.
+  const edgeW = new Map<number, Map<number, number>>();
+  for (const e of flow.edges) {
+    let m = edgeW.get(e.from_item_id);
+    if (!m) edgeW.set(e.from_item_id, (m = new Map()));
+    m.set(e.to_item_id, (m.get(e.to_item_id) ?? 0) + e.matches);
+  }
+  // How many of this hero's players touch each item at all (relevance gate + tiebreak).
+  const flowPlayers = new Map<number, number>();
+  for (const n of flow.nodes) flowPlayers.set(n.item_id, (flowPlayers.get(n.item_id) ?? 0) + n.players);
+  // Reverse component tree: component id → items built from it.
+  const builtFrom = new Map<number, Item[]>();
+  for (const it of items.values())
+    for (const c of it.componentIds) {
+      const arr = builtFrom.get(c);
+      if (arr) arr.push(it);
+      else builtFrom.set(c, [it]);
+    }
+
+  const buildsToward = (id: number): { id: number; name: string } | undefined => {
+    // Only upgrades this hero's players actually make (in the flow), best transition first.
+    const cands = (builtFrom.get(id) ?? []).filter((y) => flowPlayers.has(y.id));
+    if (cands.length === 0) return undefined;
+    const w = edgeW.get(id);
+    cands.sort(
+      (a, b) =>
+        (w?.get(b.id) ?? 0) - (w?.get(a.id) ?? 0) ||
+        (flowPlayers.get(b.id) ?? 0) - (flowPlayers.get(a.id) ?? 0),
+    );
+    return { id: cands[0].id, name: cands[0].name };
+  };
+
+  for (const p of phases) {
+    // Transient core picks already say "builds into X"; don't double up.
+    for (const b of p.core) if (!b.transient) b.buildsToward = buildsToward(b.item.id);
+    for (const s of p.situational) s.buildsToward = buildsToward(s.item.id);
+  }
+}
+
+/**
+ * Slot-relative clues — `coreLater` ("core by Mid, rush if ahead") and `swapFor` (the same-slot
+ * comparable-cost core pick this is an alternative to). Pure over phases and *resets first*, so
+ * it can be re-run after a comp re-rank shuffles core membership without leaving stale pairings.
+ */
+export function annotateSlotRelations(phases: BuildPhase[]): void {
+  const coreCols = new Map<number, number[]>();
+  for (const p of phases)
+    for (const b of p.core) {
+      const arr = coreCols.get(b.item.id);
+      if (arr) arr.push(p.column);
+      else coreCols.set(b.item.id, [p.column]);
+    }
+
+  for (const p of phases) {
+    for (const b of p.core) {
+      b.swapFor = undefined;
+      b.coreLater = undefined;
+    }
+    for (const s of p.situational) {
+      s.swapFor = undefined;
+      s.coreLater = undefined;
+      // Same item core in a later phase ⇒ a rush/stretch target ("buy early if ahead"), not a swap.
+      const laterCol = (coreCols.get(s.item.id) ?? []).find((c) => c > p.column);
+      if (laterCol !== undefined) {
+        s.coreLater = PHASE_META[laterCol].label;
+        continue;
+      }
+      // Else pair with a same-slot core pick of *comparable cost* — a real alternative, not a
+      // 6.4k item dressed up as a swap for a 1.6k one.
+      const peers = p.core.filter(
+        (c) => c.item.slot === s.item.slot && withinCostBand(c.item.cost, s.item.cost),
+      );
+      if (peers.length) {
+        const closest = peers.reduce((best, c) =>
+          Math.abs(c.item.cost - s.item.cost) < Math.abs(best.item.cost - s.item.cost) ? c : best,
+        );
+        s.swapFor = { id: closest.item.id, name: closest.item.name };
+      }
+    }
+  }
+}
+
 function buildPhase(
   col: number,
   flow: ItemFlowStats,
@@ -173,7 +274,14 @@ function buildPhase(
     for (const c of categoryPriority(candidates, slot, baselineWinRate, chosen)) {
       if (want <= 0) break;
       if (coreSouls + c.item.cost > soulBudget * SOUL_SLACK) continue; // a cheaper pick may still fit
-      const role: BuildRole = c.pickRate >= UNIVERSAL_PICK ? 'universal' : 'value';
+      // Mirror the bucket logic in categoryPriority: a quota-filling pick that beats
+      // neither the pick-rate bar nor the value gate is `filler`, not a `value` pick.
+      const role: BuildRole =
+        c.pickRate >= UNIVERSAL_PICK
+          ? 'universal'
+          : c.adjustedWinRate >= baselineWinRate + VALUE_EDGE
+            ? 'value'
+            : 'filler';
       core.push({ ...c, role });
       coreSouls += c.item.cost;
       chosen.add(c.item.id);
@@ -181,11 +289,20 @@ function buildPhase(
     }
   }
 
-  // Situational: the best leftover value picks across every category.
-  const situational = candidates
+  // Situational: the best leftover value picks across every category — but reserve a couple
+  // of slots for the strongest "comeback" picks (adj ≫ raw: reactive items that hold up when
+  // behind). Sorting purely by win rate lets raw damage items crowd those out, so a real
+  // late-game stabilizer (e.g. Fortitude) never surfaces. Reserve first, then fill by WR.
+  const eligible = candidates
     .filter((c) => !chosen.has(c.item.id) && c.adjustedWinRate >= baselineWinRate + VALUE_EDGE)
-    .sort((a, b) => b.adjustedWinRate - a.adjustedWinRate)
+    .sort((a, b) => b.adjustedWinRate - a.adjustedWinRate);
+  const reserved = eligible
+    .filter((c) => c.adjustedWinRate - c.rawWinRate >= COMEBACK_GAP)
+    .slice(0, COMEBACK_RESERVE);
+  const reservedIds = new Set(reserved.map((c) => c.item.id));
+  const situational = [...reserved, ...eligible.filter((c) => !reservedIds.has(c.item.id))]
     .slice(0, SITUATIONAL_MAX)
+    .sort((a, b) => b.adjustedWinRate - a.adjustedWinRate)
     .map<BuildItem>((c) => ({ ...c, role: 'situational' }));
 
   const buyTime = (b: BuildItem) => buyTimes.get(b.item.id) ?? Number.POSITIVE_INFINITY;
@@ -245,9 +362,12 @@ function allocateCategoryCounts(
 }
 
 /**
- * One category's candidates, best-first: every-game staples (by pick rate), then value
- * picks (by win rate), then — so a guaranteed category is never empty — the rest by
- * pick rate. Items already taken (or in another category) are skipped.
+ * One category's candidates, best-first for filling *core* slots. Core means "what most
+ * players build", so after the every-game staples we go by *commonality* among picks that
+ * clear the value gate — the most-built decent item — not by raw win rate. Otherwise a
+ * 6%-pick item with a shiny win rate steals a core slot from the 22%-pick staple everyone
+ * actually buys (e.g. Battle Vest over Extra Health). Niche high-WR picks still surface in
+ * `situational`. The remainder (so a guaranteed category is never empty) follows by pick rate.
  */
 function categoryPriority(
   candidates: BuildItem[],
@@ -258,14 +378,14 @@ function categoryPriority(
   const pool = candidates.filter((c) => c.item.slot === slot);
   const byPick = (a: BuildItem, b: BuildItem) => b.pickRate - a.pickRate;
   const universal = pool.filter((c) => c.pickRate >= UNIVERSAL_PICK).sort(byPick);
-  const value = pool
+  const staples = pool
     .filter((c) => c.pickRate < UNIVERSAL_PICK && c.adjustedWinRate >= baselineWinRate + VALUE_EDGE)
-    .sort((a, b) => b.adjustedWinRate - a.adjustedWinRate);
-  const rest = pool.filter((c) => !universal.includes(c) && !value.includes(c)).sort(byPick);
+    .sort(byPick);
+  const rest = pool.filter((c) => !universal.includes(c) && !staples.includes(c)).sort(byPick);
 
   const ordered: BuildItem[] = [];
   const seen = new Set<number>(chosen);
-  for (const c of [...universal, ...value, ...rest]) {
+  for (const c of [...universal, ...staples, ...rest]) {
     if (seen.has(c.item.id)) continue;
     seen.add(c.item.id);
     ordered.push(c);
@@ -294,6 +414,82 @@ function toCandidate(n: FlowNode, reached: number, items: Map<number, Item>): Bu
     avgNetWorthAtBuy: n.avg_net_worth_at_buy,
     why: '',
   };
+}
+
+const COMP_DEMOTE = -0.03; // a build pick this far below the matchup lean is "weak vs comp"
+
+/**
+ * Re-rank an already-generated build for a selected enemy comp, using each item's signed
+ * comp edge (win-rate gain vs the comp, centered on the matchup lean). The category core-slot
+ * counts and the universal staples are preserved — so the budget/category balance the base
+ * build worked out survives — while within each category the comp decides which non-staples
+ * fill the core slots, the role labels, and the order. Pure: returns a new build.
+ */
+export function rerankBuildForComp(
+  build: GeneratedBuild,
+  edgeByItem: Map<number, number>,
+): GeneratedBuild {
+  const baseline = build.population.baselineWinRate;
+  // Combined score: general strength over baseline, plus the comp-specific edge.
+  const score = (b: BuildItem) => b.adjustedWinRate - baseline + (edgeByItem.get(b.item.id) ?? 0);
+  const annotate = (b: BuildItem): BuildItem => {
+    const compEdge = edgeByItem.get(b.item.id);
+    return { ...b, compEdge, weakVsComp: compEdge !== undefined && compEdge <= COMP_DEMOTE };
+  };
+
+  const cats: SlotType[] = ['weapon', 'vitality', 'spirit', 'unknown'];
+
+  const phases = build.phases.map((phase) => {
+    const pool = [...phase.core, ...phase.situational].map(annotate);
+    const newCore: BuildItem[] = [];
+    let leftover: BuildItem[] = [];
+
+    for (const cat of cats) {
+      const catItems = pool.filter((b) => b.item.slot === cat);
+      const coreSlots = phase.core.filter((b) => b.item.slot === cat).length;
+      const universals = catItems
+        .filter((b) => b.pickRate >= UNIVERSAL_PICK)
+        .sort((a, b) => score(b) - score(a));
+      const others = catItems
+        .filter((b) => b.pickRate < UNIVERSAL_PICK)
+        .sort((a, b) => score(b) - score(a));
+
+      // Staples hold their slots; the comp picks which non-staples fill what's left.
+      const coreUniv = universals.slice(0, coreSlots);
+      const fill = Math.max(0, coreSlots - coreUniv.length);
+      const coreCat = [...coreUniv, ...others.slice(0, fill)];
+      leftover = leftover.concat(universals.slice(coreSlots), others.slice(fill));
+
+      for (const b of coreCat) {
+        const role: BuildRole =
+          b.pickRate >= UNIVERSAL_PICK ? 'universal' : score(b) >= VALUE_EDGE ? 'value' : 'filler';
+        newCore.push({ ...b, role });
+      }
+    }
+
+    // Situational: leftovers worth showing for this comp (clear the value gate, or are
+    // staples that didn't fit a core slot), strongest first, capped.
+    const newSitu = leftover
+      .filter((b) => b.pickRate >= UNIVERSAL_PICK || score(b) >= VALUE_EDGE)
+      .sort((a, b) => score(b) - score(a))
+      .slice(0, SITUATIONAL_MAX)
+      .map<BuildItem>((b) => ({ ...b, role: 'situational' }));
+
+    // Within the core group, order by comp relevance (buy-order is moot once we're tuning
+    // the build to a specific comp).
+    newCore.sort((a, b) => score(b) - score(a));
+    return {
+      ...phase,
+      core: newCore,
+      situational: newSitu,
+      coreSouls: newCore.reduce((s, b) => s + b.item.cost, 0),
+      categorySouls: categorySouls(newCore),
+    };
+  });
+
+  annotateSlotRelations(phases); // swap/rush pairings for the re-ranked membership
+  const standingSlots = phases.flatMap((p) => p.core).filter((b) => !b.transient).length;
+  return { ...build, phases, standingSlots };
 }
 
 export const SLOT_COLORS: Record<string, string> = {
