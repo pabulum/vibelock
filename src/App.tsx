@@ -156,6 +156,7 @@ export default function App() {
   } | null>(null);
   const [communityLoading, setCommunityLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showGuide, setShowGuide] = useState(false);
 
   // Load assets once.
   useEffect(() => {
@@ -475,6 +476,14 @@ export default function App() {
               ))}
             </select>
           </label>
+          <button
+            type="button"
+            className="guidebtn"
+            onClick={() => setShowGuide(true)}
+            title="How these numbers are calculated"
+          >
+            How it works
+          </button>
         </div>
         {busy && <div className="loadstrip" aria-hidden="true" />}
       </header>
@@ -567,13 +576,11 @@ export default function App() {
               )}
             </div>
             <p className="hint">
-              Raw win rate over the selected rank/patch (no adjusted rate exists for whole builds, so
-              lean on the larger samples). “% match” = overlap of our core picks with their core
-              (sections the author didn’t flag situational), which ranks “most like ours” — so
-              tightly organized builds rank above kitchen-sink ones. “core N/M” = our core picks they
-              also run; “flex N/M” = our situational picks they also flag situational (secondary, not
-              ranked). Hover to preview its items, click <code>#id</code> to copy it for the in-game
-              search.
+              Hover a build to preview its items; click <code>#id</code> to copy it for the in-game
+              search.{' '}
+              <button type="button" className="guidelink" onClick={() => setShowGuide(true)}>
+                What “% match”, core &amp; flex mean →
+              </button>
             </p>
           </section>
         )}
@@ -611,8 +618,10 @@ export default function App() {
             </div>
           )}
           <p className="hint">
-            Win rate when this hero is on the enemy team (whole-game, not lane-only). Click one to add
-            it below and see what to build against it.
+            Click a hero to add it below and see what to build against it.{' '}
+            <button type="button" className="guidelink" onClick={() => setShowGuide(true)}>
+              How matchup rates work →
+            </button>
           </p>
         </div>
       )}
@@ -628,8 +637,10 @@ export default function App() {
         <p className="counters-note">
           The build below is re-ranked for {enemyNames}: picks that answer the comp rise and carry
           the enemy portrait (hover any row for the per-hero gain); picks that are weak into it are
-          flagged <span className="weakcomp">▼</span>. Staples and category balance are kept. Counter
-          numbers are a <em>raw</em> win-rate delta — one threat at a time reads cleaner.
+          flagged <span className="weakcomp">▼</span>.{' '}
+          <button type="button" className="guidelink" onClick={() => setShowGuide(true)}>
+            How comp re-ranking works →
+          </button>
         </p>
       )}
 
@@ -709,10 +720,175 @@ export default function App() {
       )}
 
       <footer className="foot">
-        Data: deadlock-api.com · build win rates are <em>adjusted</em> for net-worth-at-buy; counter
-        deltas are raw (no adjusted rate available), so lean on the larger samples.
+        Data:{' '}
+        <a href="https://deadlock-api.com" target="_blank" rel="noreferrer">
+          deadlock-api.com
+        </a>
+        .{' '}
+        <button type="button" className="guidelink" onClick={() => setShowGuide(true)}>
+          Methodology &amp; glossary →
+        </button>
       </footer>
+
+      {showGuide && <GuideModal onClose={() => setShowGuide(false)} />}
     </div>
+  );
+}
+
+/** Static reference pane: how every number on the page is derived, plus a glossary of the
+ * tags that show up on rows. Opened from the header button, the inline "learn more" links,
+ * and the footer. Closes on backdrop click or Escape. */
+function GuideModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    // Freeze the page behind the modal so wheel/touch can't scroll it.
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div className="guide-backdrop" onClick={onClose}>
+      <div
+        className="guide"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Methodology and glossary"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="guide-head">
+          <h2>How this works</h2>
+          <button type="button" className="guide-x" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </header>
+
+        <div className="guide-body">
+          <section>
+            <h3>Where the numbers come from</h3>
+            <p>
+              Every panel is computed live from public match data on{' '}
+              <a href="https://deadlock-api.com" target="_blank" rel="noreferrer">
+                deadlock-api.com
+              </a>
+              , filtered to the <strong>rank floor</strong> and <strong>patch</strong> you select
+              (or the last 30 days). Nothing here is hand-curated — change a control and the whole
+              page recomputes.
+            </p>
+          </section>
+
+          <section>
+            <h3>Two kinds of win rate</h3>
+            <p>
+              <strong>Adjusted win rate</strong> is corrected for{' '}
+              <em>net worth at the moment of purchase</em>, so an item doesn’t look strong just
+              because the team that was already winning happened to buy it. Build and item rows use
+              adjusted rates, and show the <strong>± gap versus the hero’s average</strong>.
+            </p>
+            <p>
+              <strong>Raw win rate</strong> is the plain win rate with no correction. We fall back to
+              it wherever no adjusted figure exists — counter deltas, hero matchups, and whole
+              community builds — so in those spots, <strong>lean on the larger samples</strong>.
+            </p>
+          </section>
+
+          <section>
+            <h3>Reading a pick’s two rates together</h3>
+            <p>The gap between an item’s raw and adjusted rate tells you when it earns its win:</p>
+            <ul>
+              <li>
+                <span className="statetag comeback">comeback</span> adjusted ≫ raw — it holds up
+                even when bought from behind. A safer pick when you’re losing.
+              </li>
+              <li>
+                <span className="statetag winmore">win more</span> raw ≫ adjusted — its win rate
+                leans on already being ahead. Strong when snowballing, thin when the game is even.
+              </li>
+            </ul>
+            <p className="fine">A pick is only flagged once the gap clears ~3.5 points either way.</p>
+          </section>
+
+          <section>
+            <h3>Adjusting for the enemy comp</h3>
+            <p>
+              Add enemy heroes and the build re-ranks. Picks that answer the comp rise and carry the
+              enemy’s portrait — the number is that pick’s raw win-rate gain into that hero — while
+              picks that are weak into the comp get a <span className="weakcomp">▼</span> flag.
+              Staples and per-category soul balance are preserved. Counter deltas are raw and read
+              cleanest one threat at a time.
+            </p>
+          </section>
+
+          <section>
+            <h3>Glossary</h3>
+            <dl className="glossary">
+              <dt>Adjusted WR</dt>
+              <dd>Win rate corrected for net worth at purchase. Used on every build/item row.</dd>
+
+              <dt>Raw WR</dt>
+              <dd>Uncorrected win rate. Used for counters, matchups, and whole community builds.</dd>
+
+              <dt>Hero avg</dt>
+              <dd>
+                The population’s baseline win rate for this hero, rank and patch. Rows show ± versus
+                it.
+              </dd>
+
+              <dt>
+                <span className="statetag comeback">comeback</span>
+              </dt>
+              <dd>Adjusted ≫ raw — the pick holds up even when you buy it from behind.</dd>
+
+              <dt>
+                <span className="statetag winmore">win more</span>
+              </dt>
+              <dd>Raw ≫ adjusted — the pick’s win rate leans on already being ahead.</dd>
+
+              <dt>% match</dt>
+              <dd>
+                How much a community build’s core overlaps ours: shared ÷ combined core items
+                (Jaccard). Ranks builds “most like ours”, so tightly focused builds rank above
+                kitchen-sink ones.
+              </dd>
+
+              <dt>core / flex</dt>
+              <dd>
+                Core = the committed picks; flex = situational ones. “core N/M” counts our core picks
+                a community build also runs; “flex N/M” counts our situational picks it also flags
+                situational (secondary, not ranked).
+              </dd>
+
+              <dt>archetype / signature</dt>
+              <dd>
+                A build style defined by a signature item (e.g. a gun or spirit core). “all” blends
+                every build for the hero together.
+              </dd>
+
+              <dt>rush if ahead</dt>
+              <dd>A situational pick that becomes core in a later phase — buy it early if you’re winning.</dd>
+
+              <dt>
+                weak into comp <span className="weakcomp">▼</span>
+              </dt>
+              <dd>The pick loses win rate against the enemies you’ve selected, and nothing on its row counters them.</dd>
+
+              <dt>thin / low sample</dt>
+              <dd>Too few matches to trust — treat the number as noisy.</dd>
+
+              <dt>standing slots</dt>
+              <dd>How many of your active-item slots the build uses, against the in-game cap.</dd>
+            </dl>
+          </section>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 

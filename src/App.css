@@ -1151,3 +1151,179 @@ body {
   color: var(--muted);
   font-size: 12px;
 }
+.foot a {
+  color: var(--muted);
+}
+
+/* "How it works" trigger that sits alongside the header controls. */
+.guidebtn {
+  align-self: flex-end;
+  margin-bottom: 1px;
+  padding: 7px 12px;
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.guidebtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Inline "learn more →" links left behind in the trimmed hints and footer. */
+.guidelink {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.guidelink:hover {
+  text-decoration: underline;
+}
+
+/* Methodology & glossary modal. */
+.guide-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 6vh 16px 24px;
+  background: rgba(8, 10, 13, 0.62);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+.guide {
+  /* The card is a fixed-height column: a pinned header + a body that scrolls on its own,
+     so the header can't overlap content and scrolling can't chain to the page behind. */
+  display: flex;
+  flex-direction: column;
+  width: min(680px, 100%);
+  max-height: 100%;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  /* Portaled to <body>, so it doesn't inherit the app's font/color — set them here. */
+  color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+.guide-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  border-radius: 14px 14px 0 0;
+}
+.guide-head h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.guide-x {
+  padding: 4px 9px;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+.guide-x:hover {
+  color: var(--text);
+  background: var(--panel2);
+}
+.guide-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px 20px 20px;
+}
+.guide-body section {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+.guide-body section:last-child {
+  border-bottom: 0;
+  padding-bottom: 2px;
+}
+.guide-body h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+.guide-body p {
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+.guide-body p:last-child {
+  margin-bottom: 0;
+}
+.guide-body a {
+  color: var(--accent);
+}
+.guide-body ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.guide-body ul li {
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+.guide-body ul li:last-child {
+  margin-bottom: 8px;
+}
+.guide-body ul li .statetag {
+  margin-right: 6px;
+}
+.guide-body .fine {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Two-column term list; collapses to stacked rows on narrow screens. */
+.glossary {
+  margin: 2px 0 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 11px 18px;
+  align-items: baseline;
+}
+.glossary dt {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.glossary dt .statetag,
+.glossary dt .weakcomp {
+  font-weight: 700;
+}
+.glossary dd {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+@media (max-width: 560px) {
+  .glossary {
+    grid-template-columns: 1fr;
+    gap: 3px 0;
+  }
+  .glossary dd {
+    margin: 0 0 9px;
+  }
+}
