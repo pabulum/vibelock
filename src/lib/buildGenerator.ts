@@ -411,10 +411,11 @@ function buildPhase(
     candidates.reduce((a, c) => a + c.sample * marginalCost(c.item, ownedBefore, items), 0) / reached;
 
   // Split the phase's item count across weapon/vitality/spirit in the same proportion
-  // real players of this hero invest souls. Without this the build is category-blind:
-  // defensive items are bought reactively, so they miss the pick-rate and win-rate
-  // gates and the budget gets spent entirely on weapon/spirit — e.g. zero greens in lane.
-  const catCounts = allocateCategoryCounts(categorySoulShare(candidates), targetItems);
+  // real players of this hero invest souls (marginal, so an upgrade of an item bought earlier
+  // counts only its top-up). Without this the build is category-blind: defensive items are bought
+  // reactively, so they miss the pick-rate and win-rate gates and the budget gets spent entirely on
+  // weapon/spirit — e.g. zero greens in lane.
+  const catCounts = allocateCategoryCounts(categorySoulShare(candidates, ownedBefore, items), targetItems);
 
   const chosen = new Set<number>();
   const core: BuildItem[] = [];
@@ -589,12 +590,22 @@ function buildPhase(
   };
 }
 
-/** Fraction of phase souls real players put into each category (weapon/vitality/spirit). */
-function categorySoulShare(candidates: BuildItem[]): Record<SlotType, number> {
+/**
+ * Fraction of phase souls real players put into each category (weapon/vitality/spirit). Costs are
+ * marginal — net of components bought in an earlier phase (`ownedBefore`) — so a category whose
+ * power this phase is mostly a cheap upgrade of something you already own doesn't claim slots its
+ * *new* spend doesn't justify. That hands the freed slot to a category still paying full price, which
+ * is the implicit, honest bias toward efficient build paths: no thumb on the scale, just true cost.
+ */
+function categorySoulShare(
+  candidates: BuildItem[],
+  ownedBefore: (id: number) => boolean,
+  items: Map<number, Item>,
+): Record<SlotType, number> {
   const souls: Record<SlotType, number> = { weapon: 0, vitality: 0, spirit: 0, unknown: 0 };
   let total = 0;
   for (const c of candidates) {
-    const s = c.sample * c.item.cost;
+    const s = c.sample * marginalCost(c.item, ownedBefore, items);
     souls[c.item.slot] += s;
     total += s;
   }
