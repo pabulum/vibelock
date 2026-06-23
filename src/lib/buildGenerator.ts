@@ -103,11 +103,14 @@ export function generateBuild(
   const primaryCol = primaryColumnByItem(flow);
   // Phases are built in order so each can see what earlier phases committed to buy (`owned`): an
   // upgrade is discounted by a component you already hold, both when gating what fits the soul budget
-  // and in the displayed spend.
+  // and in the displayed spend. `claimed` tracks components already absorbed by an upgrade so a single
+  // component can't discount two of them (Sprint Boots → Enduring Speed *or* Trophy Collector, not
+  // both); buildPhase reads it for the discount and adds to it as it seats absorbing picks.
   const owned = new Set<number>();
+  const claimed = new Set<number>();
   const phases: BuildPhase[] = [];
   for (let col = 0; col < PHASE_META.length; col++) {
-    const phase = buildPhase(col, flow, items, baselineWinRate, buyTimes, opts, primaryCol, owned);
+    const phase = buildPhase(col, flow, items, baselineWinRate, buyTimes, opts, primaryCol, owned, claimed);
     phases.push(phase);
     for (const b of phase.core) owned.add(b.item.id);
   }
@@ -162,21 +165,27 @@ function dedupeAcrossPhases(phases: BuildPhase[]): void {
 }
 
 /**
+ * Each in-build component → the single recommended upgrade that absorbs it. A component can only be
+ * consumed once, so when two kept items build from the same one (Trophy Collector and Enduring Speed
+ * both build from Sprint Boots) only one absorbs it — the other pays full price. Last in core order
+ * (≈ buy order) wins, so the "builds into" note and the cost refund always name the same upgrade.
+ */
+function absorptionMap(core: BuildItem[]): Map<number, Item> {
+  const coreIds = new Set(core.map((b) => b.item.id));
+  const into = new Map<number, Item>();
+  for (const b of core)
+    for (const compId of b.item.componentIds) if (coreIds.has(compId)) into.set(compId, b.item);
+  return into;
+}
+
+/**
  * Flags core items that don't hold a permanent slot — either they build into another
  * recommended item (a shared slot) or they're a cheap item players typically sell —
  * and returns the count of items that *do* hold a slot. Mutates the phases' core items.
  */
 function markTransient(phases: BuildPhase[], sellTimes: Map<number, number>): number {
   const core = phases.flatMap((p) => p.core);
-  const coreIds = new Set(core.map((b) => b.item.id));
-
-  // Map a recommended component → the recommended item it builds into.
-  const buildsInto = new Map<number, Item>();
-  for (const b of core) {
-    for (const compId of b.item.componentIds) {
-      if (coreIds.has(compId)) buildsInto.set(compId, b.item);
-    }
-  }
+  const buildsInto = absorptionMap(core); // component → the one upgrade that absorbs it
 
   for (const b of core) {
     const upgrade = buildsInto.get(b.item.id);
@@ -219,25 +228,25 @@ function marginalCost(item: Item, owns: (id: number) => boolean, items: Map<numb
 }
 
 /**
- * Recompute every phase's marginal costs against the *final* core membership: each pick's cost is net
- * of any components already bought in an earlier phase (threaded via `owned`) or alongside it in the
- * same phase. Sets `effectiveCost` on core picks and refreshes coreSouls/categorySouls so the budget
- * reflects what the build actually spends, not the sum of stickers. Mutates phases; run once core
- * membership is settled (after dedupe, or after a comp re-rank). Pure w.r.t. `soulBudget` — that's a
- * population figure, computed per phase from the candidate pool, and core moves don't change it.
+ * Recompute every phase's marginal costs against the *final* core membership, then refresh
+ * coreSouls/categorySouls. Each component refunds into the *one* upgrade that absorbs it
+ * ({@link absorptionMap}), so a single Sprint Boots shared by Trophy Collector and Enduring Speed
+ * discounts only one of them — no double-credit. A chain (A→B→C, all kept) still nets to the top
+ * item's price because each link refunds the full sticker of the one below it. Mutates phases; run
+ * once core membership is settled (after dedupe, or after a comp re-rank). Also lifts each phase's
+ * displayed budget to at least its true spend, so the discount can never read as "over budget".
  */
 function recomputeCosts(phases: BuildPhase[], items: Map<number, Item>): void {
-  const owned = new Set<number>();
+  const into = absorptionMap(phases.flatMap((p) => p.core)); // component id → its absorbing upgrade
+  const refund = new Map<number, number>(); // upgrade id → souls its absorbed components refund
+  for (const [compId, up] of into)
+    refund.set(up.id, (refund.get(up.id) ?? 0) + (items.get(compId)?.cost ?? 0));
+
   for (const p of phases) {
-    // Credit components kept in *this* phase too: you buy the component before completing the upgrade,
-    // and the component is consumed into it (markTransient flags it "builds into …"), so the build
-    // only ever pays the net — order within the phase doesn't change the total.
-    const here = new Set(p.core.map((b) => b.item.id));
-    const owns = (id: number) => owned.has(id) || here.has(id);
-    for (const b of p.core) b.effectiveCost = marginalCost(b.item, owns, items);
+    for (const b of p.core) b.effectiveCost = Math.max(0, b.item.cost - (refund.get(b.item.id) ?? 0));
     p.coreSouls = p.core.reduce((s, b) => s + (b.effectiveCost ?? b.item.cost), 0);
     p.categorySouls = categorySouls(p.core);
-    for (const b of p.core) owned.add(b.item.id);
+    p.soulBudget = Math.max(p.soulBudget, p.coreSouls);
   }
 }
 
@@ -386,6 +395,7 @@ function buildPhase(
   opts: BuildOptions,
   primaryCol: Map<number, number>,
   owned: Set<number>,
+  claimed: Set<number>,
 ): BuildPhase {
   // reached_per_column is the correct denominator for an unlocked query: players
   // who were still buying in this phase.
@@ -398,8 +408,9 @@ function buildPhase(
     .filter((c): c is BuildItem => c !== null && c.sample >= minSupport);
 
   // An upgrade of a component bought in an earlier phase costs only its marginal here — credit that
-  // both for our spend and for the population budget, so the bar compares like with like.
-  const ownedBefore = (id: number) => owned.has(id);
+  // both for our spend and for the population budget, so the bar compares like with like. A component
+  // already absorbed by an earlier upgrade (`claimed`) is gone, so it can't discount a second one.
+  const ownedBefore = (id: number) => owned.has(id) && !claimed.has(id);
 
   // Budget for the phase, from what players actually do. This raw figure sums pick-mass × cost over
   // *every* candidate, so mutually-exclusive lines (Monster Rounds vs the High-Velocity Rounds →
@@ -423,15 +434,21 @@ function buildPhase(
   const benchedIds = new Set<number>(); // their upgrade lines are off-limits for filling core (see buildsFromAny)
   let coreSouls = 0;
 
-  // Cost net of components already bought — earlier phases (`owned`) or earlier in this one
-  // (`chosen`). Lets a component-chained upgrade fit a slot a full-sticker price would have blocked.
-  const owns = (id: number) => owned.has(id) || chosen.has(id);
+  // The components `c` would absorb: in the build already (earlier phase `owned`, or earlier this
+  // phase `chosen`) and not yet consumed by another upgrade (`claimed`). Returns the ids so the caller
+  // can mark them claimed once `c` actually seats — that's what stops a shared component (Sprint Boots)
+  // from discounting two upgrades. Each is consumed at most once; the second upgrade pays full.
+  const absorbs = (c: BuildItem): number[] =>
+    c.item.componentIds.filter((id) => (owned.has(id) || chosen.has(id)) && !claimed.has(id));
+  const costAfter = (c: BuildItem, absorb: number[]): number =>
+    Math.max(0, c.item.cost - absorb.reduce((s, id) => s + (items.get(id)?.cost ?? 0), 0));
 
   // Try to seat one candidate in core. Returns true only when it actually took a slot (so the caller
   // decrements its quota); a soul/line/phase miss or a benched substitute returns false.
   const tryAddCore = (c: BuildItem): boolean => {
     if (chosen.has(c.item.id) || benchedIds.has(c.item.id)) return false;
-    const cost = marginalCost(c.item, owns, items);
+    const absorb = absorbs(c);
+    const cost = costAfter(c, absorb);
     if (coreSouls + cost > soulBudget * SOUL_SLACK) return false; // a cheaper pick may still fit
     // Don't fill a slot with the upgrade of an item we've already benched as a swap — that's the same
     // line (Opening Rounds builds from High-Velocity Rounds), so it'd put the upgrade in core and the
@@ -456,11 +473,12 @@ function buildPhase(
     if (rival) {
       if (c.adjustedWinRate >= rival.adjustedWinRate + SUBSTITUTE_WR_EDGE) {
         core.splice(core.indexOf(rival), 1);
-        coreSouls -= marginalCost(rival.item, owns, items);
+        coreSouls -= rival.item.cost; // a substitute is a stat-stick with no in-build component to net out
         chosen.delete(rival.item.id);
         core.push({ ...c, role: 'universal' }); // a substitute is by definition over the pick bar
         coreSouls += cost;
         chosen.add(c.item.id);
+        absorb.forEach((id) => claimed.add(id));
         swaps.push({ ...rival, role: 'situational', swapForId: c.item.id });
         benchedIds.add(rival.item.id);
       } else {
@@ -480,6 +498,7 @@ function buildPhase(
     core.push({ ...c, role });
     coreSouls += cost;
     chosen.add(c.item.id);
+    absorb.forEach((id) => claimed.add(id));
     return true;
   };
 
@@ -571,7 +590,8 @@ function buildPhase(
   // shouldn't read as "over budget" — it tops out at its own spend.
   const kept = candidates.filter((c) => !benchedIds.has(c.item.id) && !buildsFromAny(c.item, benchedIds, items));
   const keptIds = new Set(kept.map((c) => c.item.id));
-  const ownsForBudget = (id: number) => owned.has(id) || keptIds.has(id);
+  // A component already consumed by an upgrade (`claimed`) can't also discount another kept item.
+  const ownsForBudget = (id: number) => (owned.has(id) || keptIds.has(id)) && !claimed.has(id);
   const deflatedBudget =
     kept.reduce((a, c) => a + c.sample * marginalCost(c.item, ownsForBudget, items), 0) / reached;
   const shownBudget = Math.max(deflatedBudget, coreSouls);
