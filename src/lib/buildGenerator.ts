@@ -39,6 +39,9 @@ const MIN_SUPPORT_ABS = 40; // ignore items bought by fewer than this many playe
 const MIN_SUPPORT_FRAC = 0.03; // ...or fewer than 3% of the phase's players
 const UNIVERSAL_PICK = 0.3; // ≥30% pick rate ⇒ "build it every game"
 const VALUE_EDGE = 0.02; // value/situational picks must beat the baseline by ≥2 pts
+const CO_OCCUR_MIN = 1; // two comparable-cost every-game picks in a slot are assumed to co-occur
+// only when their pick rates sum past this (inclusion–exclusion: pA+pB−1 players must buy both);
+// below it they can be bought by disjoint players — substitutes — so only one holds a core slot.
 const SOUL_SLACK = 1.15; // allow 15% over the soul budget before stopping
 const SITUATIONAL_MAX = 5;
 const COMEBACK_GAP = 0.035; // adj−raw this big ⇒ a reactive "hold up when behind" pick
@@ -88,8 +91,12 @@ export function generateBuild(
   const baseWins = flow.baseline.wins + flow.baseline.losses;
   const baselineWinRate = baseWins > 0 ? flow.baseline.wins / baseWins : 0.5;
 
+  // Each item's primary phase = the column where the highest fraction of players buy it. The core
+  // fill skips an item outside its primary phase, because dedupeAcrossPhases keeps it only there —
+  // filling an earlier phase's slot with a mostly-bought-later item just leaves that slot empty.
+  const primaryCol = primaryColumnByItem(flow);
   const phases = PHASE_META.map((_, col) =>
-    buildPhase(col, flow, items, baselineWinRate, buyTimes, opts),
+    buildPhase(col, flow, items, baselineWinRate, buyTimes, opts, primaryCol),
   );
 
   dedupeAcrossPhases(phases);
@@ -108,6 +115,20 @@ export function generateBuild(
     phases,
     standingSlots,
   };
+}
+
+/** Item id → the column where the largest fraction of players buy it (its primary phase). */
+function primaryColumnByItem(flow: ItemFlowStats): Map<number, number> {
+  const best = new Map<number, { col: number; pick: number }>();
+  for (const n of flow.nodes) {
+    const reached = flow.reached_per_column[n.column] || flow.baseline.matches || 1;
+    const pick = reached > 0 ? n.players / reached : 0;
+    const cur = best.get(n.item_id);
+    if (!cur || pick > cur.pick) best.set(n.item_id, { col: n.column, pick });
+  }
+  const out = new Map<number, number>();
+  for (const [id, v] of best) out.set(id, v.col);
+  return out;
 }
 
 /** Keep each core item only in the phase where it's most commonly bought (you buy it once). */
@@ -167,6 +188,43 @@ function withinCostBand(a: number, b: number): boolean {
   const hi = Math.max(a, b);
   const lo = Math.min(a, b);
   return lo > 0 && hi / lo <= COST_BAND;
+}
+
+/**
+ * The same-slot, comparable-cost every-game pick already in `core` that `c` does *not* co-occur
+ * with (its substitute), or undefined. Co-occurrence is read off the marginals: by inclusion–
+ * exclusion two picks must overlap once their pick rates sum past {@link CO_OCCUR_MIN}; below that
+ * they can be bought by disjoint players, so the build shouldn't assert both as every-game core
+ * (e.g. Paradox lane: Monster Rounds 43% and High-Velocity Rounds 37% sum to 0.80 — players take
+ * one or the other; only ~4% buy both). Scoped to comparable cost because the floor only
+ * discriminates among same-role alternatives — across tiers any two moderately-popular picks
+ * "could be disjoint", which would wrongly bench scaling items (Opening Rounds, Headhunter) that
+ * are bought *alongside* the cheap stat-sticks, not instead of them.
+ */
+function substituteRival(c: BuildItem, core: BuildItem[]): BuildItem | undefined {
+  if (c.pickRate < UNIVERSAL_PICK) return undefined;
+  return core.find(
+    (b) =>
+      b.item.slot === c.item.slot &&
+      b.pickRate >= UNIVERSAL_PICK &&
+      withinCostBand(b.item.cost, c.item.cost) &&
+      b.pickRate + c.pickRate < CO_OCCUR_MIN,
+  );
+}
+
+/**
+ * True when `item` is built (transitively) from any id in `roots` — i.e. it's an upgrade of one of
+ * them. Used to keep a benched substitute's whole line out of core: the slot a swap vacates is real
+ * and should be filled, but not by the swap's own upgrade (Opening Rounds is built from
+ * High-Velocity Rounds) — that would put the upgrade in core *and* the component as its swap.
+ */
+function buildsFromAny(item: Item, roots: Set<number>, items: Map<number, Item>): boolean {
+  if (roots.size === 0) return false;
+  return item.componentIds.some((c) => {
+    if (roots.has(c)) return true;
+    const comp = items.get(c);
+    return comp ? buildsFromAny(comp, roots, items) : false;
+  });
 }
 
 /**
@@ -238,6 +296,15 @@ export function annotateSlotRelations(phases: BuildPhase[]): void {
     for (const s of p.situational) {
       s.swapFor = undefined;
       s.coreLater = undefined;
+      // Explicit substitution link (held out of core as an alternative to a specific pick): pair to
+      // that rival when it's still core here, not to the merely cost-closest pick below.
+      if (s.swapForId !== undefined) {
+        const rival = p.core.find((c) => c.item.id === s.swapForId);
+        if (rival) {
+          s.swapFor = { id: rival.item.id, name: rival.item.name };
+          continue;
+        }
+      }
       // Same item core in a later phase ⇒ a rush/stretch target ("buy early if ahead"), not a swap.
       const laterCol = (coreCols.get(s.item.id) ?? []).find((c) => c > p.column);
       if (laterCol !== undefined) {
@@ -266,6 +333,7 @@ function buildPhase(
   baselineWinRate: number,
   buyTimes: Map<number, number>,
   opts: BuildOptions,
+  primaryCol: Map<number, number>,
 ): BuildPhase {
   // reached_per_column is the correct denominator for an unlocked query: players
   // who were still buying in this phase.
@@ -277,7 +345,10 @@ function buildPhase(
     .map((n) => toCandidate(n, reached, items))
     .filter((c): c is BuildItem => c !== null && c.sample >= minSupport);
 
-  // Budget for the phase, from what players actually do.
+  // Budget for the phase, from what players actually do. This raw figure sums pick-mass × cost over
+  // *every* candidate, so mutually-exclusive lines (Monster Rounds vs the High-Velocity Rounds →
+  // Opening Rounds line) both count even though a player buys one — it's a generous cap for the fill,
+  // but inflated as a *target*. We deflate the displayed budget below, once we know what got benched.
   const buys = candidates.reduce((a, c) => a + c.sample, 0);
   const targetItems = Math.max(1, Math.round(buys / reached));
   const soulBudget = candidates.reduce((a, c) => a + c.sample * c.item.cost, 0) / reached;
@@ -290,26 +361,66 @@ function buildPhase(
 
   const chosen = new Set<number>();
   const core: BuildItem[] = [];
+  const swaps: BuildItem[] = []; // every-game picks held out of core as substitutes (see substituteRival)
+  const benchedIds = new Set<number>(); // their upgrade lines are off-limits for filling core (see buildsFromAny)
   let coreSouls = 0;
+
+  // Try to seat one candidate in core. Returns true only when it actually took a slot (so the caller
+  // decrements its quota); a soul/line/phase miss or a benched substitute returns false.
+  const tryAddCore = (c: BuildItem): boolean => {
+    if (chosen.has(c.item.id) || benchedIds.has(c.item.id)) return false;
+    if (coreSouls + c.item.cost > soulBudget * SOUL_SLACK) return false; // a cheaper pick may still fit
+    // Don't fill a slot with the upgrade of an item we've already benched as a swap — that's the same
+    // line (Opening Rounds builds from High-Velocity Rounds), so it'd put the upgrade in core and the
+    // component as its swap. Skip it; the slot stays open for a genuinely different item.
+    if (buildsFromAny(c.item, benchedIds, items)) return false;
+    // Skip items whose primary phase is *later* — dedupeAcrossPhases keeps them there, so placing one
+    // in this earlier slot just leaves it empty (they still surface as a situational, "core by Mid").
+    // Items primary in an earlier phase are allowed through: if they didn't win a slot there they'd
+    // otherwise vanish, and a later phase is a fine home for them.
+    if ((primaryCol.get(c.item.id) ?? col) > col) return false;
+    // Substitution guard: if this every-game pick is an alternative to one already in core (a
+    // same-slot, comparable-cost pick it doesn't co-occur with), it isn't a second item — it's a swap
+    // for the rival that beat it. Bench it (the rival holds the build's representation of that line),
+    // but keep the slot — it's a real, budgeted slot owed to a different co-occurring item, not this
+    // swap's line. So the phase keeps its count without reading "buy all three cheap weapon items".
+    const rival = substituteRival(c, core);
+    if (rival) {
+      swaps.push({ ...c, role: 'situational', swapForId: rival.item.id });
+      benchedIds.add(c.item.id);
+      return false;
+    }
+    // Mirror the bucket logic in categoryPriority: a quota-filling pick that beats neither the
+    // pick-rate bar nor the value gate is `filler`, not a `value` pick.
+    const role: BuildRole =
+      c.pickRate >= UNIVERSAL_PICK
+        ? 'universal'
+        : c.adjustedWinRate >= baselineWinRate + VALUE_EDGE
+          ? 'value'
+          : 'filler';
+    core.push({ ...c, role });
+    coreSouls += c.item.cost;
+    chosen.add(c.item.id);
+    return true;
+  };
 
   for (const slot of FILL_ORDER) {
     let want = catCounts[slot];
     if (want <= 0) continue;
     for (const c of categoryPriority(candidates, slot, baselineWinRate, chosen)) {
       if (want <= 0) break;
-      if (coreSouls + c.item.cost > soulBudget * SOUL_SLACK) continue; // a cheaper pick may still fit
-      // Mirror the bucket logic in categoryPriority: a quota-filling pick that beats
-      // neither the pick-rate bar nor the value gate is `filler`, not a `value` pick.
-      const role: BuildRole =
-        c.pickRate >= UNIVERSAL_PICK
-          ? 'universal'
-          : c.adjustedWinRate >= baselineWinRate + VALUE_EDGE
-            ? 'value'
-            : 'filler';
-      core.push({ ...c, role });
-      coreSouls += c.item.cost;
-      chosen.add(c.item.id);
-      want--;
+      if (tryAddCore(c)) want--;
+    }
+  }
+
+  // Backfill to the item target: the per-category quotas can come up short when a category runs out
+  // of primary-phase candidates (e.g. no green clears the bar in a late phase, or a substitute
+  // emptied a slot). Top up from the most-bought remaining primary-phase picks of any category, so
+  // the phase reaches the count players actually buy instead of leaving a hole.
+  if (core.length < targetItems) {
+    for (const c of [...candidates].sort((a, b) => b.pickRate - a.pickRate)) {
+      if (core.length >= targetItems) break;
+      tryAddCore(c);
     }
   }
 
@@ -317,17 +428,27 @@ function buildPhase(
   // of slots for the strongest "comeback" picks (adj ≫ raw: reactive items that hold up when
   // behind). Sorting purely by win rate lets raw damage items crowd those out, so a real
   // late-game stabilizer (e.g. Fortitude) never surfaces. Reserve first, then fill by WR.
+  const swapIds = new Set(swaps.map((s) => s.item.id));
   const eligible = candidates
-    .filter((c) => !chosen.has(c.item.id) && c.adjustedWinRate >= baselineWinRate + VALUE_EDGE)
+    .filter(
+      (c) =>
+        !chosen.has(c.item.id) &&
+        !swapIds.has(c.item.id) &&
+        !buildsFromAny(c.item, benchedIds, items) && // an upgrade of a swap is that swap's line, not its own pick
+        c.adjustedWinRate >= baselineWinRate + VALUE_EDGE,
+    )
     .sort((a, b) => b.adjustedWinRate - a.adjustedWinRate);
   const reserved = eligible
     .filter((c) => c.adjustedWinRate - c.rawWinRate >= COMEBACK_GAP)
     .slice(0, COMEBACK_RESERVE);
   const reservedIds = new Set(reserved.map((c) => c.item.id));
-  const situational = [...reserved, ...eligible.filter((c) => !reservedIds.has(c.item.id))]
-    .slice(0, SITUATIONAL_MAX)
+  // Substitution swaps lead the list (they're the explicit alternative to a core pick); the
+  // strongest value/comeback leftovers fill whatever cap is left.
+  const value = [...reserved, ...eligible.filter((c) => !reservedIds.has(c.item.id))]
+    .slice(0, Math.max(0, SITUATIONAL_MAX - swaps.length))
     .sort((a, b) => b.adjustedWinRate - a.adjustedWinRate)
     .map<BuildItem>((c) => ({ ...c, role: 'situational' }));
+  const situational = [...swaps, ...value];
 
   // Conditional need pick: when a near-universal, win-rate-neutral need (sustain) is split across
   // substitutes so its lead item missed both the core and the value gates above, surface that
@@ -341,17 +462,44 @@ function buildPhase(
     }
   }
 
+  // Enrich: the value gate alone can leave a thin 1–2 line list, hiding common picks a player would
+  // want to see (sustain, popular alternatives). Round the list out to the cap with the most-bought
+  // remaining picks even if they don't clear the win-rate bar — labelled honestly (`value` only if it
+  // actually beats the bar, else `filler`) so the chip doesn't oversell a win-rate-neutral pickup.
+  if (situational.length < SITUATIONAL_MAX) {
+    const shown = new Set([...core, ...situational].map((b) => b.item.id));
+    for (const c of [...candidates].sort((a, b) => b.pickRate - a.pickRate)) {
+      if (situational.length >= SITUATIONAL_MAX) break;
+      if (shown.has(c.item.id) || benchedIds.has(c.item.id)) continue;
+      if (buildsFromAny(c.item, benchedIds, items)) continue; // an upgrade of a swap is that swap's line
+      const role: BuildRole = c.adjustedWinRate >= baselineWinRate + VALUE_EDGE ? 'value' : 'filler';
+      situational.push({ ...c, role });
+      shown.add(c.item.id);
+    }
+  }
+
   const buyTime = (b: BuildItem) => buyTimes.get(b.item.id) ?? Number.POSITIVE_INFINITY;
   // The "why" is what the item does — the WR/pick numbers are already on the row — unless a pick
   // set its own rationale (the conditional need note above), which we keep.
   const withWhy = (b: BuildItem) => ({ ...b, why: b.why || b.item.effect || '' });
+
+  // Deflate the displayed budget: drop the benched substitutes and their upgrade lines, the spend a
+  // coherent build never makes (it picks one of each mutually-exclusive line). Without this the bar
+  // shows a gap that can only be closed by buying redundant items. (Component lines whose members are
+  // *both* kept — Headshot Booster → Headhunter — still slightly double-count; a smaller residual.)
+  // Floor it at what this build actually costs: a phase that front-loads a pricier-than-average item
+  // (e.g. an early Headhunter) shouldn't read as "over budget" — it tops out at its own spend.
+  const deflatedBudget = candidates
+    .filter((c) => !benchedIds.has(c.item.id) && !buildsFromAny(c.item, benchedIds, items))
+    .reduce((a, c) => a + c.sample * c.item.cost, 0) / reached;
+  const shownBudget = Math.max(deflatedBudget, coreSouls);
 
   return {
     column: col,
     label: PHASE_META[col].label,
     timeLabel: PHASE_META[col].timeLabel,
     targetItems,
-    soulBudget,
+    soulBudget: shownBudget,
     coreSouls,
     categorySouls: categorySouls(core),
     // Order by buy time so top-to-bottom reads as buy order.
@@ -512,11 +660,23 @@ export function rerankBuildForComp(
         .filter((b) => b.pickRate < UNIVERSAL_PICK)
         .sort((a, b) => score(b) - score(a));
 
-      // Staples hold their slots; the comp picks which non-staples fill what's left.
-      const coreUniv = universals.slice(0, coreSlots);
+      // Staples hold their slots; the comp picks which non-staples fill what's left. Same
+      // substitution guard as the base build: a universal that doesn't co-occur with one already
+      // taken (same-slot, comparable-cost) is benched as a swap, not given a second core slot.
+      const coreUniv: BuildItem[] = [];
+      const benched: BuildItem[] = [];
+      for (const u of universals) {
+        if (coreUniv.length >= coreSlots) {
+          benched.push(u);
+          continue;
+        }
+        const rival = substituteRival(u, coreUniv);
+        if (rival) benched.push({ ...u, swapForId: rival.item.id });
+        else coreUniv.push(u);
+      }
       const fill = Math.max(0, coreSlots - coreUniv.length);
       const coreCat = [...coreUniv, ...others.slice(0, fill)];
-      leftover = leftover.concat(universals.slice(coreSlots), others.slice(fill));
+      leftover = leftover.concat(benched, others.slice(fill));
 
       for (const b of coreCat) {
         const role: BuildRole =

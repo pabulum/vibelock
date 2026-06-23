@@ -188,6 +188,10 @@ export interface BuildItem {
   buildsToward?: ItemRef;
   /** For a situational pick: the same-slot core item it can swap in for. */
   swapFor?: ItemRef;
+  /** Set when this pick was held out of core as a substitute for a specific core item — a same-slot,
+   * comparable-cost every-game pick it doesn't co-occur with. Carries that core item's id so the
+   * swap is paired to the right rival (not the merely cost-closest core pick). */
+  swapForId?: number;
   /** If this situational pick is *core* in a later phase: that phase's label — a "rush this if
    * you're ahead; it's a core item by then" clue, not a true swap. */
   coreLater?: string;
