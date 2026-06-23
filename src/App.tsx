@@ -408,8 +408,11 @@ export default function App() {
   // With a comp selected, re-rank the build for it: the comp decides which non-staples fill
   // each phase's core slots, the role labels, and the order (category counts + staples held).
   const displayBuild = useMemo(
-    () => (build && compEdges && enemies.length > 0 ? rerankBuildForComp(build, compEdges) : build),
-    [build, compEdges, enemies.length],
+    () =>
+      build && compEdges && items && enemies.length > 0
+        ? rerankBuildForComp(build, compEdges, items)
+        : build,
+    [build, compEdges, items, enemies.length],
   );
   // Every item the build already shows anywhere — a counter pick in this set gets a tag
   // in place rather than a duplicate "add" row (its buy-time phase can differ from where
@@ -1307,6 +1310,24 @@ function CounterAddRow({
   );
 }
 
+/** The item's cost. A component-chained upgrade is charged *marginally* — net of components already
+ * in the build, which Deadlock refunds into the upgrade — so the rows sum to the phase's soul budget.
+ * When that discount applies, show the marginal price with the full sticker struck through. */
+function CostTag({ b }: { b: BuildItem }) {
+  const eff = b.effectiveCost ?? b.item.cost;
+  if (eff >= b.item.cost) return <span className="cost">{b.item.cost.toLocaleString()}</span>;
+  const saved = b.item.cost - eff;
+  return (
+    <span
+      className="cost discounted"
+      title={`${eff.toLocaleString()} now — ${saved.toLocaleString()} of components already in your build refund into it (full ${b.item.cost.toLocaleString()})`}
+    >
+      <span className="cost-full">{b.item.cost.toLocaleString()}</span>
+      {eff.toLocaleString()}
+    </span>
+  );
+}
+
 function ItemRow({
   b,
   items,
@@ -1353,7 +1374,7 @@ function ItemRow({
             )}
             {b.item.name}
           </span>
-          <span className="cost">{b.item.cost.toLocaleString()}</span>
+          <CostTag b={b} />
         </div>
         <div className="line2">
           <span

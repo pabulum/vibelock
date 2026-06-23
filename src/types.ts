@@ -172,6 +172,11 @@ export interface BuildItem {
   /** Number of players (sample size) behind the numbers. */
   sample: number;
   avgNetWorthAtBuy: number;
+  /** What this pick actually costs *in this build*: its sticker `item.cost` minus any components
+   * you've already bought (an earlier phase, or earlier in this phase) — Deadlock refunds a built
+   * item's components into the upgrade. Set on core picks; equals `item.cost` when nothing is
+   * absorbed. The budget (coreSouls/categorySouls) is summed from this, not the sticker. */
+  effectiveCost?: number;
   /** Human-readable rationale. */
   why: string;
   /** True when this item doesn't hold a permanent slot (sold, or builds into another pick). */

@@ -1133,6 +1133,16 @@ body {
   font-variant-numeric: tabular-nums;
   font-size: 12px;
 }
+.line1 .cost.discounted {
+  display: inline-flex;
+  gap: 5px;
+  align-items: baseline;
+}
+.line1 .cost .cost-full {
+  color: #8a8170;
+  text-decoration: line-through;
+  font-size: 11px;
+}
 .line2 {
   display: flex;
   gap: 10px;
