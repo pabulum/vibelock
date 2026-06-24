@@ -172,6 +172,9 @@ export interface BuildItem {
   /** Number of players (sample size) behind the numbers. */
   sample: number;
   avgNetWorthAtBuy: number;
+  /** Average buy time in seconds (from item-stats), carried on the item so a comp re-rank can still
+   * order a phase by buy time without re-fetching it. Undefined when item-stats had no entry. */
+  buyTimeS?: number;
   /** What this pick actually costs *in this build*: its sticker `item.cost` minus any components
    * you've already bought (an earlier phase, or earlier in this phase) — Deadlock refunds a built
    * item's components into the upgrade. Set on core picks; equals `item.cost` when nothing is

@@ -73,6 +73,46 @@ const OVERTIME_PICK_HALF = 0.05; // a pick bought by this fraction of late-game 
 const OVERTIME_COMMIT_WEIGHT = 0.05; // ...plus a small bonus per unit pick rate, so a widely-bought late
 // pick edges out an equally-rated rarity.
 
+// --- Win-rate core ---
+// The discretionary core slots (everything below the genuine ~30%+ universals) are ranked by adjusted
+// win rate, shrunk toward baseline by sample so a thin-pick shiny WR can't outrank a proven pick (same
+// regularizer as the overtime list) — so the build tilts toward what wins, not merely what's popular.
+// Genuine universals are left alone — they're mandatory and sit ~baseline anyway.
+const CORE_WR_PICK_HALF = 0.08; // a discretionary pick bought by this fraction of the phase gets half its
+// WR-edge credit; rarer picks shrink toward zero (so a 2%-pick 63% specialist can't unseat a 20%-pick winner).
+const CORE_POP_TILT = 0.3; // mild *multiplicative* popularity bonus on the WR edge (up to +CORE_POP_TILT for a
+// 100%-pick item) — a co-occurrence/robustness tiebreak that keeps a widely-bought pick ahead of an equal rarity.
+
+// Efficiency vs. per-slot power, governed by SLOT scarcity rather than time. While the build still has empty
+// slots to fill, souls are the binding constraint, so a pick's WR edge is divided by its soul cost (cheaper =
+// more edge per soul). But the standing build is capped (~9 base, up to SLOT_CAP with Walker kills), and once
+// slots are the scarce resource two cheap items no longer beat one strong item — what matters is power *per
+// slot* (raw WR). So the cost penalty fades from CORE_COST_POWER_MAX (slots empty) to 0 (slots full), driven by
+// how many slots the build has already committed before the phase. This adapts per hero: a build that fills its
+// slots early flips to per-slot power sooner, where the big carries win. (Set MAX to 0 to recover raw-WR core.)
+const CORE_COST_POWER_MAX = 0.6;
+const CORE_SLOT_TARGET = SLOT_CAP; // committed standing slots at which efficiency has fully faded to per-slot
+
+/** The efficiency weight to use for a phase, given how many standing slots are already committed. Linear fade
+ * from CORE_COST_POWER_MAX (nothing committed — souls bind) to 0 (slots full — per-slot power decides). */
+function costPowerForSlots(slotsCommitted: number): number {
+  return CORE_COST_POWER_MAX * Math.max(0, 1 - slotsCommitted / CORE_SLOT_TARGET);
+}
+
+/** Discretionary core ranking. Combines: the adjusted-WR
+ * edge over baseline; a sample shrink (a thin-pick shiny WR can't unseat a proven pick); a mild popularity
+ * tilt; and a cost penalty whose strength (`costPower`, from {@link costPowerForSlots}) fades as the standing
+ * build fills — so early picks favor soul-efficiency and, once slots are scarce, per-slot win rate (the big
+ * carries) decides. `costK` floors at 1 (1000 souls) so sub-1k stat-sticks get no efficiency boost. Higher =
+ * seat first. */
+function coreWrScore(b: BuildItem, baselineWinRate: number, costPower: number): number {
+  const edge = b.adjustedWinRate - baselineWinRate;
+  const shrink = b.pickRate / (b.pickRate + CORE_WR_PICK_HALF);
+  const popTilt = 1 + CORE_POP_TILT * b.pickRate;
+  const costK = Math.max(1, b.item.cost / 1000);
+  return (edge * shrink * popTilt) / Math.pow(costK, costPower);
+}
+
 // --- Need-aware situational pick (see NeedKind) ---
 // A need like sustain is bought by most players but split across substitutes (Extra Regen /
 // Restorative Shot / Healing Rite), so no single item clears the pick-rate core bar; and it's
@@ -92,6 +132,10 @@ const NEED_MAX_WR_DROP = 0.03; // ...and skip it if buyers win this far below ba
 // the plurality buy most phases, so giving the reactively-bought categories (greens,
 // then spirit) first claim on the budget stops weapon from starving them of a slot.
 const FILL_ORDER: Array<'weapon' | 'vitality' | 'spirit'> = ['vitality', 'spirit', 'weapon'];
+
+// End of each phase's time window (seconds): Lane 0–9, Early mid 9–20, Mid 20–30, Late 30+. Used to
+// reject re-homing a cheap placeholder into a phase it's typically already sold within (see buildPhase).
+const PHASE_END_S = [540, 1200, 1800, Number.POSITIVE_INFINITY];
 
 /** Options for {@link generateBuild}. */
 export interface BuildOptions {
@@ -128,7 +172,7 @@ export function generateBuild(
   const claimed = new Set<number>();
   const phases: BuildPhase[] = [];
   for (let col = 0; col < PHASE_META.length; col++) {
-    const phase = buildPhase(col, flow, items, baselineWinRate, buyTimes, opts, primaryCol, owned, claimed);
+    const phase = buildPhase(col, flow, items, baselineWinRate, buyTimes, sellTimes, opts, primaryCol, owned, claimed);
     phases.push(phase);
     for (const b of phase.core) owned.add(b.item.id);
   }
@@ -257,7 +301,9 @@ function dedupeAcrossPhases(phases: BuildPhase[]): void {
  * Opening Rounds it builds into) while the upgrade still shows the component's price knocked off. We
  * keep only the upgrade, at full sticker: recomputeCosts credits a refund only for components still in
  * core, so dropping the component restores its price and the phase's soul total is unchanged (full
- * sticker = component + marginal). The item target drops with it so "N/M items" stays coherent.
+ * sticker = component + marginal). `targetItems` is left untouched — it's a stable population reference
+ * ("items the average player buys here", which counts that component as a purchase), so our row count
+ * can sit one under it when a component folds into its upgrade; that's honest, not a number to retune.
  * Cross-phase components are left alone — there you really do buy the cheap item in an earlier phase
  * and upgrade later, so it holds a genuine (transient) slot and earns its row. Run after dedupe (final
  * membership known) and before recomputeCosts (so the kept upgrade prices at full sticker).
@@ -266,9 +312,7 @@ function dropSamePhaseComponents(phases: BuildPhase[]): void {
   for (const p of phases) {
     const absorbedHere = absorptionMap(p.core); // component id → its same-phase absorbing upgrade
     if (absorbedHere.size === 0) continue;
-    const before = p.core.length;
     p.core = p.core.filter((b) => !absorbedHere.has(b.item.id));
-    p.targetItems = Math.max(p.core.length, p.targetItems - (before - p.core.length));
   }
 }
 
@@ -341,8 +385,8 @@ function marginalCost(item: Item, owns: (id: number) => boolean, items: Map<numb
  * ({@link absorptionMap}), so a single Sprint Boots shared by Trophy Collector and Enduring Speed
  * discounts only one of them — no double-credit. A chain (A→B→C, all kept) still nets to the top
  * item's price because each link refunds the full sticker of the one below it. Mutates phases; run
- * once core membership is settled (after dedupe, or after a comp re-rank). Also lifts each phase's
- * displayed budget to at least its true spend, so the discount can never read as "over budget".
+ * once core membership is settled (after dedupe, or after a comp re-rank). Leaves `soulBudget` alone —
+ * it's a stable population reference, so coreSouls is shown against it as-is (under, or modestly over).
  */
 function recomputeCosts(phases: BuildPhase[], items: Map<number, Item>): void {
   const into = absorptionMap(phases.flatMap((p) => p.core)); // component id → its absorbing upgrade
@@ -354,7 +398,6 @@ function recomputeCosts(phases: BuildPhase[], items: Map<number, Item>): void {
     for (const b of p.core) b.effectiveCost = Math.max(0, b.item.cost - (refund.get(b.item.id) ?? 0));
     p.coreSouls = p.core.reduce((s, b) => s + (b.effectiveCost ?? b.item.cost), 0);
     p.categorySouls = categorySouls(p.core);
-    p.soulBudget = Math.max(p.soulBudget, p.coreSouls);
   }
 }
 
@@ -500,6 +543,7 @@ function buildPhase(
   items: Map<number, Item>,
   baselineWinRate: number,
   buyTimes: Map<number, number>,
+  sellTimes: Map<number, number>,
   opts: BuildOptions,
   primaryCol: Map<number, number>,
   owned: Set<number>,
@@ -520,14 +564,32 @@ function buildPhase(
   // already absorbed by an earlier upgrade (`claimed`) is gone, so it can't discount a second one.
   const ownedBefore = (id: number) => owned.has(id) && !claimed.has(id);
 
-  // Budget for the phase, from what players actually do. This raw figure sums pick-mass × cost over
-  // *every* candidate, so mutually-exclusive lines (Monster Rounds vs the High-Velocity Rounds →
-  // Opening Rounds line) both count even though a player buys one — it's a generous cap for the fill,
-  // but inflated as a *target*. We deflate the displayed budget below, once we know what got benched.
   const buys = candidates.reduce((a, c) => a + c.sample, 0);
   const targetItems = Math.max(1, Math.round(buys / reached));
+  // Fill ceiling — what we're allowed to spend, using our build's own earlier picks for the component
+  // discount (internally consistent with coreSouls, which also credits what we actually own).
   const soulBudget =
     candidates.reduce((a, c) => a + c.sample * marginalCost(c.item, ownedBefore, items), 0) / reached;
+
+  // Displayed budget — a *build-independent* population reference, so flipping a toggle changes our
+  // recommendation (coreSouls), never this denominator. It's the average souls a player at this rank
+  // spends in the phase: each candidate's pick-mass × its population marginal cost, where a component is
+  // credited by how much of the population already owns it (its cumulative pick rate across earlier
+  // phases), not by our specific picks. That's what fixes the residual wobble — `ownedBefore` above made
+  // the old number drift ~1–2% with our selection. coreSouls is shown against this as-is: under it for a
+  // leaner-than-average build, occasionally a touch over when we front-load (the fill allows SOUL_SLACK).
+  const ownedShareBefore = new Map<number, number>();
+  for (const n of flow.nodes) {
+    if (n.column >= col) continue;
+    const rc = flow.reached_per_column[n.column] || flow.baseline.matches || 1; // that column's own denominator
+    ownedShareBefore.set(n.item_id, Math.min(1, (ownedShareBefore.get(n.item_id) ?? 0) + n.players / rc));
+  }
+  const popMarginal = (it: Item): number =>
+    Math.max(
+      0,
+      it.cost - it.componentIds.reduce((s, cid) => s + (items.get(cid)?.cost ?? 0) * (ownedShareBefore.get(cid) ?? 0), 0),
+    );
+  const popSoulBudget = candidates.reduce((a, c) => a + c.sample * popMarginal(c.item), 0) / reached;
 
   // Bias the phase's items across weapon/vitality/spirit toward the proportion real players of this
   // hero *buy* in each category (count share, not soul share — slots are bodies, so an expensive
@@ -561,7 +623,32 @@ function buildPhase(
   // Try to seat one candidate in core. Returns true only when it actually took a slot (so the caller
   // decrements its quota); a soul/line/phase miss or a benched substitute returns false.
   const tryAddCore = (c: BuildItem): boolean => {
-    if (chosen.has(c.item.id) || benchedIds.has(c.item.id)) return false;
+    // Already bought in an earlier phase: it holds its slot there, you don't re-buy it. Seating it
+    // again only for dedupeAcrossPhases to strip it back out is what left later phases short of their
+    // item target with budget to spare — skip it so this slot goes to a genuinely new pick.
+    if (chosen.has(c.item.id) || benchedIds.has(c.item.id) || owned.has(c.item.id)) return false;
+    // Don't seat a component whose upgrade is already in this phase's core — buying the upgrade already
+    // includes it, so it would just fold away (dropSamePhaseComponents) and waste the slot. Skip it so
+    // the slot goes to a genuinely new item (Victor early-mid: skip Sprint Boots once Enduring Speed is
+    // in, so Healing Booster gets the slot instead of the build silently coming up an item short).
+    const cidSet = new Set([c.item.id]);
+    if (core.some((b) => buildsFromAny(b.item, cidSet, items))) return false;
+    // Don't re-home a cheap placeholder into a phase it's typically sold *within*. An item whose primary
+    // (most-bought) phase is earlier but that lost its slot there is otherwise allowed to resurface in a
+    // later phase (see the primaryCol check below) — but if it's a cheap item the population sells before
+    // this phase even ends, that resurfacing is a buy-then-sell, not a real pick for the phase. (Kelvin
+    // Emissary: Extra Regen, a lane-sustain bought ~5min / sold ~13min, drifting into Early mid. At
+    // Eternus it stays in Lane.) Limited to T1 + an earlier primary phase, matching markTransient's
+    // assumption that a cheap early-sold item is a placeholder, not a kept pick with a noisy sell time.
+    const sellT = sellTimes.get(c.item.id);
+    if (
+      c.item.tier <= 1 &&
+      (primaryCol.get(c.item.id) ?? col) < col &&
+      sellT !== undefined &&
+      sellT > 0 &&
+      sellT <= PHASE_END_S[col]
+    )
+      return false;
     const absorb = absorbs(c);
     const cost = costAfter(c, absorb);
     if (coreSouls + cost > soulBudget * SOUL_SLACK) return false; // a cheaper pick may still fit
@@ -621,10 +708,16 @@ function buildPhase(
   // Each category has its own best-first list (categoryPriority: universals, then value staples, then
   // the rest by pick). "Worth building" = a universal (everyone-builds) pick, or a discretionary pick
   // that isn't a clear loser (FILL_WR_FLOOR) — a popular-but-bad item never holds a slot.
+  // Efficiency weight for this phase from how many standing slots are already committed (owned, minus
+  // components an upgrade absorbed — those don't hold a permanent slot). Empty build ⇒ souls bind ⇒ favor
+  // soul-efficiency; near the slot cap ⇒ slots bind ⇒ per-slot win rate (the big carries) decides.
+  let committedSlots = 0;
+  for (const id of owned) if (!claimed.has(id)) committedSlots++;
+  const costPower = costPowerForSlots(committedSlots);
   const pools: Record<'weapon' | 'vitality' | 'spirit', BuildItem[]> = {
-    weapon: categoryPriority(candidates, 'weapon', baselineWinRate, chosen),
-    vitality: categoryPriority(candidates, 'vitality', baselineWinRate, chosen),
-    spirit: categoryPriority(candidates, 'spirit', baselineWinRate, chosen),
+    weapon: categoryPriority(candidates, 'weapon', baselineWinRate, chosen, costPower),
+    vitality: categoryPriority(candidates, 'vitality', baselineWinRate, chosen, costPower),
+    spirit: categoryPriority(candidates, 'spirit', baselineWinRate, chosen, costPower),
   };
   const cursor: Record<'weapon' | 'vitality' | 'spirit', number> = { weapon: 0, vitality: 0, spirit: 0 };
   const allocated: Record<'weapon' | 'vitality' | 'spirit', number> = { weapon: 0, vitality: 0, spirit: 0 };
@@ -635,7 +728,7 @@ function buildPhase(
   const peek = (slot: 'weapon' | 'vitality' | 'spirit'): BuildItem | undefined => {
     while (cursor[slot] < pools[slot].length) {
       const c = pools[slot][cursor[slot]];
-      if (chosen.has(c.item.id) || benchedIds.has(c.item.id) || !seatable(c)) {
+      if (chosen.has(c.item.id) || benchedIds.has(c.item.id) || owned.has(c.item.id) || !seatable(c)) {
         cursor[slot]++;
         continue;
       }
@@ -675,8 +768,8 @@ function buildPhase(
   // dragged in to hit the number. A phase with nothing worth building simply runs short.
   if (core.length < targetItems) {
     const rest = candidates
-      .filter((c) => !chosen.has(c.item.id) && !benchedIds.has(c.item.id) && seatable(c))
-      .sort((a, b) => b.pickRate - a.pickRate);
+      .filter((c) => !chosen.has(c.item.id) && !benchedIds.has(c.item.id) && !owned.has(c.item.id) && seatable(c))
+      .sort((a, b) => coreWrScore(b, baselineWinRate, costPower) - coreWrScore(a, baselineWinRate, costPower));
     for (const c of rest) {
       if (core.length >= targetItems) break;
       tryAddCore(c);
@@ -692,6 +785,7 @@ function buildPhase(
     .filter(
       (c) =>
         !chosen.has(c.item.id) &&
+        !owned.has(c.item.id) && // bought in an earlier phase already — don't re-surface it as optional
         !swapIds.has(c.item.id) &&
         !buildsFromAny(c.item, benchedIds, items) && // an upgrade of a swap is that swap's line, not its own pick
         c.adjustedWinRate >= baselineWinRate + VALUE_EDGE,
@@ -715,7 +809,7 @@ function buildPhase(
   // than forcing it into the every-game core. Skipped when it's already in the build.
   if (opts.needs !== false) {
     const need = dominantNeed(candidates, 'sustain', baselineWinRate);
-    if (need && !chosen.has(need.item.id) && !situational.some((s) => s.item.id === need.item.id)) {
+    if (need && !chosen.has(need.item.id) && !owned.has(need.item.id) && !situational.some((s) => s.item.id === need.item.id)) {
       situational.unshift({ ...need, role: 'need', why: 'optional lane sustain — most players grab one' });
       if (situational.length > SITUATIONAL_MAX) situational.pop(); // keep the cap; drops the weakest WR pick
     }
@@ -729,7 +823,7 @@ function buildPhase(
     const shown = new Set([...core, ...situational].map((b) => b.item.id));
     for (const c of [...candidates].sort((a, b) => b.pickRate - a.pickRate)) {
       if (situational.length >= SITUATIONAL_MAX) break;
-      if (shown.has(c.item.id) || benchedIds.has(c.item.id)) continue;
+      if (shown.has(c.item.id) || benchedIds.has(c.item.id) || owned.has(c.item.id)) continue;
       if (buildsFromAny(c.item, benchedIds, items)) continue; // an upgrade of a swap is that swap's line
       const role: BuildRole = c.adjustedWinRate >= baselineWinRate + VALUE_EDGE ? 'value' : 'filler';
       situational.push({ ...c, role });
@@ -739,30 +833,16 @@ function buildPhase(
 
   const buyTime = (b: BuildItem) => buyTimes.get(b.item.id) ?? Number.POSITIVE_INFINITY;
   // The "why" is what the item does — the WR/pick numbers are already on the row — unless a pick
-  // set its own rationale (the conditional need note above), which we keep.
-  const withWhy = (b: BuildItem) => ({ ...b, why: b.why || b.item.effect || '' });
-
-  // Deflate the displayed budget: drop the benched substitutes and their upgrade lines, the spend a
-  // coherent build never makes (it picks one of each mutually-exclusive line). Without this the bar
-  // shows a gap that can only be closed by buying redundant items. Component lines whose members are
-  // *both* kept (Headshot Booster → Headhunter) are charged marginally — the upgrade nets out the
-  // component, here and across phases — so they no longer double-count. Floor it at what this build
-  // actually costs: a phase that front-loads a pricier-than-average item (e.g. an early Headhunter)
-  // shouldn't read as "over budget" — it tops out at its own spend.
-  const kept = candidates.filter((c) => !benchedIds.has(c.item.id) && !buildsFromAny(c.item, benchedIds, items));
-  const keptIds = new Set(kept.map((c) => c.item.id));
-  // A component already consumed by an upgrade (`claimed`) can't also discount another kept item.
-  const ownsForBudget = (id: number) => (owned.has(id) || keptIds.has(id)) && !claimed.has(id);
-  const deflatedBudget =
-    kept.reduce((a, c) => a + c.sample * marginalCost(c.item, ownsForBudget, items), 0) / reached;
-  const shownBudget = Math.max(deflatedBudget, coreSouls);
+  // set its own rationale (the conditional need note above), which we keep. Also stamp each item's
+  // buy time so a later comp re-rank can re-sort a phase into buy order without the buyTimes map.
+  const withWhy = (b: BuildItem) => ({ ...b, why: b.why || b.item.effect || '', buyTimeS: buyTimes.get(b.item.id) });
 
   return {
     column: col,
     label: PHASE_META[col].label,
     timeLabel: PHASE_META[col].timeLabel,
     targetItems,
-    soulBudget: shownBudget,
+    soulBudget: popSoulBudget,
     coreSouls,
     categorySouls: categorySouls(core),
     // Order by buy time so top-to-bottom reads as buy order.
@@ -813,26 +893,30 @@ function dominantNeed(candidates: BuildItem[], need: NeedKind, baselineWinRate: 
 }
 
 /**
- * One category's candidates, best-first for filling *core* slots. Core means "what most
- * players build", so after the every-game staples we go by *commonality* among picks that
- * clear the value gate — the most-built decent item — not by raw win rate. Otherwise a
- * 6%-pick item with a shiny win rate steals a core slot from the 22%-pick staple everyone
- * actually buys (e.g. Battle Vest over Extra Health). Niche high-WR picks still surface in
- * `situational`. The remainder (so a guaranteed category is never empty) follows by pick rate.
+ * One category's candidates, best-first for filling *core* slots. Genuine universals (everyone-builds
+ * staples) lead, ordered by pick rate — they're mandatory regardless. Below them the discretionary picks
+ * (value staples, then the rest) order by efficiency-aware shrunk adjusted win rate ({@link coreWrScore}),
+ * so the build tilts toward what wins; the sample shrink keeps a 6%-pick shiny-WR item from stealing a
+ * slot from the proven staple everyone buys. Niche high-WR picks still surface in `situational`.
  */
 function categoryPriority(
   candidates: BuildItem[],
   slot: SlotType,
   baselineWinRate: number,
   chosen: Set<number>,
+  costPower = 0,
 ): BuildItem[] {
   const pool = candidates.filter((c) => c.item.slot === slot);
   const byPick = (a: BuildItem, b: BuildItem) => b.pickRate - a.pickRate;
+  // Discretionary picks (staples + rest) order by efficiency-aware shrunk adjusted WR.
+  // Universals stay by pick rate — they're mandatory regardless.
+  const byDiscretionary = (a: BuildItem, b: BuildItem) =>
+    coreWrScore(b, baselineWinRate, costPower) - coreWrScore(a, baselineWinRate, costPower);
   const universal = pool.filter((c) => c.pickRate >= UNIVERSAL_PICK).sort(byPick);
   const staples = pool
     .filter((c) => c.pickRate < UNIVERSAL_PICK && c.adjustedWinRate >= baselineWinRate + VALUE_EDGE)
-    .sort(byPick);
-  const rest = pool.filter((c) => !universal.includes(c) && !staples.includes(c)).sort(byPick);
+    .sort(byDiscretionary);
+  const rest = pool.filter((c) => !universal.includes(c) && !staples.includes(c)).sort(byDiscretionary);
 
   const ordered: BuildItem[] = [];
   const seen = new Set<number>(chosen);
@@ -948,9 +1032,10 @@ export function rerankBuildForComp(
       .map<BuildItem>((b) => ({ ...b, role: 'situational' }));
     const newSitu = [...kept, ...demoted].sort((a, b) => score(b) - score(a));
 
-    // Within the core group, order by comp relevance (buy-order is moot once we're tuning
-    // the build to a specific comp).
-    newCore.sort((a, b) => score(b) - score(a));
+    // The comp decides *which* items are core (and their roles), but you still buy them in time
+    // order — so order the phase by buy time, same as the base build, not by comp relevance. (Buy
+    // time is stamped on each item at generation; missing times sort last.)
+    newCore.sort((a, b) => (a.buyTimeS ?? Number.POSITIVE_INFINITY) - (b.buyTimeS ?? Number.POSITIVE_INFINITY));
     // coreSouls/categorySouls are finalized by recomputeCosts below, once every phase's new core
     // membership is settled (component discounts span phases, so they can't be summed per-phase here).
     return { ...phase, core: newCore, situational: newSitu };

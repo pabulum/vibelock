@@ -18,7 +18,7 @@ import type {
   Item,
   ItemFlowStats,
 } from '../types';
-import { generateBuild } from './buildGenerator';
+import { generateBuild, type BuildOptions } from './buildGenerator';
 
 const SIG_MIN_TIER = 3; // signatures must be scaling items, not lane fillers
 // A hero is flex only if both archetypes are well-played (≥ MIN), neither is so
@@ -65,6 +65,7 @@ export function assembleArchetypes(
   sellTimes: Map<number, number>,
   flows: ArchetypeFlows,
   sig: Signatures,
+  opts: BuildOptions = {},
 ): ArchetypeSet {
   const baseMatches = flows.all.baseline.matches || 1;
 
@@ -83,7 +84,7 @@ export function assembleArchetypes(
       winRate: winRateOf(flow),
       matches: flow.baseline.matches,
       share: flow.baseline.matches / baseMatches,
-      build: generateBuild(hero, rankLabel, items, flow, buyTimes, sellTimes),
+      build: generateBuild(hero, rankLabel, items, flow, buyTimes, sellTimes, opts),
     };
   };
 
