@@ -40,3 +40,43 @@ export function significantlyHigher(a: number, na: number, b: number, nb: number
   if (se === 0) return true; // no sampling noise at all ⇒ the effect-size pass already settles it
   return (a - b) / se >= GATE_Z;
 }
+
+/** Error function, Abramowitz & Stegun 7.1.26 rational approximation (|error| ≤ 1.5e-7) — used by the
+ * normal CDF below. JS has no built-in erf. */
+function erf(x: number): number {
+  const sign = x < 0 ? -1 : 1;
+  const ax = Math.abs(x);
+  const t = 1 / (1 + 0.3275911 * ax);
+  const y =
+    1 -
+    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
+      t *
+      Math.exp(-ax * ax);
+  return sign * y;
+}
+
+/** Standard-normal CDF Φ(z): the probability a standard normal draw is ≤ z. */
+export function normalCdf(z: number): number {
+  return 0.5 * (1 + erf(z / Math.SQRT2));
+}
+
+/**
+ * Benjamini-Hochberg false-discovery-rate control. Given p-values for many simultaneous tests, returns a
+ * boolean[] (aligned to the input) marking which to call significant while keeping the *expected fraction
+ * of false positives among the calls* at or below `q`.
+ *
+ * Why it's needed: testing m things each at level q lets ~q of all the truly-null ones fire by luck, so
+ * with many tests a large share of the "discoveries" can be noise. BH adapts the bar to m: sort the
+ * p-values ascending, find the largest rank k (1-based) with p(k) ≤ (k/m)·q, and accept every test with a
+ * p-value at or below that one. Few tests ⇒ lenient; many ⇒ strict.
+ */
+export function benjaminiHochberg(pValues: number[], q: number): boolean[] {
+  const m = pValues.length;
+  const accept = new Array<boolean>(m).fill(false);
+  if (m === 0) return accept;
+  const order = pValues.map((p, i) => ({ p, i })).sort((a, b) => a.p - b.p);
+  let cutoffRank = -1; // largest 0-based rank whose p clears (k/m)·q
+  for (let r = 0; r < m; r++) if (order[r].p <= ((r + 1) / m) * q) cutoffRank = r;
+  for (let r = 0; r <= cutoffRank; r++) accept[order[r].i] = true; // accept all up to the cutoff
+  return accept;
+}

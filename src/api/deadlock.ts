@@ -13,6 +13,7 @@ import type {
   Item,
   ItemCard,
   ItemFlowStats,
+  ItemPermutationStats,
   ItemStat,
   NeedKind,
   Patch,
@@ -439,6 +440,29 @@ export interface ItemStatsQuery extends TimeWindow {
   /** Filter to matches where any of these heroes were on the enemy team. */
   enemyHeroIds?: number[];
   minMatches?: number;
+}
+
+export interface PermutationQuery extends TimeWindow {
+  heroId: number;
+  minBadge: number;
+  /** Size of the item permutations to return (default 2 = pairs). `item_ids` mode is mutually exclusive
+   * with this and unused — we want every pair for the hero, then aggregate orderings client-side. */
+  combSize?: number;
+}
+
+/**
+ * Every item permutation of size `combSize` (default 2) for the hero, with its win/loss record. Note this
+ * is one largish payload (all pairs ≈ 1–2 MB), cached server-side 1h and in our analytics cache, so it's
+ * fetched on demand (the synergy view), not on every build. See {@link ItemPermutationStats}.
+ */
+export function getItemPermutationStats(q: PermutationQuery): Promise<ItemPermutationStats[]> {
+  const params = new URLSearchParams({
+    hero_id: String(q.heroId),
+    comb_size: String(q.combSize ?? 2),
+    min_average_badge: String(q.minBadge),
+  });
+  applyWindow(params, q);
+  return getAnalytics<ItemPermutationStats[]>(`${BASE}/v1/analytics/item-permutation-stats?${params}`);
 }
 
 export function getItemStats(q: ItemStatsQuery): Promise<ItemStat[]> {

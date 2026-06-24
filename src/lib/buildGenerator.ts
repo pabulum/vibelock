@@ -80,6 +80,11 @@ const OVERTIME_COMMIT_WEIGHT = 0.05; // a small bonus per unit pick rate, so a w
 // popular. Genuine universals are left alone — they're mandatory and sit ~baseline anyway.
 const CORE_POP_TILT = 0.3; // mild *multiplicative* popularity bonus on the WR edge (up to +CORE_POP_TILT for a
 // 100%-pick item) — a co-occurrence/robustness tiebreak that keeps a widely-bought pick ahead of an equal rarity.
+const SYNERGY_WEIGHT = 0.5; // how much a discretionary pick's *synergy with the already-committed build*
+// counts toward its core ranking (#5/#6). The bonus is Σ centered+shrunk pairwise synergy with owned items
+// (see lib/synergy.ts), a win-rate-scale quantity added to the edge: ±1.4pt typical, up to ±3.5pt for a
+// strong combo, against ~±2–5pt edges — a real tiebreak that tips close calls toward items that reinforce
+// the build, but can't override a clearly-better pick or seat one that fails the break-even gate. 0 = off.
 
 // --- Empirical-Bayes shrinkage (toward the hero's baseline win rate) ---
 // An item's win rate is shrunk toward baseline by a weighted average with the baseline standing in as a
@@ -181,8 +186,17 @@ function costPowerForSlots(slotsCommitted: number): number {
  * fades as the standing build fills — so early picks favor soul-efficiency and, once slots are scarce,
  * per-slot win rate (the big carries) decides. `costK` floors at 1 (1000 souls) so sub-1k stat-sticks get
  * no efficiency boost. Higher = seat first. */
-function coreWrScore(b: BuildItem, baselineWinRate: number, costPower: number, k: number): number {
-  const edge = lowerConfidenceWinRate(b.adjustedWinRate, b.decided, baselineWinRate, k) - baselineWinRate;
+function coreWrScore(
+  b: BuildItem,
+  baselineWinRate: number,
+  costPower: number,
+  k: number,
+  synBonus = 0,
+): number {
+  const edge =
+    lowerConfidenceWinRate(b.adjustedWinRate, b.decided, baselineWinRate, k) -
+    baselineWinRate +
+    SYNERGY_WEIGHT * synBonus;
   const popTilt = 1 + CORE_POP_TILT * b.pickRate;
   const costK = Math.max(1, b.item.cost / 1000);
   return (edge * popTilt) / Math.pow(costK, costPower);
@@ -216,6 +230,14 @@ const PHASE_END_S = [540, 1200, 1800, Number.POSITIVE_INFINITY];
 export interface BuildOptions {
   /** Guarantee a slot for the plurality answer to a near-universal need (default true). */
   needs?: boolean;
+  /**
+   * Pairwise item synergy (#5/#6): `(a, b) → centered, shrunk synergy` between two item ids, from
+   * {@link buildSynergyLookup} in lib/synergy.ts. When present, a discretionary pick's core ranking gets a
+   * bonus for its net synergy with the already-committed build (see {@link SYNERGY_WEIGHT}), so the build
+   * leans toward items that reinforce each other — not just independently-good items. Omit to rank on win
+   * rate alone (the build is unchanged from before synergy existed).
+   */
+  synergyOf?: (a: number, b: number) => number;
 }
 
 /**
@@ -805,10 +827,21 @@ function buildPhase(
   let committedSlots = 0;
   for (const id of owned) if (!claimed.has(id)) committedSlots++;
   const costPower = costPowerForSlots(committedSlots);
+  // Synergy bonus per candidate = its net (centered, shrunk) pairwise synergy with the items committed in
+  // earlier phases (`owned`). Computed against `owned` rather than within-phase picks because the rankers
+  // sort upfront; this captures the dominant cross-phase synergy (a late pick reinforcing the lane/early
+  // core) and is zero in Lane (nothing owned yet) and when no synergy data was supplied. See SYNERGY_WEIGHT.
+  const ownedIds = [...owned];
+  const synBonus = new Map<number, number>();
+  if (opts.synergyOf && ownedIds.length) {
+    const syn = opts.synergyOf;
+    for (const c of candidates)
+      synBonus.set(c.item.id, ownedIds.reduce((s, o) => s + syn(c.item.id, o), 0));
+  }
   const pools: Record<'weapon' | 'vitality' | 'spirit', BuildItem[]> = {
-    weapon: categoryPriority(candidates, 'weapon', baselineWinRate, chosen, costPower, k),
-    vitality: categoryPriority(candidates, 'vitality', baselineWinRate, chosen, costPower, k),
-    spirit: categoryPriority(candidates, 'spirit', baselineWinRate, chosen, costPower, k),
+    weapon: categoryPriority(candidates, 'weapon', baselineWinRate, chosen, costPower, k, synBonus),
+    vitality: categoryPriority(candidates, 'vitality', baselineWinRate, chosen, costPower, k, synBonus),
+    spirit: categoryPriority(candidates, 'spirit', baselineWinRate, chosen, costPower, k, synBonus),
   };
   const cursor: Record<'weapon' | 'vitality' | 'spirit', number> = { weapon: 0, vitality: 0, spirit: 0 };
   const allocated: Record<'weapon' | 'vitality' | 'spirit', number> = { weapon: 0, vitality: 0, spirit: 0 };
@@ -865,7 +898,11 @@ function buildPhase(
   if (core.length < targetItems) {
     const rest = candidates
       .filter((c) => !chosen.has(c.item.id) && !benchedIds.has(c.item.id) && !owned.has(c.item.id) && seatable(c))
-      .sort((a, b) => coreWrScore(b, baselineWinRate, costPower, k) - coreWrScore(a, baselineWinRate, costPower, k));
+      .sort(
+        (a, b) =>
+          coreWrScore(b, baselineWinRate, costPower, k, synBonus.get(b.item.id) ?? 0) -
+          coreWrScore(a, baselineWinRate, costPower, k, synBonus.get(a.item.id) ?? 0),
+      );
     for (const c of rest) {
       if (core.length >= targetItems) break;
       tryAddCore(c);
@@ -995,9 +1032,10 @@ function dominantNeed(candidates: BuildItem[], need: NeedKind, baselineWinRate: 
 /**
  * One category's candidates, best-first for filling *core* slots. Genuine universals (everyone-builds
  * staples) lead, ordered by pick rate — they're mandatory regardless. Below them the discretionary picks
- * (value staples, then the rest) order by efficiency-aware shrunk adjusted win rate ({@link coreWrScore}),
- * so the build tilts toward what wins; the sample shrink keeps a 6%-pick shiny-WR item from stealing a
- * slot from the proven staple everyone buys. Niche high-WR picks still surface in `situational`.
+ * (value staples, then the rest) order by efficiency-aware shrunk adjusted win rate plus a synergy bonus
+ * ({@link coreWrScore}), so the build tilts toward what wins *and* what reinforces the committed core; the
+ * sample shrink keeps a 6%-pick shiny-WR item from stealing a slot from the proven staple everyone buys.
+ * Niche high-WR picks still surface in `situational`. `synBonus` maps item id → its synergy bonus.
  */
 function categoryPriority(
   candidates: BuildItem[],
@@ -1006,13 +1044,15 @@ function categoryPriority(
   chosen: Set<number>,
   costPower = 0,
   k = EB_DEFAULT_K,
+  synBonus: Map<number, number> = new Map(),
 ): BuildItem[] {
   const pool = candidates.filter((c) => c.item.slot === slot);
   const byPick = (a: BuildItem, b: BuildItem) => b.pickRate - a.pickRate;
-  // Discretionary picks (staples + rest) order by efficiency-aware shrunk adjusted WR.
+  // Discretionary picks (staples + rest) order by efficiency-aware shrunk adjusted WR + synergy bonus.
   // Universals stay by pick rate — they're mandatory regardless.
   const byDiscretionary = (a: BuildItem, b: BuildItem) =>
-    coreWrScore(b, baselineWinRate, costPower, k) - coreWrScore(a, baselineWinRate, costPower, k);
+    coreWrScore(b, baselineWinRate, costPower, k, synBonus.get(b.item.id) ?? 0) -
+    coreWrScore(a, baselineWinRate, costPower, k, synBonus.get(a.item.id) ?? 0);
   const universal = pool.filter((c) => c.pickRate >= UNIVERSAL_PICK).sort(byPick);
   const staples = pool
     .filter((c) => c.pickRate < UNIVERSAL_PICK && isValuePick(c, baselineWinRate))

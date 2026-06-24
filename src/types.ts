@@ -361,6 +361,19 @@ export interface ItemStat {
   avg_sell_time_s: number;
 }
 
+/**
+ * One row from /v1/analytics/item-permutation-stats — a specific *ordered* item permutation (the items
+ * bought in this order) and its record. The endpoint is order-sensitive, so an unordered pair shows up as
+ * up to two rows; synergy.ts sums a set's orderings into one unordered joint. Fetched with `comb_size`
+ * (all permutations of that size for the hero); `item_ids` mode is mutually exclusive and unused here.
+ */
+export interface ItemPermutationStats {
+  item_ids: number[];
+  wins: number;
+  losses: number;
+  matches: number;
+}
+
 /** One cell of the hero-vs-hero counter matrix (from /v1/analytics/hero-counter-stats). */
 export interface HeroCounterRow {
   hero_id: number;

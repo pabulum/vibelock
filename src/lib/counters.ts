@@ -10,7 +10,7 @@
 // Items are filtered by a hard sample floor so flukes don't appear; thin marks are flagged.
 
 import type { ItemCounters, Item, ItemStat } from '../types';
-import { GATE_Z, winRateSE } from './stats';
+import { benjaminiHochberg, normalCdf, winRateSE } from './stats';
 
 const PHASE_BOUNDS_S = [540, 1200, 1800]; // 9m / 20m / 30m
 const PHASE_LABELS = ['Lane', 'Early mid', 'Mid', 'Late'];
@@ -18,6 +18,9 @@ const PHASE_LABELS = ['Lane', 'Early mid', 'Mid', 'Late'];
 const MIN_SAMPLE = 80; // below this, too noisy to show at all
 const LOW_SAMPLE = 150; // below this, show but flag as shaky
 const MIN_EDGE = 0.03; // must beat the general matchup lean by ≥3 pts to count as a counter
+const COUNTER_FDR = 0.1; // Benjamini-Hochberg target: allow ≤10% of the counter marks we surface to be
+// flukes. We test every item against every enemy, so a per-test significance bar alone would mint a fixed
+// fraction of false marks across the whole grid; FDR control caps that share regardless of how many tests run.
 
 /** Join per-enemy item stats to the baseline. Returns:
  *  - `counters`: one entry per item that genuinely over-performs vs ≥1 enemy (above that
@@ -38,6 +41,11 @@ export function computeItemCounters(
   const byItem = new Map<number, ItemCounters>();
   const edgeSum = new Map<number, number>(); // Σ edge·n, for the signed average
   const edgeWeight = new Map<number, number>(); // Σ n
+  // Every candidate counter mark (an item that beats a given enemy's lean by ≥ MIN_EDGE), with the one-
+  // sided p-value that its edge is real (not noise). Collected across *all* enemies so the significance
+  // decision can account for how many comparisons we ran (FDR control), rather than testing each alone.
+  type Candidate = { item: Item; enemyHeroId: number; winRate: number; edge: number; n: number; buyT: number; p: number };
+  const candidates: Candidate[] = [];
   for (const { enemyHeroId, stats } of perEnemy) {
     // Pass 1: raw deltas for every item over the sample floor, plus the matchup lean
     // (sample-weighted mean shift) — what an "average" item does vs this enemy.
@@ -59,26 +67,38 @@ export function computeItemCounters(
     }
     const lean = shiftWeight > 0 ? shiftSum / shiftWeight : 0;
 
-    // Pass 2: the centered edge per item. Accumulate the signed average for ranking, and
-    // keep items that beat the lean by MIN_EDGE as displayed counter marks.
+    // Pass 2: the centered edge per item. Accumulate the signed average (all items, for ranking), and
+    // collect *every* item as a candidate test with a significance p-value.
     for (const x of raw) {
       const edge = x.rawDelta - lean;
       edgeSum.set(x.item.id, (edgeSum.get(x.item.id) ?? 0) + edge * x.n);
       edgeWeight.set(x.item.id, (edgeWeight.get(x.item.id) ?? 0) + x.n);
-      if (edge < MIN_EDGE) continue; // effect size: must beat the lean by the threshold
-      // Significance: the edge must also be wide relative to this mark's sampling noise, or a thin sample
-      // can clear MIN_EDGE on a fluke. The reference (the item's overall WR plus the matchup lean) is a
-      // large aggregate, so its own noise is negligible and we test against the per-enemy mark's SE alone.
-      if (edge < GATE_Z * winRateSE(x.winRate, x.n)) continue;
-      let entry = byItem.get(x.item.id);
-      if (!entry) {
-        entry = { item: x.item, phaseLabel: phaseForTime(x.buyT), marks: [], topDelta: 0 };
-        byItem.set(x.item.id, entry);
-      }
-      entry.marks.push({ enemyHeroId, winRate: x.winRate, delta: edge, sample: x.n, lowSample: x.n < LOW_SAMPLE });
-      entry.topDelta = Math.max(entry.topDelta, edge);
+      // One-sided p that this edge is real vs the null "no better than the lean" (edge = 0), computed for
+      // *every* item — not just those past MIN_EDGE. BH needs the full family of tests with uniform null
+      // p-values; pre-filtering on the noisy edge would keep only the flukes that scored high and bias the
+      // p-distribution, breaking the FDR guarantee. The effect-size floor is applied *after* BH instead.
+      // The reference (item's overall WR + the matchup lean) is a large aggregate, so its own noise is
+      // negligible and we test against the per-enemy mark's SE alone.
+      const se = winRateSE(x.winRate, x.n);
+      const p = se > 0 ? 1 - normalCdf(edge / se) : edge > 0 ? 0 : 1;
+      candidates.push({ item: x.item, enemyHeroId, winRate: x.winRate, edge, n: x.n, buyT: x.buyT, p });
     }
   }
+
+  // FDR control across the whole item×enemy grid at once: keep the expected share of fluke marks ≤
+  // COUNTER_FDR no matter how many comparisons we ran. A mark is shown only if it's both FDR-significant
+  // (BH-accepted) *and* practically meaningful (edge ≥ MIN_EDGE) — significance first, effect floor after.
+  const accept = benjaminiHochberg(candidates.map((c) => c.p), COUNTER_FDR);
+  candidates.forEach((c, i) => {
+    if (!accept[i] || c.edge < MIN_EDGE) return;
+    let entry = byItem.get(c.item.id);
+    if (!entry) {
+      entry = { item: c.item, phaseLabel: phaseForTime(c.buyT), marks: [], topDelta: 0 };
+      byItem.set(c.item.id, entry);
+    }
+    entry.marks.push({ enemyHeroId: c.enemyHeroId, winRate: c.winRate, delta: c.edge, sample: c.n, lowSample: c.n < LOW_SAMPLE });
+    entry.topDelta = Math.max(entry.topDelta, c.edge);
+  });
 
   const edgeByItem = new Map<number, number>();
   for (const [id, w] of edgeWeight) if (w > 0) edgeByItem.set(id, (edgeSum.get(id) ?? 0) / w);
