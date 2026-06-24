@@ -41,6 +41,7 @@ import type {
   CounterMark,
   ItemCounters,
   ItemRef,
+  GeneratedBuild,
   Hero,
   HeroBuildStatRow,
   HeroCounterRow,
@@ -441,8 +442,10 @@ export default function App() {
   const shuffleSeed = `${heroId}|${tier}|${patchIdx}|${archKey}|${enemies.join(',')}`;
 
   // Per-piece "developing" veils — each tracks its own query so panels settle as their
-  // data actually lands, independently of the single strip in the header.
-  const buildRef = useSettle<HTMLElement>(loading);
+  // data actually lands, independently of the single strip in the header. The build wears
+  // the veil for its own archetype query *and* for a counters re-rank: picking an enemy
+  // re-orders the build in place, so it should visibly develop into the answer too.
+  const buildRef = useSettle<HTMLElement>(loading || countersLoading);
   const skillRef = useSettle<HTMLElement>(skillLoading);
   const communityRef = useSettle<HTMLElement>(communityLoading);
   const matrixRef = useSettle<HTMLDivElement>(matrixLoading);
@@ -732,6 +735,13 @@ export default function App() {
               </section>
             );
           })}
+          <OvertimeColumn
+            build={displayBuild}
+            items={items}
+            counterByItem={counterByItem}
+            enemiesById={enemiesById}
+            imbueByItem={imbueByItem}
+          />
         </main>
       )}
 
@@ -995,19 +1005,62 @@ function CategoryBar({ split }: { split: Record<'weapon' | 'vitality' | 'spirit'
       {segs.map(([slot, label]) => {
         const souls = split[slot];
         if (souls <= 0) return null;
-        const pct = Math.round((souls / total) * 100);
+        const exact = (souls / total) * 100;
+        const pct = Math.round(exact);
         return (
           <span
             key={slot}
             className="catseg"
-            style={{ width: `${(souls / total) * 100}%`, background: SLOT_COLORS[slot] }}
-            title={`${label}: ${souls.toLocaleString()} souls (${pct}%)`}
+            style={{ width: `${exact}%`, background: SLOT_COLORS[slot] }}
+            title={`${label}: ${souls.toLocaleString()} souls (${exact.toFixed(1)}%)`}
           >
-            {pct >= 12 ? `${pct}%` : ''}
+            {exact >= 8 ? `${pct}%` : ''}
           </span>
         );
       })}
     </div>
+  );
+}
+
+// The overtime buy-list column — a prioritized "spend your surplus" list for games that drag past
+// 30 min with the build already full. Rendered as the natural continuation of the Lane→Late columns,
+// but it's not a time slice: it's the T3+ upgrades (ranked by *late-window* win rate) to replace your
+// lowest-tier slots with once souls stop being the constraint. Reuses ItemRow so each buy still
+// carries its win-rate delta, counter portraits, and imbue/learn-more tags.
+function OvertimeColumn({
+  build,
+  items,
+  counterByItem,
+  enemiesById,
+  imbueByItem,
+}: {
+  build: GeneratedBuild;
+  items: Map<number, Item> | null;
+  counterByItem: Map<number, ItemCounters>;
+  enemiesById: Map<number, Hero>;
+  imbueByItem: Map<number, ImbueTarget>;
+}) {
+  const buys = build.overtimeBuys;
+  if (!buys.length) return null;
+  return (
+    <section className="phase overtime">
+      <h2>
+        Overtime buys <span className="time">build full · 30+ min</span>
+      </h2>
+      <div className="budget">Surplus souls? Replace your lowest-tier slots — best at late, top first.</div>
+      <h3 className="grouphdr core">Buy in this order</h3>
+      {buys.map((b) => (
+        <ItemRow
+          key={b.item.id}
+          b={b}
+          items={items}
+          baseline={build.population.baselineWinRate}
+          counter={counterByItem.get(b.item.id)}
+          enemiesById={enemiesById}
+          imbue={imbueByItem.get(b.item.id)}
+        />
+      ))}
+    </section>
   );
 }
 

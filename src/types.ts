@@ -227,6 +227,10 @@ export interface GeneratedBuild {
   phases: BuildPhase[];
   /** Count of items that hold a permanent slot (excludes transient/sold/component picks). */
   standingSlots: number;
+  /** Prioritized "spend your surplus" list for games that drag past ~30 min with the build already
+   * full: the T3+ upgrades to replace your lowest-tier slots with, ranked by how they perform in the
+   * *late* window (the 30+ flow column) — not blended across the game. Highest priority first. */
+  overtimeBuys: BuildItem[];
 }
 
 export type ArchetypeKey = 'all' | 'gun' | 'spirit';

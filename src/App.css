@@ -180,14 +180,12 @@ body {
    the data arrives the blur resolves into focus and `--flash` pulses a purple
    glow, so each box visibly snaps into being as it becomes up to date. */
 .skills,
-.counters,
 .phase,
 .crow,
 .mchip {
   position: relative;
 }
 .skills::after,
-.counters::after,
 .phase::after,
 .crow::after,
 .mchip::after {
@@ -209,7 +207,6 @@ body {
 }
 /* Purple "just landed" glow — a soft bloom (no hard frame), pulsed by --flash. */
 .skills::before,
-.counters::before,
 .phase::before,
 .crow::before,
 .mchip::before {
@@ -810,13 +807,18 @@ body {
 
 .phases {
   display: grid;
-  grid-template-columns: repeat(4, minmax(240px, 1fr));
+  grid-template-columns: repeat(5, minmax(230px, 1fr));
   gap: 16px;
   padding: 14px 22px;
 }
+@media (max-width: 1380px) {
+  .phases {
+    grid-template-columns: repeat(3, minmax(230px, 1fr));
+  }
+}
 @media (max-width: 1100px) {
   .phases {
-    grid-template-columns: repeat(2, minmax(240px, 1fr));
+    grid-template-columns: repeat(2, minmax(230px, 1fr));
   }
 }
 @media (max-width: 620px) {
@@ -830,6 +832,17 @@ body {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 14px;
+}
+
+/* The overtime buy-list is a prioritized shopping list, not a time phase — give it an accent edge
+   and a faint tint so it reads as the culmination of the Lane→Late progression. */
+.phase.overtime {
+  border-color: color-mix(in srgb, var(--accent, #9b6dd1) 55%, var(--line));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent, #9b6dd1) 7%, var(--panel)), var(--panel) 120px);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #9b6dd1) 20%, transparent);
+}
+.phase.overtime h2 .time {
+  color: color-mix(in srgb, var(--accent, #9b6dd1) 80%, var(--muted));
 }
 .phase h2 {
   margin: 0 0 10px;
