@@ -67,21 +67,82 @@ const OVERTIME_MIN_TIER = 3; // an overtime buy is an upgrade you spend surplus 
 // stat-stick you're replacing. T4 dominates the late window, but standout T3s (Kelvin's Rapid Recharge,
 // Haze's Fortitude) genuinely top it — so we keep T3+, not T4-only, and let the late win rate rank them.
 const OVERTIME_MAX = 10; // a focused priority list, not the whole catalogue
-const OVERTIME_PICK_HALF = 0.05; // a pick bought by this fraction of late-game players gets half credit
-// for its win-rate edge; rarer picks are shrunk toward zero so a small-sample shine (Refresher, 2% pick
-// / n≈130 / +18pt) can't outrank the proven late staples.
-const OVERTIME_COMMIT_WEIGHT = 0.05; // ...plus a small bonus per unit pick rate, so a widely-bought late
+const OVERTIME_COMMIT_WEIGHT = 0.05; // a small bonus per unit pick rate, so a widely-bought late
 // pick edges out an equally-rated rarity.
 
 // --- Win-rate core ---
 // The discretionary core slots (everything below the genuine ~30%+ universals) are ranked by adjusted
-// win rate, shrunk toward baseline by sample so a thin-pick shiny WR can't outrank a proven pick (same
-// regularizer as the overtime list) — so the build tilts toward what wins, not merely what's popular.
-// Genuine universals are left alone — they're mandatory and sit ~baseline anyway.
-const CORE_WR_PICK_HALF = 0.08; // a discretionary pick bought by this fraction of the phase gets half its
-// WR-edge credit; rarer picks shrink toward zero (so a 2%-pick 63% specialist can't unseat a 20%-pick winner).
+// win rate, shrunk toward baseline by sample (empirical Bayes — see shrinkToBaseline / priorStrength) so a
+// thin-pick shiny WR can't outrank a proven pick — the build tilts toward what wins, not merely what's
+// popular. Genuine universals are left alone — they're mandatory and sit ~baseline anyway.
 const CORE_POP_TILT = 0.3; // mild *multiplicative* popularity bonus on the WR edge (up to +CORE_POP_TILT for a
 // 100%-pick item) — a co-occurrence/robustness tiebreak that keeps a widely-bought pick ahead of an equal rarity.
+
+// --- Empirical-Bayes shrinkage (toward the hero's baseline win rate) ---
+// An item's win rate is shrunk toward baseline by a weighted average with the baseline standing in as a
+// prior worth `K` games of evidence: shrunk = (n·wr + K·baseline) / (n + K), where n is the item's decided
+// games. Few games ⇒ pulled to baseline; many ⇒ trusted. K isn't hand-tuned — priorStrength learns it from
+// how spread out *this hero's* item win rates actually are (wide spread ⇒ real differences ⇒ trust items
+// more ⇒ small K; everything bunched at baseline ⇒ differences are noise ⇒ shrink hard ⇒ large K). This
+// replaces the old pickRate/(pickRate+half) proxy: it shrinks by the actual win/loss count, not popularity.
+const EB_MIN_SAMPLE = MIN_SUPPORT_ABS; // items with fewer decided games than this don't inform the prior fit
+const EB_MIN_ITEMS = 8; // need at least this many items to estimate a spread; below it use the default K
+const EB_DEFAULT_K = 300; // fallback prior strength when the spread can't be estimated (~300 games to trust an item)
+const EB_MIN_K = 25; // clamp so a freak-wide spread can't make us trust a 40-game item outright
+const EB_MAX_K = 4000; // ...or a freak-tight one shrink everything flat to baseline
+
+/** Empirical-Bayes prior mean of an item's win rate: a weighted average of its observed (adjusted) rate
+ * and the hero baseline, where the baseline carries the weight of `k` games. `n` = the item's decided
+ * games. n≫k ⇒ ≈ the item's own rate; n≪k ⇒ ≈ baseline; n=k ⇒ exactly halfway. */
+function shrinkToBaseline(winRate: number, n: number, baseline: number, k: number): number {
+  return (n * winRate + k * baseline) / (n + k);
+}
+
+// How many posterior standard deviations below the mean we *rank* by. The shrinkage (mean) already pulls
+// thin picks toward baseline; this adds a modest "lean conservative" discount for how *uncertain* an item
+// still is, so a proven pick edges out an equally-rated shakier one. ~1 SD ≈ an 84% one-sided floor — a
+// gentle nudge, not a hard cutoff (raise toward 1.645 for a stricter 95% floor, toward 0 to rank by the
+// mean alone). Hard yes/no gates that need real significance are a separate step (see #3).
+const RANK_CONFIDENCE_Z = 1.0;
+
+/**
+ * Lower confidence bound on an item's win rate — the win rate we're fairly sure it *at least* has. It's
+ * the empirical-Bayes posterior mean ({@link shrinkToBaseline}) minus {@link RANK_CONFIDENCE_Z} posterior
+ * standard deviations. The posterior is a Beta with concentration (n + k), so its spread is
+ * √(mean·(1−mean)/(n+k+1)): more decided games or a stronger prior ⇒ tighter interval ⇒ bound nearer the
+ * mean; a thin-sample pick has a wide interval and a low bound. Ranking by this prefers proven picks over
+ * small-sample shines, with both the shrink *and* the uncertainty baked into one number. (Same posterior
+ * as #1 — that read the mean; this reads its lower edge.)
+ */
+function lowerConfidenceWinRate(winRate: number, n: number, baseline: number, k: number): number {
+  const mean = shrinkToBaseline(winRate, n, baseline, k);
+  const sd = Math.sqrt((mean * (1 - mean)) / (n + k + 1));
+  return mean - RANK_CONFIDENCE_Z * sd;
+}
+
+/**
+ * Empirical-Bayes prior strength K, in "equivalent games", learned from the spread of this hero's item
+ * win rates. The observed spread of item win rates around baseline is part real (items differ) and part
+ * noise (each item has a finite sample, so its rate wobbles even if its true rate is baseline). We
+ * subtract the expected noise to recover the *real* between-item variance, then convert it to K via the
+ * Beta relationship K = baseline·(1−baseline)/variance − 1. Wide real spread ⇒ small K (trust items);
+ * little real spread ⇒ large K (shrink hard). Falls back to EB_DEFAULT_K when there aren't enough items,
+ * and clamps to [EB_MIN_K, EB_MAX_K] so a freak sample can't push the build to one extreme.
+ */
+function priorStrength(rates: Array<{ winRate: number; decided: number }>, baseline: number): number {
+  const pts = rates.filter((r) => r.decided >= EB_MIN_SAMPLE);
+  if (pts.length < EB_MIN_ITEMS) return EB_DEFAULT_K;
+  const m = baseline;
+  // Total spread of the observed win rates around baseline...
+  const observedVar = pts.reduce((s, r) => s + (r.winRate - m) ** 2, 0) / pts.length;
+  // ...minus the part that's just finite-sample coin-flip noise (a baseline-rate item over n games has
+  // sampling variance m(1−m)/n), averaged across items.
+  const samplingVar = pts.reduce((s, r) => s + (m * (1 - m)) / r.decided, 0) / pts.length;
+  const trueVar = observedVar - samplingVar;
+  if (trueVar <= 0) return EB_MAX_K; // no real spread beyond noise ⇒ trust the baseline, not the items
+  const k = (m * (1 - m)) / trueVar - 1;
+  return Math.min(EB_MAX_K, Math.max(EB_MIN_K, k));
+}
 
 // Efficiency vs. per-slot power, governed by SLOT scarcity rather than time. While the build still has empty
 // slots to fill, souls are the binding constraint, so a pick's WR edge is divided by its soul cost (cheaper =
@@ -99,18 +160,18 @@ function costPowerForSlots(slotsCommitted: number): number {
   return CORE_COST_POWER_MAX * Math.max(0, 1 - slotsCommitted / CORE_SLOT_TARGET);
 }
 
-/** Discretionary core ranking. Combines: the adjusted-WR
- * edge over baseline; a sample shrink (a thin-pick shiny WR can't unseat a proven pick); a mild popularity
- * tilt; and a cost penalty whose strength (`costPower`, from {@link costPowerForSlots}) fades as the standing
- * build fills — so early picks favor soul-efficiency and, once slots are scarce, per-slot win rate (the big
- * carries) decides. `costK` floors at 1 (1000 souls) so sub-1k stat-sticks get no efficiency boost. Higher =
- * seat first. */
-function coreWrScore(b: BuildItem, baselineWinRate: number, costPower: number): number {
-  const edge = b.adjustedWinRate - baselineWinRate;
-  const shrink = b.pickRate / (b.pickRate + CORE_WR_PICK_HALF);
+/** Discretionary core ranking. Combines: the adjusted-WR edge over baseline measured at the item's
+ * *lower confidence bound* (so a thin-pick shiny WR — shrunk toward baseline *and* discounted for its wide
+ * uncertainty — can't unseat a proven pick; `k` is the learned prior strength from {@link priorStrength});
+ * a mild popularity tilt; and a cost penalty whose strength (`costPower`, from {@link costPowerForSlots})
+ * fades as the standing build fills — so early picks favor soul-efficiency and, once slots are scarce,
+ * per-slot win rate (the big carries) decides. `costK` floors at 1 (1000 souls) so sub-1k stat-sticks get
+ * no efficiency boost. Higher = seat first. */
+function coreWrScore(b: BuildItem, baselineWinRate: number, costPower: number, k: number): number {
+  const edge = lowerConfidenceWinRate(b.adjustedWinRate, b.decided, baselineWinRate, k) - baselineWinRate;
   const popTilt = 1 + CORE_POP_TILT * b.pickRate;
   const costK = Math.max(1, b.item.cost / 1000);
-  return (edge * shrink * popTilt) / Math.pow(costK, costPower);
+  return (edge * popTilt) / Math.pow(costK, costPower);
 }
 
 // --- Need-aware situational pick (see NeedKind) ---
@@ -159,6 +220,15 @@ export function generateBuild(
   const baseWins = flow.baseline.wins + flow.baseline.losses;
   const baselineWinRate = baseWins > 0 ? flow.baseline.wins / baseWins : 0.5;
 
+  // Empirical-Bayes prior strength for shrinking item win rates toward baseline, learned once from the
+  // spread of *all* this hero's item win rates (every flow node is one item×phase observation). One
+  // hero-wide K is steadier than re-estimating per phase, and the shrink itself still uses each item's
+  // own decided-game count, so a thin pick in any phase is pulled back regardless.
+  const priorK = priorStrength(
+    flow.nodes.map((n) => ({ winRate: n.adjusted_win_rate, decided: n.wins + n.losses })),
+    baselineWinRate,
+  );
+
   // Each item's primary phase = the column where the highest fraction of players buy it. The core
   // fill skips an item outside its primary phase, because dedupeAcrossPhases keeps it only there —
   // filling an earlier phase's slot with a mostly-bought-later item just leaves that slot empty.
@@ -172,7 +242,7 @@ export function generateBuild(
   const claimed = new Set<number>();
   const phases: BuildPhase[] = [];
   for (let col = 0; col < PHASE_META.length; col++) {
-    const phase = buildPhase(col, flow, items, baselineWinRate, buyTimes, sellTimes, opts, primaryCol, owned, claimed);
+    const phase = buildPhase(col, flow, items, baselineWinRate, buyTimes, sellTimes, opts, primaryCol, owned, claimed, priorK);
     phases.push(phase);
     for (const b of phase.core) owned.add(b.item.id);
   }
@@ -194,7 +264,7 @@ export function generateBuild(
     },
     phases,
     standingSlots,
-    overtimeBuys: overtimeBuyList(flow, items, baselineWinRate),
+    overtimeBuys: overtimeBuyList(flow, items, baselineWinRate, priorK),
   };
 }
 
@@ -213,6 +283,7 @@ function overtimeBuyList(
   flow: ItemFlowStats,
   items: Map<number, Item>,
   baselineWinRate: number,
+  k: number,
 ): BuildItem[] {
   // Read the LATE column only — the 30+ minute window is the relevant signal for a long game, so an
   // item is judged on what it does *then*, not on its blended-across-the-game average.
@@ -234,8 +305,13 @@ function overtimeBuyList(
   pool = pool.filter((b) => !superseded.has(b.item.id));
 
   const edge = (b: BuildItem) => b.adjustedWinRate - baselineWinRate;
-  const shrink = (b: BuildItem) => b.pickRate / (b.pickRate + OVERTIME_PICK_HALF);
-  const score = (b: BuildItem) => edge(b) * shrink(b) + OVERTIME_COMMIT_WEIGHT * b.pickRate;
+  // Lower-confidence-bound edge for ranking: the item's win-rate edge at its conservative floor (shrunk
+  // toward baseline by its decided games *and* discounted for uncertainty), so a small-sample shine
+  // (Refresher, 2% pick / n≈130 / +18pt) can't outrank the proven late staples. A small commit bonus still
+  // nudges a widely-bought late pick past an equally-rated rarity.
+  const rankEdge = (b: BuildItem) =>
+    lowerConfidenceWinRate(b.adjustedWinRate, b.decided, baselineWinRate, k) - baselineWinRate;
+  const score = (b: BuildItem) => rankEdge(b) + OVERTIME_COMMIT_WEIGHT * b.pickRate;
   const role = (b: BuildItem): BuildRole =>
     b.pickRate >= UNIVERSAL_PICK ? 'universal' : edge(b) >= VALUE_EDGE ? 'value' : 'filler';
 
@@ -548,6 +624,7 @@ function buildPhase(
   primaryCol: Map<number, number>,
   owned: Set<number>,
   claimed: Set<number>,
+  k: number,
 ): BuildPhase {
   // reached_per_column is the correct denominator for an unlocked query: players
   // who were still buying in this phase.
@@ -715,9 +792,9 @@ function buildPhase(
   for (const id of owned) if (!claimed.has(id)) committedSlots++;
   const costPower = costPowerForSlots(committedSlots);
   const pools: Record<'weapon' | 'vitality' | 'spirit', BuildItem[]> = {
-    weapon: categoryPriority(candidates, 'weapon', baselineWinRate, chosen, costPower),
-    vitality: categoryPriority(candidates, 'vitality', baselineWinRate, chosen, costPower),
-    spirit: categoryPriority(candidates, 'spirit', baselineWinRate, chosen, costPower),
+    weapon: categoryPriority(candidates, 'weapon', baselineWinRate, chosen, costPower, k),
+    vitality: categoryPriority(candidates, 'vitality', baselineWinRate, chosen, costPower, k),
+    spirit: categoryPriority(candidates, 'spirit', baselineWinRate, chosen, costPower, k),
   };
   const cursor: Record<'weapon' | 'vitality' | 'spirit', number> = { weapon: 0, vitality: 0, spirit: 0 };
   const allocated: Record<'weapon' | 'vitality' | 'spirit', number> = { weapon: 0, vitality: 0, spirit: 0 };
@@ -769,7 +846,7 @@ function buildPhase(
   if (core.length < targetItems) {
     const rest = candidates
       .filter((c) => !chosen.has(c.item.id) && !benchedIds.has(c.item.id) && !owned.has(c.item.id) && seatable(c))
-      .sort((a, b) => coreWrScore(b, baselineWinRate, costPower) - coreWrScore(a, baselineWinRate, costPower));
+      .sort((a, b) => coreWrScore(b, baselineWinRate, costPower, k) - coreWrScore(a, baselineWinRate, costPower, k));
     for (const c of rest) {
       if (core.length >= targetItems) break;
       tryAddCore(c);
@@ -781,6 +858,10 @@ function buildPhase(
   // behind). Sorting purely by win rate lets raw damage items crowd those out, so a real
   // late-game stabilizer (e.g. Fortitude) never surfaces. Reserve first, then fill by WR.
   const swapIds = new Set(swaps.map((s) => s.item.id));
+  // Rank situational picks by the lower confidence bound, so a thin-sample shiny WR doesn't lead the list
+  // over a proven value pick. The VALUE_EDGE gate below still uses the raw adjusted rate (a gate is a
+  // yes/no, handled in #3) — this only orders the picks that already cleared it.
+  const rankWr = (c: BuildItem) => lowerConfidenceWinRate(c.adjustedWinRate, c.decided, baselineWinRate, k);
   const eligible = candidates
     .filter(
       (c) =>
@@ -790,7 +871,7 @@ function buildPhase(
         !buildsFromAny(c.item, benchedIds, items) && // an upgrade of a swap is that swap's line, not its own pick
         c.adjustedWinRate >= baselineWinRate + VALUE_EDGE,
     )
-    .sort((a, b) => b.adjustedWinRate - a.adjustedWinRate);
+    .sort((a, b) => rankWr(b) - rankWr(a));
   const reserved = eligible
     .filter((c) => c.adjustedWinRate - c.rawWinRate >= COMEBACK_GAP)
     .slice(0, COMEBACK_RESERVE);
@@ -799,7 +880,7 @@ function buildPhase(
   // strongest value/comeback leftovers fill whatever cap is left.
   const value = [...reserved, ...eligible.filter((c) => !reservedIds.has(c.item.id))]
     .slice(0, Math.max(0, SITUATIONAL_MAX - swaps.length))
-    .sort((a, b) => b.adjustedWinRate - a.adjustedWinRate)
+    .sort((a, b) => rankWr(b) - rankWr(a))
     .map<BuildItem>((c) => ({ ...c, role: 'situational' }));
   const situational = [...swaps, ...value];
 
@@ -905,13 +986,14 @@ function categoryPriority(
   baselineWinRate: number,
   chosen: Set<number>,
   costPower = 0,
+  k = EB_DEFAULT_K,
 ): BuildItem[] {
   const pool = candidates.filter((c) => c.item.slot === slot);
   const byPick = (a: BuildItem, b: BuildItem) => b.pickRate - a.pickRate;
   // Discretionary picks (staples + rest) order by efficiency-aware shrunk adjusted WR.
   // Universals stay by pick rate — they're mandatory regardless.
   const byDiscretionary = (a: BuildItem, b: BuildItem) =>
-    coreWrScore(b, baselineWinRate, costPower) - coreWrScore(a, baselineWinRate, costPower);
+    coreWrScore(b, baselineWinRate, costPower, k) - coreWrScore(a, baselineWinRate, costPower, k);
   const universal = pool.filter((c) => c.pickRate >= UNIVERSAL_PICK).sort(byPick);
   const staples = pool
     .filter((c) => c.pickRate < UNIVERSAL_PICK && c.adjustedWinRate >= baselineWinRate + VALUE_EDGE)
@@ -948,6 +1030,7 @@ function toCandidate(n: FlowNode, reached: number, items: Map<number, Item>): Bu
     adjustedWinRate: n.adjusted_win_rate,
     rawWinRate: decided > 0 ? n.wins / decided : 0,
     sample: n.players,
+    decided,
     avgNetWorthAtBuy: n.avg_net_worth_at_buy,
     why: '',
   };

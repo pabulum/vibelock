@@ -171,6 +171,10 @@ export interface BuildItem {
   rawWinRate: number;
   /** Number of players (sample size) behind the numbers. */
   sample: number;
+  /** Decided games (wins + losses) — the denominator of the win rate, used as the sample
+   * size for empirical-Bayes shrinkage toward baseline. ≈ `sample`, but it's the literal
+   * win/loss count, so it's the honest n for a win-rate estimate. */
+  decided: number;
   avgNetWorthAtBuy: number;
   /** Average buy time in seconds (from item-stats), carried on the item so a comp re-rank can still
    * order a phase by buy time without re-fetching it. Undefined when item-stats had no entry. */
