@@ -915,9 +915,17 @@ function buildPhase(
   // late-game stabilizer (e.g. Fortitude) never surfaces. Reserve first, then fill by WR.
   const swapIds = new Set(swaps.map((s) => s.item.id));
   // Rank situational picks by the lower confidence bound, so a thin-sample shiny WR doesn't lead the list
-  // over a proven value pick (#2). The eligibility gate below is the significance-aware value test (#3):
-  // a pick must *confidently* beat baseline by VALUE_EDGE to be offered as a value pick at all.
-  const rankWr = (c: BuildItem) => lowerConfidenceWinRate(c.adjustedWinRate, c.decided, baselineWinRate, k);
+  // over a proven value pick (#2), plus the same synergy bonus as the core (#5/#6) — but measured against
+  // the *full* committed build (earlier phases + this phase's core), so an option that reinforces what
+  // you're building ranks above an equally-rated isolated one. The eligibility gate below is the
+  // significance-aware value test (#3): a pick must *confidently* beat baseline by VALUE_EDGE to be offered.
+  const synOf = opts.synergyOf;
+  const committedNow = synOf ? [...owned, ...chosen] : [];
+  const rankWr = (c: BuildItem) => {
+    const lcb = lowerConfidenceWinRate(c.adjustedWinRate, c.decided, baselineWinRate, k);
+    if (!synOf || !committedNow.length) return lcb;
+    return lcb + SYNERGY_WEIGHT * committedNow.reduce((s, o) => s + synOf(c.item.id, o), 0);
+  };
   const eligible = candidates
     .filter(
       (c) =>

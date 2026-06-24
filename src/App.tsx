@@ -28,13 +28,7 @@ import { assembleArchetypes, pickSignatures } from './lib/archetypes';
 import { rerankBuildForComp, SLOT_CAP, SLOT_COLORS } from './lib/buildGenerator';
 import { matchCommunityBuilds } from './lib/communityBuilds';
 import { computeItemCounters } from './lib/counters';
-import {
-  buildSynergyLookup,
-  computeSynergies,
-  singleRecordsFromFlow,
-  type Synergy,
-  type SynergyResult,
-} from './lib/synergy';
+import { buildSynergyLookup, singleRecordsFromFlow } from './lib/synergy';
 import { bestImbueTargets } from './lib/imbue';
 import { heroMatchups } from './lib/matchups';
 import { RANK_TIERS, rankFloorLabel, tierToMinBadge } from './lib/ranks';
@@ -48,8 +42,6 @@ import type {
   CommunityBuild,
   CounterMark,
   ItemCounters,
-  ItemFlowStats,
-  ItemPermutationStats,
   ItemRef,
   GeneratedBuild,
   Hero,
@@ -154,10 +146,6 @@ export default function App() {
 
   const [archetypeSet, setArchetypeSet] = useState<ArchetypeSet | null>(null);
   const [archKey, setArchKey] = useState<ArchetypeKey>('all');
-  // The unconditioned ("all") flow + the hero's item-pair permutation stats, kept for the synergy panel.
-  // Pairs are a largish payload, fetched in their own effect so they don't gate the build.
-  const [baseFlow, setBaseFlow] = useState<ItemFlowStats | null>(null);
-  const [permPairs, setPermPairs] = useState<ItemPermutationStats[] | null>(null);
   const [counterMatrix, setCounterMatrix] = useState<HeroCounterRow[] | null>(null);
   const [matrixLoading, setMatrixLoading] = useState(false);
   const [abilities, setAbilities] = useState<Map<number, Ability> | null>(null);
@@ -213,8 +201,6 @@ export default function App() {
       ]);
       const buyTimes = new Map(stats.map((s) => [s.item_id, s.avg_buy_time_s]));
       const sellTimes = new Map(stats.map((s) => [s.item_id, s.avg_sell_time_s]));
-      setBaseFlow(base); // unconditioned flow → single-item rates + baseline for synergy
-      setPermPairs(permRows);
 
       // Pairwise synergy lookup (#5/#6): centered + shrunk interaction between item ids, from the
       // unconditioned pairs + singles. Passed into the generator so discretionary core picks lean toward
@@ -387,21 +373,6 @@ export default function App() {
     () => ({ coreCount: ourCoreIds.length, situCount: ourSituationalIds.length }),
     [ourCoreIds, ourSituationalIds],
   );
-
-  // Pairwise synergies among the build's items (#5+#6). Singles + baseline come from the unconditioned
-  // flow so they match the permutation pairs' population; restricted to the items we actually recommend.
-  const synergy = useMemo<SynergyResult | null>(() => {
-    if (!permPairs || !baseFlow || !items || ourIdSet.size < 2) return null;
-    const decided = baseFlow.baseline.wins + baseFlow.baseline.losses;
-    if (decided <= 0) return null;
-    return computeSynergies(
-      permPairs,
-      singleRecordsFromFlow(baseFlow),
-      baseFlow.baseline.wins / decided,
-      items,
-      ourIdSet,
-    );
-  }, [permPairs, baseFlow, items, ourIdSet]);
 
   const communityMatch = useMemo(
     () =>
@@ -789,10 +760,6 @@ export default function App() {
         </main>
       )}
 
-      {displayBuild && synergy && (synergy.synergies.length > 0 || synergy.antiSynergies.length > 0) && (
-        <SynergyPanel synergy={synergy} />
-      )}
-
       <footer className="foot">
         Data:{' '}
         <a href="https://deadlock-api.com" target="_blank" rel="noreferrer">
@@ -1067,54 +1034,6 @@ function CategoryBar({ split }: { split: Record<'weapon' | 'vitality' | 'spirit'
         );
       })}
     </div>
-  );
-}
-
-// Pairwise item synergies (#5+#6): items that win notably more — or less — *together* than their solo
-// rates predict, i.e. the additive interaction WR(A∧B) − WR(A) − WR(B) + baseline, kept only when it
-// clears FDR significance and a magnitude floor (see lib/synergy.ts). It answers a question a single
-// item's win rate can't: do these two reinforce each other, or are they redundant?
-function SynergyPanel({ synergy }: { synergy: SynergyResult }) {
-  const Row = ({ s }: { s: Synergy }) => (
-    <div
-      className="syn-row"
-      title={`${s.a.name} + ${s.b.name}: ${s.synergy >= 0 ? '+' : ''}${(s.synergy * 100).toFixed(1)} pts vs their solo win rates · ${s.jointSample.toLocaleString()} games built both`}
-    >
-      <span className="syn-pair">
-        {s.a.image && <img src={s.a.image} alt="" loading="lazy" />}
-        {s.b.image && <img src={s.b.image} alt="" loading="lazy" />}
-      </span>
-      <span className="syn-names">
-        {s.a.name} <span className="syn-plus">+</span> {s.b.name}
-      </span>
-      <span className={`syn-val ${s.synergy >= 0 ? 'good' : 'bad'}`}>
-        {s.synergy >= 0 ? '+' : ''}
-        {(s.synergy * 100).toFixed(1)} pts
-      </span>
-    </div>
-  );
-  return (
-    <section className="synergy">
-      <h2>
-        Synergies <span className="time">win rate together vs. apart</span>
-      </h2>
-      {synergy.synergies.length > 0 && (
-        <>
-          <h3 className="grouphdr core">Better together</h3>
-          {synergy.synergies.map((s) => (
-            <Row key={`${s.a.id}-${s.b.id}`} s={s} />
-          ))}
-        </>
-      )}
-      {synergy.antiSynergies.length > 0 && (
-        <>
-          <h3 className="grouphdr">Redundant together</h3>
-          {synergy.antiSynergies.map((s) => (
-            <Row key={`${s.a.id}-${s.b.id}`} s={s} />
-          ))}
-        </>
-      )}
-    </section>
   );
 }
 

@@ -8,38 +8,18 @@
 // This is the additive interaction (difference-in-differences, a.k.a. "lift" on the win-rate scale). If the
 // two items' effects were independent, a build with both would win at baseline + A's edge + B's edge; the
 // synergy is how far the *actual* joint win rate beats (positive ⇒ they complement) or trails (negative ⇒
-// redundant / anti-synergistic, e.g. two items granting the same stat) that prediction. Shared confounds
-// (who plays the hero, game length) largely cancel in the difference — but the rates are raw (un-adjusted),
-// so read it as association, not proof.
+// redundant / anti-synergistic, e.g. two items granting the same stat) that prediction.
 //
-// Noise control reuses the toolkit: each pair's interaction has a sampling error; we keep only the ones
-// significant under Benjamini-Hochberg FDR across the build's pairs (#3/#4), and require a minimum
-// magnitude so a significant-but-trivial interaction doesn't surface.
+// The output feeds the build generator (lib/buildGenerator.ts): a discretionary pick's core/situational
+// ranking gets a bonus for its net synergy with the already-committed build, so the build leans toward
+// items that reinforce each other — not just independently-good items. Read it as association, not proof:
+// the rates are raw (un-adjusted), and a residual depth bias may survive the centering below.
 
-import type { Item, ItemFlowStats, ItemPermutationStats } from '../types';
-import { benjaminiHochberg, normalCdf, winRateSE } from './stats';
+import type { ItemFlowStats, ItemPermutationStats } from '../types';
 
 const MIN_PAIR_SAMPLE = 100; // unordered joint games a pair needs before we'll judge its synergy
-const MIN_SYNERGY = 0.015; // |interaction| must be ≥1.5pt to be worth *surfacing* (panel effect-size floor)
-const SYNERGY_FDR = 0.1; // Benjamini-Hochberg target FDR across the build's pairs (panel)
-const SYNERGY_MAX = 8; // cap each panel list (synergies / anti-synergies)
-const SYN_SHRINK_K = 400; // for the *build-fill* lookup: shrink a pair's synergy toward 0 by its joint
-// sample (synergy·n/(n+K)) so a thin-pair interaction barely nudges item selection while a well-sampled
-// one counts in full. No hard significance gate here — the fill wants a continuous signal, not a yes/no.
-
-export interface Synergy {
-  a: Item;
-  b: Item;
-  /** WR(A∧B) − WR(A) − WR(B) + baseline. >0 ⇒ better together, <0 ⇒ redundant. */
-  synergy: number;
-  jointWinRate: number;
-  jointSample: number; // unordered matches that built both items
-}
-
-export interface SynergyResult {
-  synergies: Synergy[]; // significant positive, strongest first
-  antiSynergies: Synergy[]; // significant negative, strongest first
-}
+const SYN_SHRINK_K = 400; // shrink a pair's synergy toward 0 by its joint sample (synergy·n/(n+K)) so a
+// thin-pair fluke barely nudges item selection while a well-sampled one counts in full.
 
 interface WL {
   wins: number;
@@ -83,48 +63,35 @@ function unorderedPairs(rows: ItemPermutationStats[]): Array<{ ids: [number, num
   return [...out.values()];
 }
 
-/** One pair's raw interaction: unordered ids, the synergy, joint win rate/sample, and a two-sided p-value
- * that the interaction is real (vs the null of zero interaction). Shared by the panel (BH-gated discoveries)
- * and the build-fill lookup (continuous, shrunk). */
-interface PairSynergy {
-  ids: [number, number];
-  synergy: number;
-  jointWinRate: number;
-  jointSample: number;
-  p: number;
-}
+const pairKey = (a: number, b: number): string => (a < b ? `${a}-${b}` : `${b}-${a}`);
 
 /**
- * Per-pair synergies over *all* pairs with both singles present and ≥ MIN_PAIR_SAMPLE joint games, each
- * **centered on the mean interaction** to remove a systematic bias: conditioning on "built *both* items"
- * selects for games that ran long / were ahead, so WR(A∧B) is inflated for *every* pair by roughly the
- * same amount. The raw interaction is therefore positive across the board (≈ co-occurrence, not synergy).
- * Subtracting the sample-weighted mean (the same de-leaning trick counters.ts uses for the matchup shift)
- * cancels that offset, leaving relative synergy: positive = combos better than a *typical* pairing, negative
- * = worse. (Residual depth-dependent bias may remain — read as association, not proof.) No restriction and
- * no multiple-comparisons gate here — callers add those as needed (the panel does).
+ * A function `(a, b) → synergy` for use inside the build fill: each eligible pair's additive interaction,
+ * **centered on the mean interaction** then **shrunk toward 0** by its joint sample. Returns 0 for unknown
+ * or identical pairs. Build it once per hero from the permutation pairs + unconditioned singles + baseline
+ * (same population), then pass into `generateBuild` via `BuildOptions.synergyOf`.
+ *
+ * Centering removes a systematic bias: conditioning on "built *both* items" selects for games that ran long
+ * / were ahead, so WR(A∧B) is inflated for *every* pair by roughly the same amount — the raw interaction is
+ * positive across the board (≈ co-occurrence, not synergy). Subtracting the sample-weighted mean (the same
+ * de-leaning trick counters.ts uses for the matchup shift) cancels that offset, leaving relative synergy:
+ * positive = combos better than a *typical* pairing, negative = worse.
  */
-function allPairSynergies(
+export function buildSynergyLookup(
   pairRows: ItemPermutationStats[],
   singles: Map<number, WL>,
   baselineWinRate: number,
-): PairSynergy[] {
+): (a: number, b: number) => number {
   // Pass 1: raw interaction per eligible pair.
-  const raw: Array<{ ids: [number, number]; synergy: number; se: number; jointWinRate: number; jointSample: number }> = [];
+  const raw: Array<{ ids: [number, number]; synergy: number; jointSample: number }> = [];
   for (const { ids, wl } of unorderedPairs(pairRows)) {
     const nJoint = decided(wl);
     if (nJoint < MIN_PAIR_SAMPLE) continue;
     const sa = singles.get(ids[0]);
     const sb = singles.get(ids[1]);
-    if (!sa || !sb) continue;
-    const na = decided(sa);
-    const nb = decided(sb);
-    if (na <= 0 || nb <= 0) continue;
-    const wrAB = winRate(wl);
-    const synergy = wrAB - winRate(sa) - winRate(sb) + baselineWinRate;
-    // SE of the interaction ≈ quadrature sum of the three rates' SEs (baseline's is negligible — whole pop).
-    const se = Math.hypot(winRateSE(wrAB, nJoint), winRateSE(winRate(sa), na), winRateSE(winRate(sb), nb));
-    raw.push({ ids, synergy, se, jointWinRate: wrAB, jointSample: nJoint });
+    if (!sa || !sb || decided(sa) <= 0 || decided(sb) <= 0) continue;
+    const synergy = winRate(wl) - winRate(sa) - winRate(sb) + baselineWinRate;
+    raw.push({ ids, synergy, jointSample: nJoint });
   }
 
   // Sample-weighted mean interaction = the selection-bias offset shared by all pairs. Center on it.
@@ -136,60 +103,11 @@ function allPairSynergies(
   }
   const mean = w > 0 ? wsum / w : 0;
 
-  return raw.map((r) => {
-    const synergy = r.synergy - mean;
-    const p = r.se > 0 ? 2 * (1 - normalCdf(Math.abs(synergy) / r.se)) : 1; // two-sided: + and − both matter
-    return { ids: r.ids, synergy, jointWinRate: r.jointWinRate, jointSample: r.jointSample, p };
-  });
-}
-
-const pairKey = (a: number, b: number): string => (a < b ? `${a}-${b}` : `${b}-${a}`);
-
-/** A function `(a, b) → synergy` for use *inside the build fill*: each pair's interaction shrunk toward 0
- * by its joint sample ({@link SYN_SHRINK_K}), so a thin-pair fluke barely nudges item selection. Returns 0
- * for unknown/own pairs. Build it once per hero from the permutation pairs + unconditioned singles +
- * baseline (same population), then pass into {@link generateBuild}. */
-export function buildSynergyLookup(
-  pairRows: ItemPermutationStats[],
-  singles: Map<number, WL>,
-  baselineWinRate: number,
-): (a: number, b: number) => number {
   const map = new Map<string, number>();
-  for (const c of allPairSynergies(pairRows, singles, baselineWinRate)) {
-    const shrunk = c.synergy * (c.jointSample / (c.jointSample + SYN_SHRINK_K));
-    map.set(pairKey(c.ids[0], c.ids[1]), shrunk);
+  for (const r of raw) {
+    const centered = r.synergy - mean;
+    const shrunk = centered * (r.jointSample / (r.jointSample + SYN_SHRINK_K));
+    map.set(pairKey(r.ids[0], r.ids[1]), shrunk);
   }
   return (a, b) => (a === b ? 0 : map.get(pairKey(a, b)) ?? 0);
-}
-
-/**
- * Significant pairwise synergies/anti-synergies among `restrictTo` items (e.g. the build's items), from the
- * permutation pairs, per-item singles, and the hero baseline win rate. Pure. For correctness `singles` and
- * `baselineWinRate` must describe the same (unconditioned) population as `pairRows`. (Display/panel use.)
- */
-export function computeSynergies(
-  pairRows: ItemPermutationStats[],
-  singles: Map<number, WL>,
-  baselineWinRate: number,
-  items: Map<number, Item>,
-  restrictTo: Set<number>,
-): SynergyResult {
-  const cands = allPairSynergies(pairRows, singles, baselineWinRate).filter(
-    (c) => restrictTo.has(c.ids[0]) && restrictTo.has(c.ids[1]),
-  );
-
-  // FDR control across all the build's pairs (66 for a 12-item build), then an effect-size floor.
-  const accept = benjaminiHochberg(cands.map((c) => c.p), SYNERGY_FDR);
-  const keep = cands.filter((c, i) => accept[i] && Math.abs(c.synergy) >= MIN_SYNERGY);
-
-  const toSyn = (c: PairSynergy): Synergy | null => {
-    const a = items.get(c.ids[0]);
-    const b = items.get(c.ids[1]);
-    return a && b ? { a, b, synergy: c.synergy, jointWinRate: c.jointWinRate, jointSample: c.jointSample } : null;
-  };
-  const named = (cs: PairSynergy[]) => cs.map(toSyn).filter((s): s is Synergy => s !== null);
-  return {
-    synergies: named(keep.filter((c) => c.synergy > 0).sort((p, q) => q.synergy - p.synergy)).slice(0, SYNERGY_MAX),
-    antiSynergies: named(keep.filter((c) => c.synergy < 0).sort((p, q) => p.synergy - q.synergy)).slice(0, SYNERGY_MAX),
-  };
 }
