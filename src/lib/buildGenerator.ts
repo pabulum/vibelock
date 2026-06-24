@@ -26,6 +26,7 @@ import type {
   NeedKind,
   SlotType,
 } from '../types';
+import { significantlyHigher } from './stats';
 
 const PHASE_META = [
   { label: 'Lane', timeLabel: '0–9 min' },
@@ -38,7 +39,9 @@ const PHASE_META = [
 const MIN_SUPPORT_ABS = 40; // ignore items bought by fewer than this many players
 const MIN_SUPPORT_FRAC = 0.03; // ...or fewer than 3% of the phase's players
 const UNIVERSAL_PICK = 0.3; // ≥30% pick rate ⇒ "build it every game"
-const VALUE_EDGE = 0.02; // value/situational picks must beat the baseline by ≥2 pts
+const VALUE_EDGE = 0.02; // value/situational picks must beat the baseline by ≥2 pts — *and* significantly
+// so (see isValuePick): a +2pt blip on a thin sample isn't a real edge, so the gap must also clear the
+// sampling noise, not just the point cutoff.
 const FILL_WR_FLOOR = 0; // the category ratio is a *soft* bias, not a hard quota: a discretionary
 // (sub-universal) pick is only slotted to serve its category's share if it at least breaks even
 // (≥ baseline − this). Below that the share yields the slot to a category that *has* a pick worth
@@ -118,6 +121,17 @@ function lowerConfidenceWinRate(winRate: number, n: number, baseline: number, k:
   const mean = shrinkToBaseline(winRate, n, baseline, k);
   const sd = Math.sqrt((mean * (1 - mean)) / (n + k + 1));
   return mean - RANK_CONFIDENCE_Z * sd;
+}
+
+/**
+ * A "value" pick: confidently — and meaningfully — above baseline. The adjusted WR must clear baseline by
+ * VALUE_EDGE *and* the gap must be wide relative to the item's sampling noise (see {@link significantlyHigher}),
+ * so a small-sample +2pt blip isn't promoted to a real edge. Used for the value/filler label and the
+ * situational/staple gates. The baseline is treated as a fixed reference — it's the whole-population win
+ * rate, so its own sampling noise is negligible next to a single item's.
+ */
+function isValuePick(b: BuildItem, baseline: number): boolean {
+  return significantlyHigher(b.adjustedWinRate, b.decided, baseline, Number.POSITIVE_INFINITY, VALUE_EDGE);
 }
 
 /**
@@ -313,7 +327,7 @@ function overtimeBuyList(
     lowerConfidenceWinRate(b.adjustedWinRate, b.decided, baselineWinRate, k) - baselineWinRate;
   const score = (b: BuildItem) => rankEdge(b) + OVERTIME_COMMIT_WEIGHT * b.pickRate;
   const role = (b: BuildItem): BuildRole =>
-    b.pickRate >= UNIVERSAL_PICK ? 'universal' : edge(b) >= VALUE_EDGE ? 'value' : 'filler';
+    b.pickRate >= UNIVERSAL_PICK ? 'universal' : isValuePick(b, baselineWinRate) ? 'value' : 'filler';
 
   // Only items that actually win late, highest priority (regularized late edge) first.
   return pool
@@ -750,7 +764,11 @@ function buildPhase(
     // a different co-occurring item still fills the next slot).
     const rival = substituteRival(c, core);
     if (rival) {
-      if (c.adjustedWinRate >= rival.adjustedWinRate + SUBSTITUTE_WR_EDGE) {
+      // Only unseat the incumbent when this pick is *significantly* better, not just nominally — a 1pt
+      // edge between two stat-sticks each over a few hundred games is a coin-flip, and shouldn't flip a
+      // core slot. significantlyHigher requires the gap to clear SUBSTITUTE_WR_EDGE *and* the combined
+      // sampling noise of both picks.
+      if (significantlyHigher(c.adjustedWinRate, c.decided, rival.adjustedWinRate, rival.decided, SUBSTITUTE_WR_EDGE)) {
         core.splice(core.indexOf(rival), 1);
         coreSouls -= rival.item.cost; // a substitute is a stat-stick with no in-build component to net out
         chosen.delete(rival.item.id);
@@ -769,11 +787,7 @@ function buildPhase(
     // Mirror the bucket logic in categoryPriority: a quota-filling pick that beats neither the
     // pick-rate bar nor the value gate is `filler`, not a `value` pick.
     const role: BuildRole =
-      c.pickRate >= UNIVERSAL_PICK
-        ? 'universal'
-        : c.adjustedWinRate >= baselineWinRate + VALUE_EDGE
-          ? 'value'
-          : 'filler';
+      c.pickRate >= UNIVERSAL_PICK ? 'universal' : isValuePick(c, baselineWinRate) ? 'value' : 'filler';
     core.push({ ...c, role });
     coreSouls += cost;
     chosen.add(c.item.id);
@@ -798,6 +812,11 @@ function buildPhase(
   };
   const cursor: Record<'weapon' | 'vitality' | 'spirit', number> = { weapon: 0, vitality: 0, spirit: 0 };
   const allocated: Record<'weapon' | 'vitality' | 'spirit', number> = { weapon: 0, vitality: 0, spirit: 0 };
+  // Deliberately *not* significance-gated (unlike the value/substitute/counter gates in #3). This is a
+  // risk-averse break-even floor, not a "is this a real edge" claim: we'd rather a category sit a slot out
+  // than fill it with a losing pick, even one whose loss isn't yet statistically confirmed. Adding
+  // significance here would loosen it the wrong way — re-admitting not-quite-significant losers (a thin
+  // −1.5pt spirit pick) into core, the exact thing FILL_WR_FLOOR exists to keep out.
   const seatable = (c: BuildItem) =>
     c.pickRate >= UNIVERSAL_PICK || c.adjustedWinRate >= baselineWinRate - FILL_WR_FLOOR;
   // The category's next candidate worth trying — skipping ones already taken, benched, or losing —
@@ -859,8 +878,8 @@ function buildPhase(
   // late-game stabilizer (e.g. Fortitude) never surfaces. Reserve first, then fill by WR.
   const swapIds = new Set(swaps.map((s) => s.item.id));
   // Rank situational picks by the lower confidence bound, so a thin-sample shiny WR doesn't lead the list
-  // over a proven value pick. The VALUE_EDGE gate below still uses the raw adjusted rate (a gate is a
-  // yes/no, handled in #3) — this only orders the picks that already cleared it.
+  // over a proven value pick (#2). The eligibility gate below is the significance-aware value test (#3):
+  // a pick must *confidently* beat baseline by VALUE_EDGE to be offered as a value pick at all.
   const rankWr = (c: BuildItem) => lowerConfidenceWinRate(c.adjustedWinRate, c.decided, baselineWinRate, k);
   const eligible = candidates
     .filter(
@@ -869,7 +888,7 @@ function buildPhase(
         !owned.has(c.item.id) && // bought in an earlier phase already — don't re-surface it as optional
         !swapIds.has(c.item.id) &&
         !buildsFromAny(c.item, benchedIds, items) && // an upgrade of a swap is that swap's line, not its own pick
-        c.adjustedWinRate >= baselineWinRate + VALUE_EDGE,
+        isValuePick(c, baselineWinRate),
     )
     .sort((a, b) => rankWr(b) - rankWr(a));
   const reserved = eligible
@@ -906,7 +925,7 @@ function buildPhase(
       if (situational.length >= SITUATIONAL_MAX) break;
       if (shown.has(c.item.id) || benchedIds.has(c.item.id) || owned.has(c.item.id)) continue;
       if (buildsFromAny(c.item, benchedIds, items)) continue; // an upgrade of a swap is that swap's line
-      const role: BuildRole = c.adjustedWinRate >= baselineWinRate + VALUE_EDGE ? 'value' : 'filler';
+      const role: BuildRole = isValuePick(c, baselineWinRate) ? 'value' : 'filler';
       situational.push({ ...c, role });
       shown.add(c.item.id);
     }
@@ -996,7 +1015,7 @@ function categoryPriority(
     coreWrScore(b, baselineWinRate, costPower, k) - coreWrScore(a, baselineWinRate, costPower, k);
   const universal = pool.filter((c) => c.pickRate >= UNIVERSAL_PICK).sort(byPick);
   const staples = pool
-    .filter((c) => c.pickRate < UNIVERSAL_PICK && c.adjustedWinRate >= baselineWinRate + VALUE_EDGE)
+    .filter((c) => c.pickRate < UNIVERSAL_PICK && isValuePick(c, baselineWinRate))
     .sort(byDiscretionary);
   const rest = pool.filter((c) => !universal.includes(c) && !staples.includes(c)).sort(byDiscretionary);
 

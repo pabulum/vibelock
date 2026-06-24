@@ -10,6 +10,7 @@
 // Items are filtered by a hard sample floor so flukes don't appear; thin marks are flagged.
 
 import type { ItemCounters, Item, ItemStat } from '../types';
+import { GATE_Z, winRateSE } from './stats';
 
 const PHASE_BOUNDS_S = [540, 1200, 1800]; // 9m / 20m / 30m
 const PHASE_LABELS = ['Lane', 'Early mid', 'Mid', 'Late'];
@@ -64,7 +65,11 @@ export function computeItemCounters(
       const edge = x.rawDelta - lean;
       edgeSum.set(x.item.id, (edgeSum.get(x.item.id) ?? 0) + edge * x.n);
       edgeWeight.set(x.item.id, (edgeWeight.get(x.item.id) ?? 0) + x.n);
-      if (edge < MIN_EDGE) continue;
+      if (edge < MIN_EDGE) continue; // effect size: must beat the lean by the threshold
+      // Significance: the edge must also be wide relative to this mark's sampling noise, or a thin sample
+      // can clear MIN_EDGE on a fluke. The reference (the item's overall WR plus the matchup lean) is a
+      // large aggregate, so its own noise is negligible and we test against the per-enemy mark's SE alone.
+      if (edge < GATE_Z * winRateSE(x.winRate, x.n)) continue;
       let entry = byItem.get(x.item.id);
       if (!entry) {
         entry = { item: x.item, phaseLabel: phaseForTime(x.buyT), marks: [], topDelta: 0 };
