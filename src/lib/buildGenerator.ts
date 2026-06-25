@@ -1217,6 +1217,29 @@ export function rerankBuildForComp(
 
   const cats: SlotType[] = ['weapon', 'vitality', 'spirit', 'unknown'];
 
+  // An item may hold a *core* slot in only one phase. The per-phase re-rank below rebuilds each phase's
+  // core independently from that phase's pool (its base core + situational), and a situational pick in an
+  // earlier phase is often the *same item* that's core in a later one (a "core by Mid, rush if ahead"
+  // pick). Without this guard the comp could lift that situational into core in the earlier phase while it
+  // stays core in its home phase — the same item in core twice. The base build avoids this with its
+  // cross-phase `owned` tracking + dedupeAcrossPhases; the re-rank has to restate the rule. `coreHome` maps
+  // each item to the one phase it's allowed to be core in: its base-build core phase if it has one (already
+  // deduped to a single phase), else — for an item that's only ever situational but repeats across phases —
+  // its highest-pick-rate phase (mirroring dedupeAcrossPhases' choice).
+  const coreHome = new Map<number, number>();
+  for (const phase of build.phases) for (const b of phase.core) coreHome.set(b.item.id, phase.column);
+  const situHomePick = new Map<number, number>();
+  for (const phase of build.phases)
+    for (const b of phase.situational) {
+      if (coreHome.has(b.item.id)) continue; // pinned to its base-core phase already
+      const cur = situHomePick.get(b.item.id);
+      if (cur === undefined || b.pickRate > cur) {
+        situHomePick.set(b.item.id, b.pickRate);
+        coreHome.set(b.item.id, phase.column);
+      }
+    }
+  const coreEligibleHere = (b: BuildItem, column: number) => coreHome.get(b.item.id) === column;
+
   const phases = build.phases.map((phase) => {
     const pool = [...phase.core, ...phase.situational].map(annotate);
     // Items the base build already surfaced here — preserved through the re-rank so a comp pick
@@ -1241,7 +1264,9 @@ export function rerankBuildForComp(
       const coreUniv: BuildItem[] = [];
       const benched: BuildItem[] = [];
       for (const u of universals) {
-        if (coreUniv.length >= coreSlots) {
+        // A staple whose core home is another phase stays situational here (it holds its slot there) —
+        // promoting it would put the same item in core twice. Otherwise seat it until the slots run out.
+        if (!coreEligibleHere(u, phase.column) || coreUniv.length >= coreSlots) {
           benched.push(u);
           continue;
         }
@@ -1250,8 +1275,13 @@ export function rerankBuildForComp(
         else coreUniv.push(u);
       }
       const fill = Math.max(0, coreSlots - coreUniv.length);
-      const coreCat = [...coreUniv, ...others.slice(0, fill)];
-      leftover = leftover.concat(benched, others.slice(fill));
+      // Only non-staples whose core home is *this* phase can fill the leftover slots; the rest stay
+      // situational. The home phase keeps its full count — its own base-core items are eligible here, so
+      // there are always at least `coreSlots` candidates — and the duplicate is dropped from the others.
+      const eligibleOthers = others.filter((b) => coreEligibleHere(b, phase.column));
+      const ineligibleOthers = others.filter((b) => !coreEligibleHere(b, phase.column));
+      const coreCat = [...coreUniv, ...eligibleOthers.slice(0, fill)];
+      leftover = leftover.concat(benched, eligibleOthers.slice(fill), ineligibleOthers);
 
       for (const b of coreCat) {
         const role: BuildRole =
