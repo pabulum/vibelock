@@ -980,8 +980,12 @@ function GuideModal({ onClose }: { onClose: () => void }) {
                 every build for the hero together.
               </dd>
 
-              <dt>rush if ahead</dt>
-              <dd>A situational pick that becomes core in a later phase — buy it early if you’re winning.</dd>
+              <dt>core by X · rush if ahead / buy later</dt>
+              <dd>
+                A situational pick that becomes core in a later phase. <em>Rush if ahead</em> — buy it
+                early when you’re winning — only when it wins about as much bought this early; if it does
+                worse early, it’s tagged <em>buy later</em> instead.
+              </dd>
 
               <dt>
                 weak into comp <span className="weakcomp">▼</span>
@@ -1281,6 +1285,8 @@ function MatchupChip({
 
 const COUNTER_ADDS_PER_PHASE = 3; // cap on counter-only picks folded into a phase's swaps
 const STATE_GAP = 0.035; // raw−adjusted WR gap that flags a "win more" / "comeback" pick
+const WIN_STATE_WR_FLOOR = 0.03; // ...but only on a pick within ~3 pts of baseline: a clear loser tagged
+// "win more" would read as a viable snowball option when it's just a bad pick correlated with leads.
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 /** One compact bubble: a single enemy's portrait + this item's edge vs that enemy. */
@@ -1307,8 +1313,10 @@ function ItemTags({
   swapFor,
   swapLabel = 'swap for',
   coreLater,
+  coreRush,
   rawWr,
   adjWr,
+  baseline,
 }: {
   reason?: string | null;
   counter?: ItemCounters;
@@ -1319,17 +1327,24 @@ function ItemTags({
   swapFor?: ItemRef;
   /** Wording for the swap tag — "swap for" (situational) vs "in for" (drop this for a counter). */
   swapLabel?: string;
-  /** Phase label where this situational pick becomes core — shown as a "rush if ahead" tag. */
+  /** Phase label where this situational pick becomes core — shown as a "core by X" tag. */
   coreLater?: string;
+  /** Whether rushing it early is supported by its win rate — gates the "rush if ahead" suffix. */
+  coreRush?: boolean;
   /** Raw + adjusted win rate; their gap reveals a "win more" (raw≫adj) or "comeback" (adj≫raw) pick. */
   rawWr?: number;
   adjWr?: number;
+  /** Hero baseline WR — a win-more/comeback tag only makes sense on a pick that's at least viable. */
+  baseline?: number;
 }) {
   const bubbles = counter && enemiesById ? counter.marks : [];
-  // raw ≫ adj ⇒ the win rate leans on already being ahead ("win more"); adj ≫ raw ⇒ it holds
-  // up even when bought behind ("comeback"). Only flag a clear gap.
+  // raw ≫ adj ⇒ the win rate leans on already being ahead ("win more"); adj ≫ raw ⇒ it holds up even
+  // when bought behind ("comeback"). Only flag a clear gap — and only on a pick that's at least roughly
+  // viable: a clear loser (adj well below baseline) isn't "win more", it's just bad and correlated with
+  // being ahead, so the tag would dress up a losing pick as a snowball option.
   const gap = rawWr !== undefined && adjWr !== undefined ? rawWr - adjWr : 0;
-  const state = gap >= STATE_GAP ? 'winmore' : gap <= -STATE_GAP ? 'comeback' : undefined;
+  const viable = adjWr !== undefined && (baseline === undefined || adjWr >= baseline - WIN_STATE_WR_FLOOR);
+  const state = !viable ? undefined : gap >= STATE_GAP ? 'winmore' : gap <= -STATE_GAP ? 'comeback' : undefined;
   const hasTags =
     !!reason ||
     bubbles.length > 0 ||
@@ -1361,8 +1376,15 @@ function ItemTags({
         </span>
       )}
       {coreLater && (
-        <span className="rel rush" title={`Core by ${coreLater} — buy early if you're ahead`}>
-          core by {coreLater} · rush if ahead
+        <span
+          className="rel rush"
+          title={
+            coreRush
+              ? `Core by ${coreLater} — buy early if you're ahead`
+              : `Core by ${coreLater} — but it does worse bought this early, so don't rush it`
+          }
+        >
+          core by {coreLater}{coreRush ? ' · rush if ahead' : ' · buy later'}
         </span>
       )}
       {swapFor && (
@@ -1533,8 +1555,10 @@ function ItemRow({
           weakEdge={!counter && b.weakVsComp ? b.compEdge : undefined}
           swapFor={b.swapFor}
           coreLater={b.coreLater}
+          coreRush={b.coreRush}
           rawWr={b.rawWinRate}
           adjWr={b.adjustedWinRate}
+          baseline={baseline}
         />
       </div>
     </ItemHover>

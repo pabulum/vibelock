@@ -474,7 +474,7 @@ body {
 .buildprev {
   position: fixed;
   z-index: 50;
-  width: 268px;
+  width: min(268px, calc(100vw - 16px));
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -602,7 +602,7 @@ body {
 .itemcard {
   position: fixed;
   z-index: 50;
-  width: 300px;
+  width: min(300px, calc(100vw - 16px));
   max-height: calc(100vh - 16px);
   overflow: hidden;
   background: var(--panel);
@@ -1367,5 +1367,77 @@ body {
   }
   .glossary dd {
     margin: 0 0 9px;
+  }
+}
+
+/* ---- Mobile / narrow-screen layout ----------------------------------------
+   The app is desktop-first (a sticky header with inline controls, a multi-column
+   phase grid). Below ~760px the header controls drop to their own full-width row,
+   the header stops being sticky so it doesn't eat the short viewport, the page
+   gutters tighten, and form controls go to 16px so iOS doesn't zoom on focus. */
+@media (max-width: 760px) {
+  /* Header: brand on its own line, controls wrap below as full-width fields. A wrapped
+     control row would make a sticky header tall enough to swallow the viewport, so let
+     it scroll away — `relative` keeps the loadstrip anchored to its bottom edge. */
+  .topbar {
+    position: relative;
+    flex-wrap: wrap;
+    gap: 10px 12px;
+    padding: 11px 14px;
+  }
+  .controls {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 10px 12px;
+  }
+  .controls label {
+    flex: 1 1 140px; /* selects grow to share the row, two-up on a phone */
+  }
+  .controls select {
+    width: 100%;
+    min-width: 0;
+    font-size: 16px; /* ≥16px stops iOS Safari zooming in when the field is tapped */
+  }
+  .guidebtn {
+    flex: 1 1 100%; /* full-width tap target on its own line */
+    align-self: stretch;
+    margin-bottom: 0;
+    padding: 9px 12px;
+  }
+
+  /* Tighten the generous 22px desktop gutters so content isn't squeezed thin. */
+  .meta,
+  .identity,
+  .matchups,
+  .archetypes,
+  .community,
+  .enemies,
+  .phases,
+  .foot {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .counters-note,
+  .skills,
+  .banner {
+    margin-left: 14px;
+    margin-right: 14px;
+  }
+  .enemies select {
+    font-size: 16px;
+  }
+
+  /* Roomier tap targets for the pill controls (matchup / enemy chips). */
+  .mchip,
+  .chip {
+    padding-top: 5px;
+    padding-bottom: 5px;
+  }
+}
+
+@media (max-width: 380px) {
+  /* On the narrowest phones give each select its own row — two-up gets too cramped. */
+  .controls label {
+    flex-basis: 100%;
   }
 }

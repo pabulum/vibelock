@@ -63,6 +63,9 @@ const SOUL_SLACK = 1.15; // allow 15% over the soul budget before stopping
 const SITUATIONAL_MAX = 5;
 const COMEBACK_GAP = 0.035; // adj−raw this big ⇒ a reactive "hold up when behind" pick
 const COMEBACK_RESERVE = 2; // situational slots held for the best comeback picks (vs damage)
+const RUSH_WR_TOLERANCE = 0.015; // a "core later, rush if ahead" pick must not win meaningfully *less*
+// bought this early than in its later core phase: allow a small (≤1.5pt) dip as noise, but a bigger early
+// drop means rushing it does worse, so we drop the rush advice and just say it's core later.
 const SELL_BEFORE_S = 1500; // a cheap item sold before ~25 min is a placeholder
 export const SLOT_CAP = 12; // 9 base + 3 flex slots (unlocked via Walker kills)
 const SELL_FOR_SLOTS_MAX_TIER = 2; // only cheap stat-sticks/components (≤T2) are sold to free a slot; T3+
@@ -653,22 +656,26 @@ function annotateRelations(phases: BuildPhase[], flow: ItemFlowStats, items: Map
  * it can be re-run after a comp re-rank shuffles core membership without leaving stale pairings.
  */
 export function annotateSlotRelations(phases: BuildPhase[]): void {
-  const coreCols = new Map<number, number[]>();
+  // Each item's later core appearances, keyed by column, so a situational pick can find both the phase
+  // it becomes core in *and* that phase's win rate (to decide whether rushing it early is supported).
+  const coreCols = new Map<number, Array<{ column: number; adjWr: number }>>();
   for (const p of phases)
     for (const b of p.core) {
       const arr = coreCols.get(b.item.id);
-      if (arr) arr.push(p.column);
-      else coreCols.set(b.item.id, [p.column]);
+      if (arr) arr.push({ column: p.column, adjWr: b.adjustedWinRate });
+      else coreCols.set(b.item.id, [{ column: p.column, adjWr: b.adjustedWinRate }]);
     }
 
   for (const p of phases) {
     for (const b of p.core) {
       b.swapFor = undefined;
       b.coreLater = undefined;
+      b.coreRush = undefined;
     }
     for (const s of p.situational) {
       s.swapFor = undefined;
       s.coreLater = undefined;
+      s.coreRush = undefined;
       // Explicit substitution link (held out of core as an alternative to a specific pick): pair to
       // that rival when it's still core here, not to the merely cost-closest pick below.
       if (s.swapForId !== undefined) {
@@ -678,10 +685,13 @@ export function annotateSlotRelations(phases: BuildPhase[]): void {
           continue;
         }
       }
-      // Same item core in a later phase ⇒ a rush/stretch target ("buy early if ahead"), not a swap.
-      const laterCol = (coreCols.get(s.item.id) ?? []).find((c) => c > p.column);
-      if (laterCol !== undefined) {
-        s.coreLater = PHASE_META[laterCol].label;
+      // Same item core in a later phase ⇒ it becomes core by then. Only call it a *rush* target ("buy
+      // early if ahead") when its win rate bought this early isn't materially worse than in that later
+      // phase — otherwise the data argues against rushing, so we just note it's core later.
+      const later = (coreCols.get(s.item.id) ?? []).find((c) => c.column > p.column);
+      if (later !== undefined) {
+        s.coreLater = PHASE_META[later.column].label;
+        s.coreRush = s.adjustedWinRate >= later.adjWr - RUSH_WR_TOLERANCE;
         continue;
       }
       // Else pair with a same-slot core pick of *comparable cost* — a real alternative, not a

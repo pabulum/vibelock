@@ -204,9 +204,13 @@ export interface BuildItem {
    * comparable-cost every-game pick it doesn't co-occur with. Carries that core item's id so the
    * swap is paired to the right rival (not the merely cost-closest core pick). */
   swapForId?: number;
-  /** If this situational pick is *core* in a later phase: that phase's label — a "rush this if
-   * you're ahead; it's a core item by then" clue, not a true swap. */
+  /** If this situational pick is *core* in a later phase: that phase's label — a "core item by
+   * then" clue, not a true swap. */
   coreLater?: string;
+  /** True only when rushing it early is actually supported: its win rate in *this* (earlier) phase
+   * isn't materially worse than in the later phase where it's core. When false, `coreLater` still
+   * says it becomes core later, but we don't tell the player to rush it (early buys do worse). */
+  coreRush?: boolean;
 }
 
 export interface BuildPhase {
