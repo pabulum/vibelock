@@ -856,13 +856,54 @@ function GuideModal({ onClose }: { onClose: () => void }) {
           </section>
 
           <section>
+            <h3>How the build is chosen</h3>
+            <p>
+              The build isn’t just the top win rates sorted top to bottom — a rarely-built item can show a
+              flashy rate by luck. A few corrections keep it honest:
+            </p>
+            <ul>
+              <li>
+                <strong>Small samples are pulled toward the hero’s average.</strong> Each win rate is
+                dragged toward the hero average by how little data backs it — a pick with thousands of games
+                barely moves, one with a few dozen is pulled most of the way. A shiny niche item won’t
+                outrank a proven staple on noise.
+              </li>
+              <li>
+                <strong>Picks are ranked cautiously.</strong> Discretionary slots are ordered by the win
+                rate we’re fairly sure a pick <em>at least</em> reaches, so something we’re confident about
+                beats something that merely <em>might</em> be great.
+              </li>
+              <li>
+                <strong>“Value” means real, not just high.</strong> A pick is only labelled a value pick —
+                or a counter — when its edge is big enough to be unlikely from chance at that sample size,
+                not just past a fixed cutoff. Where many items are tested at once (counters especially), we
+                also hold down how many flukes slip through.
+              </li>
+              <li>
+                <strong>Items that win together.</strong> Beyond each pick on its own, the build leans
+                toward items that win <em>together</em> more than their solo rates predict, and away from
+                redundant pairs — so it reads as a coherent kit, not a list of individually-good parts.
+              </li>
+            </ul>
+            <p className="fine">
+              For the curious: empirical-Bayes shrinkage, lower-confidence-bound ranking, significance gates
+              with false-discovery-rate control, and a centered pairwise-synergy term.
+            </p>
+          </section>
+
+          <section>
             <h3>Adjusting for the enemy comp</h3>
             <p>
               Add enemy heroes and the build re-ranks. Picks that answer the comp rise and carry the
               enemy’s portrait — the number is that pick’s raw win-rate gain into that hero — while
               picks that are weak into the comp get a <span className="weakcomp">▼</span> flag.
-              Staples and per-category soul balance are preserved. Counter deltas are raw and read
-              cleanest one threat at a time.
+              Staples and per-category soul balance are preserved.
+            </p>
+            <p>
+              A counter is only marked when its edge over the matchup is large enough to be real at that
+              sample, and — because every item is tested against every threat at once — we cap how many
+              false marks slip through, so most of what you see is genuine. Counter numbers are raw, so they
+              read cleanest one threat at a time.
             </p>
           </section>
 
@@ -879,6 +920,33 @@ function GuideModal({ onClose }: { onClose: () => void }) {
               <dd>
                 The population’s baseline win rate for this hero, rank and patch. Rows show ± versus
                 it.
+              </dd>
+
+              <dt>pulled to average</dt>
+              <dd>
+                Small-sample win rates are dragged toward the hero average by how little data backs them, so
+                a lucky streak on a rarely-built item can’t top the list. The fewer the games, the harder the
+                pull.
+              </dd>
+
+              <dt>confidence ranking</dt>
+              <dd>
+                Discretionary picks are ordered by the win rate we’re fairly sure they <em>at least</em>
+                reach — a cautious estimate that builds in sample size — so a proven pick beats a shakier
+                high-roller.
+              </dd>
+
+              <dt>significant</dt>
+              <dd>
+                An edge big enough to be unlikely from chance at that sample size. It’s the bar a pick clears
+                to be called a value pick or a counter — not just beating a fixed number.
+              </dd>
+
+              <dt>synergy</dt>
+              <dd>
+                Two items that win <em>together</em> more (or less) than their solo rates predict. The build
+                favours pairs that reinforce each other and avoids redundant ones; it’s baked into which
+                picks fill the discretionary slots, not shown as its own list.
               </dd>
 
               <dt>
