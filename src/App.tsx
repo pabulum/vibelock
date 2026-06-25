@@ -699,7 +699,7 @@ export default function App() {
                   {phase.label} <span className="time">{phase.timeLabel}</span>
                 </h2>
                 <div className="budget">
-                  {phase.core.length}/{phase.targetItems} items ·{' '}
+                  {phase.itemsBought}/{phase.targetItems} items ·{' '}
                   {Math.round(phase.coreSouls).toLocaleString()} /{' '}
                   {Math.round(phase.soulBudget).toLocaleString()} souls
                 </div>

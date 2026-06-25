@@ -292,6 +292,7 @@ export function generateBuild(
 
   dedupeAcrossPhases(phases);
   dropSamePhaseComponents(phases); // a component+upgrade in one phase ⇒ keep only the upgrade
+  countItemsBought(phases); // buy count per phase, crediting same-phase folded components
   recomputeCosts(phases, items); // finalize marginal costs against post-dedupe membership
   markTransient(phases, sellTimes); // flag builds-into / often-sold placeholders
   const standingSlots = capStandingSlots(phases, SLOT_CAP); // sell weakest cheap picks to fit the slot cap
@@ -421,18 +422,46 @@ function dedupeAcrossPhases(phases: BuildPhase[]): void {
  * Opening Rounds it builds into) while the upgrade still shows the component's price knocked off. We
  * keep only the upgrade, at full sticker: recomputeCosts credits a refund only for components still in
  * core, so dropping the component restores its price and the phase's soul total is unchanged (full
- * sticker = component + marginal). `targetItems` is left untouched — it's a stable population reference
- * ("items the average player buys here", which counts that component as a purchase), so our row count
- * can sit one under it when a component folds into its upgrade; that's honest, not a number to retune.
- * Cross-phase components are left alone — there you really do buy the cheap item in an earlier phase
- * and upgrade later, so it holds a genuine (transient) slot and earns its row. Run after dedupe (final
- * membership known) and before recomputeCosts (so the kept upgrade prices at full sticker).
+ * sticker = component + marginal). The dropped component is still a real purchase you make this phase
+ * — {@link countItemsBought} adds it back to the phase's buy count so the "N/targetItems items"
+ * readout compares like with like (targetItems counts that component too), and the soul total already
+ * bills it via the kept upgrade's full sticker. Cross-phase components are left alone — there you
+ * really do buy the cheap item in an earlier phase and upgrade later, so it holds a genuine
+ * (transient) slot and earns its row. Run after dedupe (final membership known) and before
+ * recomputeCosts (so the kept upgrade prices at full sticker).
  */
 function dropSamePhaseComponents(phases: BuildPhase[]): void {
   for (const p of phases) {
     const absorbedHere = absorptionMap(p.core); // component id → its same-phase absorbing upgrade
     if (absorbedHere.size === 0) continue;
     p.core = p.core.filter((b) => !absorbedHere.has(b.item.id));
+  }
+}
+
+/**
+ * Set each phase's `itemsBought` — the buy count the "N/targetItems items" readout compares. It's
+ * `core.length` plus every component a core upgrade absorbs that's first bought *this* phase: those
+ * were dropped as their own rows by {@link dropSamePhaseComponents}, but you still buy them (Swift
+ * Striker folds in a Rapid Rounds purchase), and the soul budget already bills them, so the count
+ * should too. A component owned from an earlier phase is already counted there — the later upgrade is
+ * just its marginal buy, not a second component purchase. Mirrors {@link marginalCost} in crediting
+ * only *direct* components (the buy Deadlock actually rolls into the upgrade). Run after
+ * dropSamePhaseComponents, when core membership is final.
+ */
+function countItemsBought(phases: BuildPhase[]): void {
+  const ownedBefore = new Set<number>(); // finished core items from earlier phases
+  for (const p of phases) {
+    const coreIds = new Set(p.core.map((b) => b.item.id));
+    let bought = 0;
+    for (const b of p.core) {
+      bought += 1; // the item itself
+      // Components folded into this upgrade and first bought here (not owned earlier, not their own
+      // row) — each is a real purchase you pass through on the way to the finished item.
+      for (const compId of b.item.componentIds)
+        if (!ownedBefore.has(compId) && !coreIds.has(compId)) bought += 1;
+    }
+    p.itemsBought = bought;
+    for (const b of p.core) ownedBefore.add(b.item.id);
   }
 }
 
@@ -1047,6 +1076,7 @@ function buildPhase(
     label: PHASE_META[col].label,
     timeLabel: PHASE_META[col].timeLabel,
     targetItems,
+    itemsBought: 0, // finalized by countItemsBought once cross-phase core membership is settled
     soulBudget: popSoulBudget,
     coreSouls,
     categorySouls: categorySouls(core),
@@ -1252,6 +1282,7 @@ export function rerankBuildForComp(
   });
 
   dropSamePhaseComponents(phases); // re-rank can pull a swap into core beside its upgrade — keep one
+  countItemsBought(phases); // re-count buys for the re-ranked core membership
   recomputeCosts(phases, items); // marginal costs + coreSouls/categorySouls for the re-ranked core
   const standingSlots = capStandingSlots(phases, SLOT_CAP); // re-fit the cap to the re-ranked membership
   annotateSlotRelations(phases); // swap/rush pairings for the re-ranked membership

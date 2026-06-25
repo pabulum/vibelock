@@ -219,6 +219,11 @@ export interface BuildPhase {
   timeLabel: string;
   /** Target item count for the phase, derived from what players actually do. */
   targetItems: number;
+  /** Purchases the recommended core represents — `core.length` plus any component a core upgrade
+   * absorbs that's first bought *this* phase (e.g. Swift Striker folding in Rapid Rounds). Matches
+   * how `targetItems` and the soul budget count a folded component as its own buy, so the readout
+   * compares like with like rather than sitting a row under. */
+  itemsBought: number;
   /** Average souls spent in the phase (the budget). */
   soulBudget: number;
   /** Souls the recommended core costs. */
