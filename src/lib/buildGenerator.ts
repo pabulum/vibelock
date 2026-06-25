@@ -65,6 +65,10 @@ const COMEBACK_GAP = 0.035; // adj−raw this big ⇒ a reactive "hold up when b
 const COMEBACK_RESERVE = 2; // situational slots held for the best comeback picks (vs damage)
 const SELL_BEFORE_S = 1500; // a cheap item sold before ~25 min is a placeholder
 export const SLOT_CAP = 12; // 9 base + 3 flex slots (unlocked via Walker kills)
+const SELL_FOR_SLOTS_MAX_TIER = 2; // only cheap stat-sticks/components (≤T2) are sold to free a slot; T3+
+// are "build complete" and never sold for room unless you're giga-late (which we don't assume — see
+// capStandingSlots). This is why builds read fine without a hard cap: the overflow is the stuff you sell.
+const SOLD_FOR_SLOTS = 'sold late for a slot';
 // --- Overtime buy-list ranking (see overtimeBuyList) ---
 const OVERTIME_MIN_TIER = 3; // an overtime buy is an upgrade you spend surplus souls on, never a cheap
 // stat-stick you're replacing. T4 dominates the late window, but standout T3s (Kelvin's Rapid Recharge,
@@ -286,7 +290,8 @@ export function generateBuild(
   dedupeAcrossPhases(phases);
   dropSamePhaseComponents(phases); // a component+upgrade in one phase ⇒ keep only the upgrade
   recomputeCosts(phases, items); // finalize marginal costs against post-dedupe membership
-  const standingSlots = markTransient(phases, sellTimes);
+  markTransient(phases, sellTimes); // flag builds-into / often-sold placeholders
+  const standingSlots = capStandingSlots(phases, SLOT_CAP); // sell weakest cheap picks to fit the slot cap
   annotateRelations(phases, flow, items);
   annotateSlotRelations(phases);
 
@@ -464,6 +469,51 @@ function markTransient(phases: BuildPhase[], sellTimes: Map<number, number>): nu
   }
 
   return core.filter((b) => !b.transient).length;
+}
+
+/**
+ * Deadlock holds at most {@link SLOT_CAP} items (9 base + 3 flex). A kept build over that isn't a bug — in
+ * game you *sell* your cheapest stat-sticks to fit your late upgrades — so we model that sale rather than
+ * refuse the strong late picks (which is why builds read fine without a hard cap; the overflow is exactly
+ * the stuff you'd sell). When the standing (kept, non-transient) build is over `cap`, mark the weakest cheap
+ * picks transient ("{@link SOLD_FOR_SLOTS}"), weakest-first, until it fits: lowest tier first (the biggest
+ * upgrade gap — "sell low-tier when the difference is big"), then filler before value before staple, then
+ * least-popular, then lowest win rate. "Build-complete" picks (tier > {@link SELL_FOR_SLOTS_MAX_TIER}) are
+ * never sold for room — you'd only do that giga-late, which we don't assume — so if every standing pick left
+ * is a keeper the build is honestly left over the cap (App.tsx warns). Idempotent: it clears *its own* prior
+ * flags first (leaving builds-into / often-sold alone), so it's safe to re-run after a comp re-rank shuffles
+ * core membership. Returns the final standing-slot count. Run after {@link markTransient}.
+ */
+function capStandingSlots(phases: BuildPhase[], cap: number): number {
+  const core = phases.flatMap((p) => p.core);
+  for (const b of core)
+    if (b.transientReason === SOLD_FOR_SLOTS) {
+      b.transient = false;
+      b.transientReason = undefined;
+    }
+
+  const standing = core.filter((b) => !b.transient);
+  let held = standing.length;
+  if (held <= cap) return held;
+
+  const roleWeakness = (r: BuildRole) => (r === 'filler' ? 0 : r === 'value' ? 1 : 2);
+  const sellable = standing
+    .filter((b) => b.item.tier <= SELL_FOR_SLOTS_MAX_TIER)
+    .sort(
+      (a, b) =>
+        a.item.tier - b.item.tier ||
+        roleWeakness(a.role) - roleWeakness(b.role) ||
+        a.pickRate - b.pickRate ||
+        a.adjustedWinRate - b.adjustedWinRate,
+    );
+
+  for (const b of sellable) {
+    if (held <= cap) break;
+    b.transient = true;
+    b.transientReason = SOLD_FOR_SLOTS;
+    held--;
+  }
+  return held;
 }
 
 function mmss(s: number): string {
@@ -1193,8 +1243,8 @@ export function rerankBuildForComp(
 
   dropSamePhaseComponents(phases); // re-rank can pull a swap into core beside its upgrade — keep one
   recomputeCosts(phases, items); // marginal costs + coreSouls/categorySouls for the re-ranked core
+  const standingSlots = capStandingSlots(phases, SLOT_CAP); // re-fit the cap to the re-ranked membership
   annotateSlotRelations(phases); // swap/rush pairings for the re-ranked membership
-  const standingSlots = phases.flatMap((p) => p.core).filter((b) => !b.transient).length;
   return { ...build, phases, standingSlots };
 }
 
