@@ -874,10 +874,11 @@ function GuideModal({ onClose }: { onClose: () => void }) {
                 beats something that merely <em>might</em> be great.
               </li>
               <li>
-                <strong>“Value” means real, not just high.</strong> A pick is only labelled a value pick —
-                or a counter — when its edge is big enough to be unlikely from chance at that sample size,
-                not just past a fixed cutoff. Where many items are tested at once (counters especially), we
-                also hold down how many flukes slip through.
+                <strong>“Value” means real, not just high.</strong> A pick is only labelled a value pick
+                when its edge is big enough to be unlikely from chance at that sample size, not just past a
+                fixed cutoff. Counters work the same way: an item is tagged as answering an enemy by the
+                edge over that matchup we’re <em>confident</em> it has — shrunk toward no-effect by sample —
+                so a thin fluke can’t earn a portrait, but a real, moderate counter isn’t hidden either.
               </li>
               <li>
                 <strong>Items that win together.</strong> Beyond each pick on its own, the build leans
@@ -886,8 +887,8 @@ function GuideModal({ onClose }: { onClose: () => void }) {
               </li>
             </ul>
             <p className="fine">
-              For the curious: empirical-Bayes shrinkage, lower-confidence-bound ranking, significance gates
-              with false-discovery-rate control, and a centered pairwise-synergy term.
+              For the curious: empirical-Bayes shrinkage, lower-confidence-bound ranking, significance gates,
+              and a centered pairwise-synergy term.
             </p>
           </section>
 
