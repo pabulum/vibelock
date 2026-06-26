@@ -36,6 +36,7 @@ import {
 } from './lib/buildGenerator';
 import { matchCommunityBuilds } from './lib/communityBuilds';
 import { computeItemCounters } from './lib/counters';
+import { friendlyError } from './lib/errors';
 import { buildSynergyLookup, singleRecordsFromFlow } from './lib/synergy';
 import { bestImbueTargets } from './lib/imbue';
 import { heroMatchups } from './lib/matchups';
@@ -167,7 +168,7 @@ function useAsyncTask(
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: render the loading veil
     setLoading(true);
     run(ctrl.signal)
-      .catch((e) => !ctrl.signal.aborted && onError(String(e)))
+      .catch((e) => !ctrl.signal.aborted && onError(friendlyError(e)))
       .finally(() => !ctrl.signal.aborted && setLoading(false));
     return () => ctrl.abort();
     // deps are forwarded by the caller; exhaustive-deps validates them at the call site (additionalHooks).
@@ -209,7 +210,7 @@ export default function App() {
         setAbilities(a);
         if (h.length) setHeroId(h[0].id);
       })
-      .catch((e) => setError(String(e)));
+      .catch((e) => setError(friendlyError(e)));
   }, []);
 
   const hero = useMemo(() => heroes.find((h) => h.id === heroId) ?? null, [heroes, heroId]);
@@ -793,6 +794,10 @@ export default function App() {
         <button type="button" className="guidelink" onClick={() => setShowGuide(true)}>
           Methodology &amp; glossary →
         </button>
+        <div className="disclaimer">
+          Vibelock is a fan-made, unofficial tool. Not affiliated with, endorsed by, or sponsored by
+          Valve. Deadlock and all related assets are trademarks of Valve Corporation.
+        </div>
       </footer>
 
       {showGuide && <GuideModal onClose={() => setShowGuide(false)} />}

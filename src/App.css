@@ -1243,6 +1243,12 @@ body {
 .foot a {
   color: var(--muted);
 }
+.foot .disclaimer {
+  margin-top: 6px;
+  font-size: 11px;
+  opacity: 0.75;
+  max-width: 70ch;
+}
 
 /* "How it works" trigger that sits alongside the header controls. */
 .guidebtn {
