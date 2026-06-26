@@ -7,6 +7,10 @@
   --muted: #98a2b3;
   --accent: #6fb1ff;
   --purple: #9b6dd1; /* Deadlock spirit purple */
+  /* Brand type, matching the Open Graph card. Space Grotesk for the wordmark (and available for
+     headings); Archivo for the italic hero flavor lines. Both fall back to the system UI stack. */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-tagline: 'Archivo', system-ui, sans-serif;
 }
 
 * {
@@ -50,10 +54,12 @@ body {
 }
 .brandname {
   flex: 0 0 auto;
+  font-family: var(--font-display);
 }
 /* Selected hero's flavor line — small, italic, muted. */
 .tagline {
   min-width: 0;
+  font-family: var(--font-tagline);
   font-size: 12px;
   font-weight: 400;
   font-style: italic;

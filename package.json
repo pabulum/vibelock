@@ -11,6 +11,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/archivo": "^5.2.8",
+    "@fontsource/space-grotesk": "^5.2.10",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
