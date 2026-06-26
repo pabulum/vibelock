@@ -136,3 +136,10 @@ it. Treat it as a strong prior, not gospel.
   feature), so it's subscribable in-game.
 - **Within-phase buy order** from `item-stats.avg_buy_time_s`.
 - **Beam search** instead of greedy, for late phases where the greedy lock thins the sample.
+
+## License
+
+MIT — see [LICENSE](LICENSE). The data and game assets come from
+[deadlock-api.com](https://deadlock-api.com) (also MIT). Vibelock is an unofficial, fan-made tool
+and is not affiliated with or endorsed by Valve; Deadlock and its assets are trademarks of Valve
+Corporation.

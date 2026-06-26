@@ -8,9 +8,9 @@ import {
   type DependencyList,
   type ReactNode,
   type Ref,
-} from 'react';
-import { createPortal } from 'react-dom';
-import './App.css';
+} from "react";
+import { createPortal } from "react-dom";
+import "./App.css";
 import {
   getAbilities,
   getAbilityOrder,
@@ -24,8 +24,8 @@ import {
   getItemStats,
   getPatches,
   type TimeWindow,
-} from './api/deadlock';
-import { assembleArchetypes, pickSignatures } from './lib/archetypes';
+} from "./api/deadlock";
+import { assembleArchetypes, pickSignatures } from "./lib/archetypes";
 import {
   classifyWinState,
   phaseTempo,
@@ -33,15 +33,21 @@ import {
   SLOT_CAP,
   SLOT_COLORS,
   type PhaseTempo,
-} from './lib/buildGenerator';
-import { matchCommunityBuilds } from './lib/communityBuilds';
-import { computeItemCounters } from './lib/counters';
-import { friendlyError } from './lib/errors';
-import { buildSynergyLookup, singleRecordsFromFlow } from './lib/synergy';
-import { bestImbueTargets } from './lib/imbue';
-import { heroMatchups } from './lib/matchups';
-import { RANK_TIERS, rankFloorLabel, tierToMinBadge } from './lib/ranks';
-import { bestSkillBuild } from './lib/skills';
+} from "./lib/buildGenerator";
+import { matchCommunityBuilds } from "./lib/communityBuilds";
+import { computeItemCounters } from "./lib/counters";
+import { friendlyError } from "./lib/errors";
+import {
+  decodeUrlState,
+  encodeUrlState,
+  slugify,
+  type UrlState,
+} from "./lib/urlState";
+import { buildSynergyLookup, singleRecordsFromFlow } from "./lib/synergy";
+import { bestImbueTargets } from "./lib/imbue";
+import { heroMatchups } from "./lib/matchups";
+import { RANK_TIERS, rankFloorLabel, tierToMinBadge } from "./lib/ranks";
+import { bestSkillBuild } from "./lib/skills";
 import type {
   Ability,
   ArchetypeKey,
@@ -62,10 +68,10 @@ import type {
   Item,
   RankedCommunityBuild,
   SkillBuild,
-} from './types';
+} from "./types";
 
 // Distinct colors for a hero's four abilities.
-const ABILITY_COLORS = ['#6fb1ff', '#e0a23c', '#5fc08a', '#cc6db1'];
+const ABILITY_COLORS = ["#6fb1ff", "#e0a23c", "#5fc08a", "#cc6db1"];
 
 /** Time window for a chosen patch index (null = last 30 days). Patches are newest-first. */
 function windowFor(patches: Patch[], idx: number | null): TimeWindow {
@@ -77,7 +83,8 @@ function windowFor(patches: Patch[], idx: number | null): TimeWindow {
 }
 
 const REDUCED =
-  typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  typeof matchMedia !== "undefined" &&
+  matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // Drives a panel's `--settle` (0 = crisp, ~0.9 = fully veiled). While its query is in
 // flight the frosted veil eases in, then *trickles* toward a floor on a curve scaled to
@@ -94,12 +101,13 @@ function useSettle<T extends HTMLElement>(loading: boolean) {
 
   useEffect(() => {
     cancelAnimationFrame(raf.current);
-    const setVar = (k: string, v: number) => ref.current?.style.setProperty(k, v.toFixed(3));
+    const setVar = (k: string, v: number) =>
+      ref.current?.style.setProperty(k, v.toFixed(3));
 
     if (loading) {
       startedAt.current = performance.now();
       if (REDUCED) {
-        setVar('--settle', 0.85); // a calm, unreadable static veil — no animated trickle
+        setVar("--settle", 0.85); // a calm, unreadable static veil — no animated trickle
         return;
       }
       const tick = () => {
@@ -109,7 +117,7 @@ function useSettle<T extends HTMLElement>(loading: boolean) {
         const decay = (1 - progress) ** 2; // 1 → 0 as we approach the expected finish
         // Stays heavy enough to keep the content unreadable the whole time; the trickle is
         // only a gentle "developing" hint, never a slide back to legible.
-        setVar('--settle', 0.95 * rampIn * (0.82 + 0.18 * decay));
+        setVar("--settle", 0.95 * rampIn * (0.82 + 0.18 * decay));
         raf.current = requestAnimationFrame(tick);
       };
       tick();
@@ -118,22 +126,25 @@ function useSettle<T extends HTMLElement>(loading: boolean) {
       estMs.current = estMs.current * 0.7 + dur * 0.3; // learn the timing for next time
       startedAt.current = 0;
       if (REDUCED) {
-        setVar('--settle', 0);
+        setVar("--settle", 0);
         return;
       }
       // The reveal: blur resolves into focus while a brief purple glow pulses — the
       // "this piece just landed" punch.
-      const from = Number(ref.current?.style.getPropertyValue('--settle')) || 0;
+      const from = Number(ref.current?.style.getPropertyValue("--settle")) || 0;
       const t0 = performance.now();
       const DUR = 560;
       const tick = () => {
         const k = Math.min((performance.now() - t0) / DUR, 1);
-        setVar('--settle', from * (1 - k) ** 3); // ease-out to crisp
-        setVar('--flash', k < 0.28 ? k / 0.28 : Math.max(0, 1 - (k - 0.28) / 0.72)); // pulse
+        setVar("--settle", from * (1 - k) ** 3); // ease-out to crisp
+        setVar(
+          "--flash",
+          k < 0.28 ? k / 0.28 : Math.max(0, 1 - (k - 0.28) / 0.72),
+        ); // pulse
         if (k < 1) raf.current = requestAnimationFrame(tick);
         else {
-          setVar('--settle', 0);
-          setVar('--flash', 0);
+          setVar("--settle", 0);
+          setVar("--flash", 0);
         }
       };
       tick();
@@ -178,17 +189,30 @@ function useAsyncTask(
 }
 
 export default function App() {
+  // Selection parsed once from the URL on first load (a deep link), via a lazy initializer so it's
+  // computed a single time and stays stable. Consumed by the asset-load and build effects below as
+  // the data each field needs arrives, then the URL flips to a write-only mirror of state (see the
+  // replaceState effect).
+  const [url0] = useState<UrlState>(() =>
+    decodeUrlState(window.location.search),
+  );
+  // Whether the URL's archetype has been honored yet — only on the first build of the linked hero;
+  // after that, switching hero falls back to the best-win-rate archetype as usual.
+  const urlArchApplied = useRef(false);
+
   const [heroes, setHeroes] = useState<Hero[]>([]);
   const [items, setItems] = useState<Map<number, Item> | null>(null);
   const [patches, setPatches] = useState<Patch[]>([]);
   const [heroId, setHeroId] = useState<number | null>(null);
-  const [tier, setTier] = useState<number>(11); // default Eternus
+  const [tier, setTier] = useState<number>(() => url0.tier ?? 11); // default Eternus
   const [patchIdx, setPatchIdx] = useState<number | null>(null); // null = last 30 days
   const [enemies, setEnemies] = useState<number[]>([]);
 
   const [archetypeSet, setArchetypeSet] = useState<ArchetypeSet | null>(null);
-  const [archKey, setArchKey] = useState<ArchetypeKey>('all');
-  const [counterMatrix, setCounterMatrix] = useState<HeroCounterRow[] | null>(null);
+  const [archKey, setArchKey] = useState<ArchetypeKey>("all");
+  const [counterMatrix, setCounterMatrix] = useState<HeroCounterRow[] | null>(
+    null,
+  );
   const [abilities, setAbilities] = useState<Map<number, Ability> | null>(null);
   const [skillBuild, setSkillBuild] = useState<SkillBuild | null>(null);
   const [counters, setCounters] = useState<ItemCounters[] | null>(null);
@@ -200,7 +224,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
 
-  // Load assets once.
+  // Load assets once, then apply any deep-link selection now that we can resolve slugs/timestamps.
   useEffect(() => {
     Promise.all([getHeroes(), getItems(), getPatches(), getAbilities()])
       .then(([h, i, p, a]) => {
@@ -208,12 +232,30 @@ export default function App() {
         setItems(i);
         setPatches(p);
         setAbilities(a);
-        if (h.length) setHeroId(h[0].id);
+        if (h.length) {
+          const idBySlug = new Map(h.map((x) => [slugify(x.name), x.id]));
+          setHeroId((url0.hero && idBySlug.get(url0.hero)) || h[0].id);
+          if (url0.enemies?.length) {
+            const ids = url0.enemies
+              .map((s) => idBySlug.get(s))
+              .filter((id): id is number => id !== undefined);
+            if (ids.length) setEnemies(ids);
+          }
+        }
+        if (url0.patchTs !== undefined) {
+          const idx = p.findIndex((pt) => pt.ts === url0.patchTs);
+          if (idx >= 0) setPatchIdx(idx);
+        }
       })
       .catch((e) => setError(friendlyError(e)));
+    // url0 is a stable ref value, read once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const hero = useMemo(() => heroes.find((h) => h.id === heroId) ?? null, [heroes, heroId]);
+  const hero = useMemo(
+    () => heroes.find((h) => h.id === heroId) ?? null,
+    [heroes, heroId],
+  );
   const minBadge = tierToMinBadge(tier);
 
   // Generate builds, split by archetype for flex heroes.
@@ -223,7 +265,12 @@ export default function App() {
       setError(null);
       const window = windowFor(patches, patchIdx);
       const flowFor = (includeItemIds?: number[]) =>
-        getItemFlowStats({ heroId: hero.id, minBadge, ...window, includeItemIds });
+        getItemFlowStats({
+          heroId: hero.id,
+          minBadge,
+          ...window,
+          includeItemIds,
+        });
 
       // Base population + buy times (for buy-order) + item-pair permutation stats, in parallel. The
       // permutation payload is large but overlaps the flow fetches below; a failure is non-fatal (the
@@ -231,10 +278,14 @@ export default function App() {
       const [base, stats, permRows] = await Promise.all([
         flowFor(),
         getItemStats({ heroId: hero.id, minBadge, ...window }),
-        getItemPermutationStats({ heroId: hero.id, minBadge, ...window }).catch(() => null),
+        getItemPermutationStats({ heroId: hero.id, minBadge, ...window }).catch(
+          () => null,
+        ),
       ]);
       const buyTimes = new Map(stats.map((s) => [s.item_id, s.avg_buy_time_s]));
-      const sellTimes = new Map(stats.map((s) => [s.item_id, s.avg_sell_time_s]));
+      const sellTimes = new Map(
+        stats.map((s) => [s.item_id, s.avg_sell_time_s]),
+      );
 
       // Pairwise synergy lookup (#5/#6): centered + shrunk interaction between item ids, from the
       // unconditioned pairs + singles. Passed into the generator so discretionary core picks lean toward
@@ -265,15 +316,56 @@ export default function App() {
         { synergyOf },
       );
       setArchetypeSet(set);
-      setArchKey(set.archetypes[0].key); // best win rate (or "all")
+      // Honor a deep-linked archetype on the first build only; otherwise default to best win rate.
+      const linked = url0.build;
+      if (
+        !urlArchApplied.current &&
+        linked &&
+        set.archetypes.some((x) => x.key === linked)
+      ) {
+        setArchKey(linked as ArchetypeKey);
+      } else {
+        setArchKey(set.archetypes[0].key); // best win rate (or "all")
+      }
+      urlArchApplied.current = true;
     },
-    [hero, items, minBadge, tier, patchIdx, patches],
+    [hero, items, minBadge, tier, patchIdx, patches, url0.build],
     setError,
   );
 
   const activeArchetype =
-    archetypeSet?.archetypes.find((a) => a.key === archKey) ?? archetypeSet?.archetypes[0] ?? null;
+    archetypeSet?.archetypes.find((a) => a.key === archKey) ??
+    archetypeSet?.archetypes[0] ??
+    null;
   const build = activeArchetype?.build ?? null;
+
+  // Mirror the live selection into the URL (replaceState, so links stay shareable without spamming
+  // history). Gated on a resolved hero so it can't overwrite the deep-link params before the
+  // asset-load effect above has consumed them.
+  useEffect(() => {
+    if (!hero) return;
+    const state: UrlState = {
+      hero: slugify(hero.name),
+      tier,
+      patchTs: patchIdx !== null ? patches[patchIdx]?.ts : undefined,
+      build: archKey,
+      enemies: enemies
+        .map((id) => heroes.find((h) => h.id === id)?.name)
+        .filter((n): n is string => !!n)
+        .map(slugify),
+    };
+    const url = `${window.location.pathname}${encodeUrlState(state)}${window.location.hash}`;
+    window.history.replaceState(null, "", url);
+  }, [hero, tier, patchIdx, patches, archKey, enemies, heroes]);
+
+  // Reflect the selected hero — and its in-game role flavor line — in the tab title. Nice for
+  // bookmarks and shared deep links. Falls back to the brand title while assets load, and to just
+  // the name for heroes that have no role yet.
+  useEffect(() => {
+    document.title = hero
+      ? `${hero.name} · Vibelock`
+      : "Vibelock — data-driven Deadlock builds";
+  }, [hero]);
 
   // Compute counters vs the chosen enemies.
   const countersLoading = useAsyncTask(
@@ -292,12 +384,19 @@ export default function App() {
         getItemStats(base),
         Promise.all(
           enemies.map((id) =>
-            getItemStats({ ...base, enemyHeroIds: [id] }).then((stats) => ({ enemyHeroId: id, stats })),
+            getItemStats({ ...base, enemyHeroIds: [id] }).then((stats) => ({
+              enemyHeroId: id,
+              stats,
+            })),
           ),
         ),
       ]);
       if (signal.aborted) return;
-      const { counters: cs, edgeByItem } = computeItemCounters(baseStats, perEnemy, items);
+      const { counters: cs, edgeByItem } = computeItemCounters(
+        baseStats,
+        perEnemy,
+        items,
+      );
       setCounters(cs);
       setCompEdges(edgeByItem);
     },
@@ -309,7 +408,10 @@ export default function App() {
   const matrixLoading = useAsyncTask(
     async (signal) => {
       if (!items) return;
-      const m = await getHeroCounters({ minBadge, ...windowFor(patches, patchIdx) });
+      const m = await getHeroCounters({
+        minBadge,
+        ...windowFor(patches, patchIdx),
+      });
       if (!signal.aborted) setCounterMatrix(m);
     },
     [items, minBadge, patchIdx, patches],
@@ -337,7 +439,11 @@ export default function App() {
   const skillLoading = useAsyncTask(
     async (signal) => {
       if (!hero) return;
-      const base = { heroId: hero.id, minBadge, ...windowFor(patches, patchIdx) };
+      const base = {
+        heroId: hero.id,
+        minBadge,
+        ...windowFor(patches, patchIdx),
+      };
       // Prefer the order players ran *with* this archetype's signature item — but that
       // slice is narrow, so at a high rank floor on one patch it can come back empty.
       // Fall back to the hero's overall order so we always have something to show.
@@ -363,7 +469,11 @@ export default function App() {
       if (!hero) return;
       const [builds, stats] = await Promise.all([
         getCommunityBuilds(hero.id),
-        getHeroBuildStats({ heroId: hero.id, minBadge, ...windowFor(patches, patchIdx) }),
+        getHeroBuildStats({
+          heroId: hero.id,
+          minBadge,
+          ...windowFor(patches, patchIdx),
+        }),
       ]);
       if (!signal.aborted) setCommunity({ builds, stats });
     },
@@ -376,38 +486,62 @@ export default function App() {
   // Compare like-for-like: our core ranks against their core, our situational against
   // theirs (secondary). The full set still drives preview highlighting.
   const ourCoreIds = useMemo(
-    () => (build ? [...new Set(build.phases.flatMap((p) => p.core.map((b) => b.item.id)))] : []),
+    () =>
+      build
+        ? [
+            ...new Set(
+              build.phases.flatMap((p) => p.core.map((b) => b.item.id)),
+            ),
+          ]
+        : [],
     [build],
   );
   const ourSituationalIds = useMemo(() => {
     if (!build) return [];
-    const core = new Set(build.phases.flatMap((p) => p.core.map((b) => b.item.id)));
-    return [...new Set(build.phases.flatMap((p) => p.situational.map((b) => b.item.id)))].filter(
-      (id) => !core.has(id),
+    const core = new Set(
+      build.phases.flatMap((p) => p.core.map((b) => b.item.id)),
     );
+    return [
+      ...new Set(
+        build.phases.flatMap((p) => p.situational.map((b) => b.item.id)),
+      ),
+    ].filter((id) => !core.has(id));
   }, [build]);
   const ourIdSet = useMemo(
     () => new Set([...ourCoreIds, ...ourSituationalIds]),
     [ourCoreIds, ourSituationalIds],
   );
   const ourSplit = useMemo(
-    () => ({ coreCount: ourCoreIds.length, situCount: ourSituationalIds.length }),
+    () => ({
+      coreCount: ourCoreIds.length,
+      situCount: ourSituationalIds.length,
+    }),
     [ourCoreIds, ourSituationalIds],
   );
 
   const communityMatch = useMemo(
     () =>
       community && (ourCoreIds.length || ourSituationalIds.length)
-        ? matchCommunityBuilds(community.builds, community.stats, ourCoreIds, ourSituationalIds)
+        ? matchCommunityBuilds(
+            community.builds,
+            community.stats,
+            ourCoreIds,
+            ourSituationalIds,
+          )
         : null,
     [community, ourCoreIds, ourSituationalIds],
   );
 
   const toggleEnemy = (id: number) =>
-    setEnemies((e) => (e.includes(id) ? e.filter((x) => x !== id) : [...e, id]));
+    setEnemies((e) =>
+      e.includes(id) ? e.filter((x) => x !== id) : [...e, id],
+    );
 
-  const patchLabel = patchIdx === null ? 'last 30 days' : patches[patchIdx]?.title;
-  const enemyNames = enemies.map((id) => heroes.find((h) => h.id === id)?.name ?? '?').join(', ');
+  const patchLabel =
+    patchIdx === null ? "last 30 days" : patches[patchIdx]?.title;
+  const enemyNames = enemies
+    .map((id) => heroes.find((h) => h.id === id)?.name ?? "?")
+    .join(", ");
   const enemiesById = useMemo(() => {
     const m = new Map<number, Hero>();
     for (const id of enemies) {
@@ -475,7 +609,7 @@ export default function App() {
     (!items && !error);
   // The brand mark's icon is a function of the current selection, so it flips to a new
   // item on each action (hero/rank/patch/build-style/enemy change) and is otherwise still.
-  const shuffleSeed = `${heroId}|${tier}|${patchIdx}|${archKey}|${enemies.join(',')}`;
+  const shuffleSeed = `${heroId}|${tier}|${patchIdx}|${archKey}|${enemies.join(",")}`;
 
   // Per-piece "developing" veils — each tracks its own query so panels settle as their
   // data actually lands, independently of the single strip in the header. The build wears
@@ -497,7 +631,10 @@ export default function App() {
         <div className="controls">
           <label>
             Hero
-            <select value={heroId ?? ''} onChange={(e) => setHeroId(Number(e.target.value))}>
+            <select
+              value={heroId ?? ""}
+              onChange={(e) => setHeroId(Number(e.target.value))}
+            >
               {heroes.map((h) => (
                 <option key={h.id} value={h.id}>
                   {h.name}
@@ -507,7 +644,10 @@ export default function App() {
           </label>
           <label>
             Rank floor
-            <select value={tier} onChange={(e) => setTier(Number(e.target.value))}>
+            <select
+              value={tier}
+              onChange={(e) => setTier(Number(e.target.value))}
+            >
               {[...RANK_TIERS].reverse().map((t) => (
                 <option key={t.tier} value={t.tier}>
                   {rankFloorLabel(t.tier)}
@@ -518,8 +658,12 @@ export default function App() {
           <label>
             Patch
             <select
-              value={patchIdx ?? ''}
-              onChange={(e) => setPatchIdx(e.target.value === '' ? null : Number(e.target.value))}
+              value={patchIdx ?? ""}
+              onChange={(e) =>
+                setPatchIdx(
+                  e.target.value === "" ? null : Number(e.target.value),
+                )
+              }
             >
               <option value="">Last 30 days</option>
               {patches.map((p, i) => (
@@ -558,14 +702,26 @@ export default function App() {
         {build && (
           <div className="meta">
             <strong>{build.hero.name}</strong>
-            {archetypeSet?.flex && activeArchetype ? ` · ${activeArchetype.label}` : ''} ·{' '}
-            {build.rankLabel} · {patchLabel} · {build.population.matches.toLocaleString()} matches ·
-            avg game {Math.round(build.population.avgDurationS / 60)} min ·{' '}
-            {(build.population.baselineWinRate * 100).toFixed(0)}% avg WR (rows show ± vs this) ·{' '}
-            <span className={(displayBuild ?? build).standingSlots > SLOT_CAP ? 'warn' : undefined}>
+            {archetypeSet?.flex && activeArchetype
+              ? ` · ${activeArchetype.label}`
+              : ""}{" "}
+            · {build.rankLabel} · {patchLabel} ·{" "}
+            {build.population.matches.toLocaleString()} matches · avg game{" "}
+            {Math.round(build.population.avgDurationS / 60)} min ·{" "}
+            {(build.population.baselineWinRate * 100).toFixed(0)}% avg WR (rows
+            show ± vs this) ·{" "}
+            <span
+              className={
+                (displayBuild ?? build).standingSlots > SLOT_CAP
+                  ? "warn"
+                  : undefined
+              }
+            >
               {(displayBuild ?? build).standingSlots}/{SLOT_CAP} standing slots
             </span>
-            {lowPopulation && <span className="warn"> · ⚠ low sample, treat as noisy</span>}
+            {lowPopulation && (
+              <span className="warn"> · ⚠ low sample, treat as noisy</span>
+            )}
           </div>
         )}
 
@@ -575,13 +731,18 @@ export default function App() {
             {archetypeSet.archetypes.map((a) => (
               <button
                 key={a.key}
-                className={`archtab ${a.key === archKey ? 'active' : ''}`}
+                className={`archtab ${a.key === archKey ? "active" : ""}`}
                 onClick={() => setArchKey(a.key)}
-                title={a.signature ? `players who built ${a.signature.name}` : 'every build, blended'}
+                title={
+                  a.signature
+                    ? `players who built ${a.signature.name}`
+                    : "every build, blended"
+                }
               >
                 <span className="atlabel">{a.label}</span>
                 <span className="atmeta">
-                  {(a.winRate * 100).toFixed(0)}% WR · {(a.share * 100).toFixed(0)}% of games
+                  {(a.winRate * 100).toFixed(0)}% WR ·{" "}
+                  {(a.share * 100).toFixed(0)}% of games
                 </span>
               </button>
             ))}
@@ -593,7 +754,8 @@ export default function App() {
         {communityMatch && (communityMatch.best || communityMatch.aligned) && (
           <section className="community" ref={communityRef}>
             <h2>
-              Community check <span className="sub">player builds at {build?.rankLabel}</span>
+              Community check{" "}
+              <span className="sub">player builds at {build?.rankLabel}</span>
             </h2>
             <div className="crows">
               {communityMatch.agree && communityMatch.best ? (
@@ -629,9 +791,13 @@ export default function App() {
               )}
             </div>
             <p className="hint">
-              Hover a build to preview its items; click <code>#id</code> to copy it for the in-game
-              search.{' '}
-              <button type="button" className="guidelink" onClick={() => setShowGuide(true)}>
+              Hover a build to preview its items; click <code>#id</code> to copy
+              it for the in-game search.{" "}
+              <button
+                type="button"
+                className="guidelink"
+                onClick={() => setShowGuide(true)}
+              >
                 What “% match”, core &amp; flex mean →
               </button>
             </p>
@@ -639,45 +805,50 @@ export default function App() {
         )}
       </div>
 
-      {matchups && (matchups.tough.length > 0 || matchups.favorable.length > 0) && (
-        <div className="matchups" ref={matrixRef}>
-          {matchups.tough.length > 0 && (
-            <div className="mrow">
-              <span className="lbl tough">Tough vs</span>
-              {matchups.tough.map((m) => (
-                <MatchupChip
-                  key={m.enemyHeroId}
-                  m={m}
-                  tough
-                  hero={heroes.find((h) => h.id === m.enemyHeroId)}
-                  active={enemies.includes(m.enemyHeroId)}
-                  onClick={() => toggleEnemy(m.enemyHeroId)}
-                />
-              ))}
-            </div>
-          )}
-          {matchups.favorable.length > 0 && (
-            <div className="mrow">
-              <span className="lbl fav">Favored vs</span>
-              {matchups.favorable.map((m) => (
-                <MatchupChip
-                  key={m.enemyHeroId}
-                  m={m}
-                  hero={heroes.find((h) => h.id === m.enemyHeroId)}
-                  active={enemies.includes(m.enemyHeroId)}
-                  onClick={() => toggleEnemy(m.enemyHeroId)}
-                />
-              ))}
-            </div>
-          )}
-          <p className="hint">
-            Click a hero to add it below and see what to build against it.{' '}
-            <button type="button" className="guidelink" onClick={() => setShowGuide(true)}>
-              How matchup rates work →
-            </button>
-          </p>
-        </div>
-      )}
+      {matchups &&
+        (matchups.tough.length > 0 || matchups.favorable.length > 0) && (
+          <div className="matchups" ref={matrixRef}>
+            {matchups.tough.length > 0 && (
+              <div className="mrow">
+                <span className="lbl tough">Tough vs</span>
+                {matchups.tough.map((m) => (
+                  <MatchupChip
+                    key={m.enemyHeroId}
+                    m={m}
+                    tough
+                    hero={heroes.find((h) => h.id === m.enemyHeroId)}
+                    active={enemies.includes(m.enemyHeroId)}
+                    onClick={() => toggleEnemy(m.enemyHeroId)}
+                  />
+                ))}
+              </div>
+            )}
+            {matchups.favorable.length > 0 && (
+              <div className="mrow">
+                <span className="lbl fav">Favored vs</span>
+                {matchups.favorable.map((m) => (
+                  <MatchupChip
+                    key={m.enemyHeroId}
+                    m={m}
+                    hero={heroes.find((h) => h.id === m.enemyHeroId)}
+                    active={enemies.includes(m.enemyHeroId)}
+                    onClick={() => toggleEnemy(m.enemyHeroId)}
+                  />
+                ))}
+              </div>
+            )}
+            <p className="hint">
+              Click a hero to add it below and see what to build against it.{" "}
+              <button
+                type="button"
+                className="guidelink"
+                onClick={() => setShowGuide(true)}
+              >
+                How matchup rates work →
+              </button>
+            </p>
+          </div>
+        )}
 
       <CounterPicker
         heroes={heroes}
@@ -688,10 +859,15 @@ export default function App() {
 
       {enemies.length > 0 && (
         <p className="counters-note">
-          The build below is re-ranked for {enemyNames}: picks that answer the comp rise and carry
-          the enemy portrait (hover any row for the per-hero gain); picks that are weak into it are
-          flagged <span className="weakcomp">▼</span>.{' '}
-          <button type="button" className="guidelink" onClick={() => setShowGuide(true)}>
+          The build below is re-ranked for {enemyNames}: picks that answer the
+          comp rise and carry the enemy portrait (hover any row for the per-hero
+          gain); picks that are weak into it are flagged{" "}
+          <span className="weakcomp">▼</span>.{" "}
+          <button
+            type="button"
+            className="guidelink"
+            onClick={() => setShowGuide(true)}
+          >
             How comp re-ranking works →
           </button>
         </p>
@@ -700,7 +876,11 @@ export default function App() {
       {((loading && !build) || (!items && !error)) && (
         <LoadingState
           items={items}
-          label={items ? `Crunching ${hero?.name ?? 'match'} data…` : 'Loading game assets…'}
+          label={
+            items
+              ? `Crunching ${hero?.name ?? "match"} data…`
+              : "Loading game assets…"
+          }
         />
       )}
 
@@ -720,14 +900,17 @@ export default function App() {
                   {phase.label} <span className="time">{phase.timeLabel}</span>
                 </h2>
                 <div className="budget">
-                  {phase.itemsBought}/{phase.targetItems} items ·{' '}
-                  {Math.round(phase.coreSouls).toLocaleString()} /{' '}
+                  {phase.itemsBought}/{phase.targetItems} items ·{" "}
+                  {Math.round(phase.coreSouls).toLocaleString()} /{" "}
                   {Math.round(phase.soulBudget).toLocaleString()} souls
                 </div>
                 <CategoryBar split={phase.categorySouls} />
 
                 <PhaseTempoLines
-                  tempo={phaseTempo(phase, displayBuild.population.baselineWinRate)}
+                  tempo={phaseTempo(
+                    phase,
+                    displayBuild.population.baselineWinRate,
+                  )}
                 />
 
                 <h3 className="grouphdr core">Build</h3>
@@ -766,7 +949,11 @@ export default function App() {
                     c={c}
                     items={items}
                     enemiesById={enemiesById}
-                    swapFor={swapTargetFor(phase, c, displayBuild.population.baselineWinRate)}
+                    swapFor={swapTargetFor(
+                      phase,
+                      c,
+                      displayBuild.population.baselineWinRate,
+                    )}
                   />
                 ))}
                 {phase.situational.length === 0 && counterAdds.length === 0 && (
@@ -786,17 +973,22 @@ export default function App() {
       )}
 
       <footer className="foot">
-        Data:{' '}
+        Data:{" "}
         <a href="https://deadlock-api.com" target="_blank" rel="noreferrer">
           deadlock-api.com
         </a>
-        .{' '}
-        <button type="button" className="guidelink" onClick={() => setShowGuide(true)}>
+        .{" "}
+        <button
+          type="button"
+          className="guidelink"
+          onClick={() => setShowGuide(true)}
+        >
           Methodology &amp; glossary →
         </button>
         <div className="disclaimer">
-          Vibelock is a fan-made, unofficial tool. Not affiliated with, endorsed by, or sponsored by
-          Valve. Deadlock and all related assets are trademarks of Valve Corporation.
+          Vibelock is a fan-made, unofficial tool. Not affiliated with, endorsed
+          by, or sponsored by Valve. Deadlock and all related assets are
+          trademarks of Valve Corporation.
         </div>
       </footer>
 
@@ -811,14 +1003,14 @@ export default function App() {
 function GuideModal({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === "Escape") onClose();
     };
-    window.addEventListener('keydown', onKey);
+    window.addEventListener("keydown", onKey);
     // Freeze the page behind the modal so wheel/touch can't scroll it.
     const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    document.body.style.overflow = "hidden";
     return () => {
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
     };
   }, [onClose]);
@@ -834,7 +1026,12 @@ function GuideModal({ onClose }: { onClose: () => void }) {
       >
         <header className="guide-head">
           <h2>How this works</h2>
-          <button type="button" className="guide-x" onClick={onClose} aria-label="Close">
+          <button
+            type="button"
+            className="guide-x"
+            onClick={onClose}
+            aria-label="Close"
+          >
             ✕
           </button>
         </header>
@@ -843,97 +1040,123 @@ function GuideModal({ onClose }: { onClose: () => void }) {
           <section>
             <h3>Where the numbers come from</h3>
             <p>
-              Every panel is computed live from public match data on{' '}
-              <a href="https://deadlock-api.com" target="_blank" rel="noreferrer">
+              Every panel is computed live from public match data on{" "}
+              <a
+                href="https://deadlock-api.com"
+                target="_blank"
+                rel="noreferrer"
+              >
                 deadlock-api.com
               </a>
-              , filtered to the <strong>rank floor</strong> and <strong>patch</strong> you select
-              (or the last 30 days). Nothing here is hand-curated — change a control and the whole
-              page recomputes.
+              , filtered to the <strong>rank floor</strong> and{" "}
+              <strong>patch</strong> you select (or the last 30 days). Nothing
+              here is hand-curated — change a control and the whole page
+              recomputes.
             </p>
           </section>
 
           <section>
             <h3>Two kinds of win rate</h3>
             <p>
-              <strong>Adjusted win rate</strong> is corrected for{' '}
-              <em>net worth at the moment of purchase</em>, so an item doesn’t look strong just
-              because the team that was already winning happened to buy it. Build and item rows use
-              adjusted rates, and show the <strong>± gap versus the hero’s average</strong>.
+              <strong>Adjusted win rate</strong> is corrected for{" "}
+              <em>net worth at the moment of purchase</em>, so an item doesn’t
+              look strong just because the team that was already winning
+              happened to buy it. Build and item rows use adjusted rates, and
+              show the <strong>± gap versus the hero’s average</strong>.
             </p>
             <p>
-              <strong>Raw win rate</strong> is the plain win rate with no correction. We fall back to
-              it wherever no adjusted figure exists — counter deltas, hero matchups, and whole
-              community builds — so in those spots, <strong>lean on the larger samples</strong>.
+              <strong>Raw win rate</strong> is the plain win rate with no
+              correction. We fall back to it wherever no adjusted figure exists
+              — counter deltas, hero matchups, and whole community builds — so
+              in those spots, <strong>lean on the larger samples</strong>.
             </p>
           </section>
 
           <section>
             <h3>Reading a pick’s two rates together</h3>
-            <p>The gap between an item’s raw and adjusted rate tells you when it earns its win:</p>
+            <p>
+              The gap between an item’s raw and adjusted rate tells you when it
+              earns its win:
+            </p>
             <ul>
               <li>
-                <span className="statetag comeback">comeback</span> adjusted ≫ raw — it holds up
-                even when bought from behind. A safer pick when you’re losing.
+                <span className="statetag comeback">comeback</span> adjusted ≫
+                raw — it holds up even when bought from behind. A safer pick
+                when you’re losing.
               </li>
               <li>
-                <span className="statetag winmore">win more</span> raw ≫ adjusted — its win rate
-                leans on already being ahead. Strong when snowballing, thin when the game is even.
+                <span className="statetag winmore">win more</span> raw ≫
+                adjusted — its win rate leans on already being ahead. Strong
+                when snowballing, thin when the game is even.
               </li>
             </ul>
-            <p className="fine">A pick is only flagged once the gap clears ~3.5 points either way.</p>
+            <p className="fine">
+              A pick is only flagged once the gap clears ~3.5 points either way.
+            </p>
           </section>
 
           <section>
             <h3>How the build is chosen</h3>
             <p>
-              The build isn’t just the top win rates sorted top to bottom — a rarely-built item can show a
-              flashy rate by luck. A few corrections keep it honest:
+              The build isn’t just the top win rates sorted top to bottom — a
+              rarely-built item can show a flashy rate by luck. A few
+              corrections keep it honest:
             </p>
             <ul>
               <li>
-                <strong>Small samples are pulled toward the hero’s average.</strong> Each win rate is
-                dragged toward the hero average by how little data backs it — a pick with thousands of games
-                barely moves, one with a few dozen is pulled most of the way. A shiny niche item won’t
-                outrank a proven staple on noise.
+                <strong>
+                  Small samples are pulled toward the hero’s average.
+                </strong>{" "}
+                Each win rate is dragged toward the hero average by how little
+                data backs it — a pick with thousands of games barely moves, one
+                with a few dozen is pulled most of the way. A shiny niche item
+                won’t outrank a proven staple on noise.
               </li>
               <li>
-                <strong>Picks are ranked cautiously.</strong> Discretionary slots are ordered by the win
-                rate we’re fairly sure a pick <em>at least</em> reaches, so something we’re confident about
+                <strong>Picks are ranked cautiously.</strong> Discretionary
+                slots are ordered by the win rate we’re fairly sure a pick{" "}
+                <em>at least</em> reaches, so something we’re confident about
                 beats something that merely <em>might</em> be great.
               </li>
               <li>
-                <strong>“Value” means real, not just high.</strong> A pick is only labelled a value pick
-                when its edge is big enough to be unlikely from chance at that sample size, not just past a
-                fixed cutoff. Counters work the same way: an item is tagged as answering an enemy by the
-                edge over that matchup we’re <em>confident</em> it has — shrunk toward no-effect by sample —
-                so a thin fluke can’t earn a portrait, but a real, moderate counter isn’t hidden either.
+                <strong>“Value” means real, not just high.</strong> A pick is
+                only labelled a value pick when its edge is big enough to be
+                unlikely from chance at that sample size, not just past a fixed
+                cutoff. Counters work the same way: an item is tagged as
+                answering an enemy by the edge over that matchup we’re{" "}
+                <em>confident</em> it has — shrunk toward no-effect by sample —
+                so a thin fluke can’t earn a portrait, but a real, moderate
+                counter isn’t hidden either.
               </li>
               <li>
-                <strong>Items that win together.</strong> Beyond each pick on its own, the build leans
-                toward items that win <em>together</em> more than their solo rates predict, and away from
-                redundant pairs — so it reads as a coherent kit, not a list of individually-good parts.
+                <strong>Items that win together.</strong> Beyond each pick on
+                its own, the build leans toward items that win <em>together</em>{" "}
+                more than their solo rates predict, and away from redundant
+                pairs — so it reads as a coherent kit, not a list of
+                individually-good parts.
               </li>
             </ul>
             <p className="fine">
-              For the curious: empirical-Bayes shrinkage, lower-confidence-bound ranking, significance gates,
-              and a centered pairwise-synergy term.
+              For the curious: empirical-Bayes shrinkage, lower-confidence-bound
+              ranking, significance gates, and a centered pairwise-synergy term.
             </p>
           </section>
 
           <section>
             <h3>Adjusting for the enemy comp</h3>
             <p>
-              Add enemy heroes and the build re-ranks. Picks that answer the comp rise and carry the
-              enemy’s portrait — the number is that pick’s raw win-rate gain into that hero — while
-              picks that are weak into the comp get a <span className="weakcomp">▼</span> flag.
+              Add enemy heroes and the build re-ranks. Picks that answer the
+              comp rise and carry the enemy’s portrait — the number is that
+              pick’s raw win-rate gain into that hero — while picks that are
+              weak into the comp get a <span className="weakcomp">▼</span> flag.
               Staples and per-category soul balance are preserved.
             </p>
             <p>
-              A counter is only marked when its edge over the matchup is large enough to be real at that
-              sample, and — because every item is tested against every threat at once — we cap how many
-              false marks slip through, so most of what you see is genuine. Counter numbers are raw, so they
-              read cleanest one threat at a time.
+              A counter is only marked when its edge over the matchup is large
+              enough to be real at that sample, and — because every item is
+              tested against every threat at once — we cap how many false marks
+              slip through, so most of what you see is genuine. Counter numbers
+              are raw, so they read cleanest one threat at a time.
             </p>
           </section>
 
@@ -941,97 +1164,121 @@ function GuideModal({ onClose }: { onClose: () => void }) {
             <h3>Glossary</h3>
             <dl className="glossary">
               <dt>Adjusted WR</dt>
-              <dd>Win rate corrected for net worth at purchase. Used on every build/item row.</dd>
+              <dd>
+                Win rate corrected for net worth at purchase. Used on every
+                build/item row.
+              </dd>
 
               <dt>Raw WR</dt>
-              <dd>Uncorrected win rate. Used for counters, matchups, and whole community builds.</dd>
+              <dd>
+                Uncorrected win rate. Used for counters, matchups, and whole
+                community builds.
+              </dd>
 
               <dt>Hero avg</dt>
               <dd>
-                The population’s baseline win rate for this hero, rank and patch. Rows show ± versus
-                it.
+                The population’s baseline win rate for this hero, rank and
+                patch. Rows show ± versus it.
               </dd>
 
               <dt>pulled to average</dt>
               <dd>
-                Small-sample win rates are dragged toward the hero average by how little data backs them, so
-                a lucky streak on a rarely-built item can’t top the list. The fewer the games, the harder the
+                Small-sample win rates are dragged toward the hero average by
+                how little data backs them, so a lucky streak on a rarely-built
+                item can’t top the list. The fewer the games, the harder the
                 pull.
               </dd>
 
               <dt>confidence ranking</dt>
               <dd>
-                Discretionary picks are ordered by the win rate we’re fairly sure they <em>at least</em>
-                reach — a cautious estimate that builds in sample size — so a proven pick beats a shakier
-                high-roller.
+                Discretionary picks are ordered by the win rate we’re fairly
+                sure they <em>at least</em>
+                reach — a cautious estimate that builds in sample size — so a
+                proven pick beats a shakier high-roller.
               </dd>
 
               <dt>significant</dt>
               <dd>
-                An edge big enough to be unlikely from chance at that sample size. It’s the bar a pick clears
-                to be called a value pick or a counter — not just beating a fixed number.
+                An edge big enough to be unlikely from chance at that sample
+                size. It’s the bar a pick clears to be called a value pick or a
+                counter — not just beating a fixed number.
               </dd>
 
               <dt>synergy</dt>
               <dd>
-                Two items that win <em>together</em> more (or less) than their solo rates predict. The build
-                favours pairs that reinforce each other and avoids redundant ones; it’s baked into which
-                picks fill the discretionary slots, not shown as its own list.
+                Two items that win <em>together</em> more (or less) than their
+                solo rates predict. The build favours pairs that reinforce each
+                other and avoids redundant ones; it’s baked into which picks
+                fill the discretionary slots, not shown as its own list.
               </dd>
 
               <dt>
                 <span className="statetag comeback">comeback</span>
               </dt>
-              <dd>Adjusted ≫ raw — the pick holds up even when you buy it from behind.</dd>
+              <dd>
+                Adjusted ≫ raw — the pick holds up even when you buy it from
+                behind.
+              </dd>
 
               <dt>
                 <span className="statetag winmore">win more</span>
               </dt>
-              <dd>Raw ≫ adjusted — the pick’s win rate leans on already being ahead.</dd>
+              <dd>
+                Raw ≫ adjusted — the pick’s win rate leans on already being
+                ahead.
+              </dd>
 
               <dt>% match</dt>
               <dd>
-                How much a community build’s core overlaps ours: shared ÷ combined core items
-                (Jaccard). Ranks builds “most like ours”, so tightly focused builds rank above
-                kitchen-sink ones.
+                How much a community build’s core overlaps ours: shared ÷
+                combined core items (Jaccard). Ranks builds “most like ours”, so
+                tightly focused builds rank above kitchen-sink ones.
               </dd>
 
               <dt>core / flex</dt>
               <dd>
-                Core = the committed picks; flex = situational ones. “core N/M” counts our core picks
-                a community build also runs; “flex N/M” counts our situational picks it also flags
-                situational (secondary, not ranked).
+                Core = the committed picks; flex = situational ones. “core N/M”
+                counts our core picks a community build also runs; “flex N/M”
+                counts our situational picks it also flags situational
+                (secondary, not ranked).
               </dd>
 
               <dt>archetype / signature</dt>
               <dd>
-                A build style defined by a signature item (e.g. a gun or spirit core). “all” blends
-                every build for the hero together.
+                A build style defined by a signature item (e.g. a gun or spirit
+                core). “all” blends every build for the hero together.
               </dd>
 
               <dt>core by X · rush if ahead / buy later</dt>
               <dd>
-                A situational pick that becomes core in a later phase. <em>Rush if ahead</em> — buy it
-                early when you’re winning — only when it wins about as much bought this early; if it does
-                worse early, it’s tagged <em>buy later</em> instead.
+                A situational pick that becomes core in a later phase.{" "}
+                <em>Rush if ahead</em> — buy it early when you’re winning — only
+                when it wins about as much bought this early; if it does worse
+                early, it’s tagged <em>buy later</em> instead.
               </dd>
 
               <dt>
                 weak into comp <span className="weakcomp">▼</span>
               </dt>
-              <dd>The pick loses win rate against the enemies you’ve selected, and nothing on its row counters them.</dd>
+              <dd>
+                The pick loses win rate against the enemies you’ve selected, and
+                nothing on its row counters them.
+              </dd>
 
               <dt>thin / low sample</dt>
               <dd>Too few matches to trust — treat the number as noisy.</dd>
 
               <dt>standing slots</dt>
-              <dd>How many of your active-item slots the build uses, against the in-game cap.</dd>
+              <dd>
+                How many of your active-item slots the build uses, against the
+                in-game cap.
+              </dd>
             </dl>
           </section>
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 }
 
@@ -1043,7 +1290,7 @@ function GuideModal({ onClose }: { onClose: () => void }) {
 function ShuffleMark({
   items,
   size = 36,
-  seed = '',
+  seed = "",
 }: {
   items: Map<number, Item> | null;
   size?: number;
@@ -1081,7 +1328,13 @@ function hashIndex(s: string, mod: number): number {
 
 // First-paint / cold-query state: the shuffling mark, gently bobbing, over a label.
 // Replaces the old "Loading build…" / "refreshing…" text so loading reads as one thing.
-function LoadingState({ items, label }: { items: Map<number, Item> | null; label: string }) {
+function LoadingState({
+  items,
+  label,
+}: {
+  items: Map<number, Item> | null;
+  label: string;
+}) {
   return (
     <div className="loadstate">
       <ShuffleMark items={items} size={46} />
@@ -1099,8 +1352,8 @@ function SkillEmpty() {
         Skill order <span className="sub">not enough games on this filter</span>
       </h2>
       <p className="empty">
-        No upgrade order has a confident sample here. Try <strong>Last 30 days</strong> or a lower
-        rank floor.
+        No upgrade order has a confident sample here. Try{" "}
+        <strong>Last 30 days</strong> or a lower rank floor.
       </p>
     </section>
   );
@@ -1160,13 +1413,17 @@ function PhaseTempoLines({ tempo }: { tempo: PhaseTempo | null }) {
   );
 }
 
-function CategoryBar({ split }: { split: Record<'weapon' | 'vitality' | 'spirit', number> }) {
+function CategoryBar({
+  split,
+}: {
+  split: Record<"weapon" | "vitality" | "spirit", number>;
+}) {
   const total = split.weapon + split.vitality + split.spirit;
   if (total <= 0) return null;
-  const segs: Array<['weapon' | 'vitality' | 'spirit', string]> = [
-    ['weapon', 'Weapon'],
-    ['vitality', 'Vitality'],
-    ['spirit', 'Spirit'],
+  const segs: Array<["weapon" | "vitality" | "spirit", string]> = [
+    ["weapon", "Weapon"],
+    ["vitality", "Vitality"],
+    ["spirit", "Spirit"],
   ];
   return (
     <div className="catbar" title="Souls this build invests per category">
@@ -1182,7 +1439,7 @@ function CategoryBar({ split }: { split: Record<'weapon' | 'vitality' | 'spirit'
             style={{ width: `${exact}%`, background: SLOT_COLORS[slot] }}
             title={`${label}: ${souls.toLocaleString()} souls (${exact.toFixed(1)}%)`}
           >
-            {exact >= 8 ? `${pct}%` : ''}
+            {exact >= 8 ? `${pct}%` : ""}
           </span>
         );
       })}
@@ -1215,7 +1472,9 @@ function OvertimeColumn({
       <h2>
         Overtime buys <span className="time">build full · 30+ min</span>
       </h2>
-      <div className="budget">Surplus souls? Replace your lowest-tier slots — best at late, top first.</div>
+      <div className="budget">
+        Surplus souls? Replace your lowest-tier slots — best at late, top first.
+      </div>
       <h3 className="grouphdr core">Buy in this order</h3>
       {buys.map((b) => (
         <ItemRow
@@ -1249,7 +1508,12 @@ function CounterPicker({
       {enemies.map((id) => {
         const h = heroes.find((x) => x.id === id);
         return (
-          <button className="chip" key={id} onClick={() => onRemove(id)} title="remove">
+          <button
+            className="chip"
+            key={id}
+            onClick={() => onRemove(id)}
+            title="remove"
+          >
             {h?.name ?? id} ✕
           </button>
         );
@@ -1286,20 +1550,27 @@ function SkillOrder({
 }) {
   // Rows in in-game slot order; fall back to upgrade order if slots are unknown.
   const present = new Set(skill.order);
-  const rows = (slotOrder.length ? slotOrder : skill.maxPriority).filter((id) => present.has(id));
-  const colorOf = (id: number) => ABILITY_COLORS[rows.indexOf(id) % ABILITY_COLORS.length];
-  const maxLabel = ['max 1st', 'max 2nd', 'max 3rd', 'max 4th'];
+  const rows = (slotOrder.length ? slotOrder : skill.maxPriority).filter((id) =>
+    present.has(id),
+  );
+  const colorOf = (id: number) =>
+    ABILITY_COLORS[rows.indexOf(id) % ABILITY_COLORS.length];
+  const maxLabel = ["max 1st", "max 2nd", "max 3rd", "max 4th"];
 
   return (
     <section className="skills" ref={settleRef}>
       <h2>
-        Skill order{' '}
+        Skill order{" "}
         <span className="sub">
-          {(skill.winRate * 100).toFixed(0)}% WR · n={skill.sample.toLocaleString()}
+          {(skill.winRate * 100).toFixed(0)}% WR · n=
+          {skill.sample.toLocaleString()}
           {skill.lowSample && <span className="warn"> · ⚠ thin sample</span>}
         </span>
       </h2>
-      <div className="skill-grid" style={{ ['--steps' as string]: skill.order.length }}>
+      <div
+        className="skill-grid"
+        style={{ ["--steps" as string]: skill.order.length }}
+      >
         {rows.map((id) => {
           const a = abilities.get(id);
           const color = colorOf(id);
@@ -1310,7 +1581,9 @@ function SkillOrder({
                 {a?.image && <img src={a.image} alt="" loading="lazy" />}
                 <div className="srow-info">
                   <span className="aname">{a?.name ?? id}</span>
-                  <span className="amax">{maxLabel[ri] ?? `max ${ri + 1}`}</span>
+                  <span className="amax">
+                    {maxLabel[ri] ?? `max ${ri + 1}`}
+                  </span>
                 </div>
               </div>
               <div className="srow-cells">
@@ -1319,11 +1592,11 @@ function SkillOrder({
                   return (
                     <span
                       key={i}
-                      className={`pip ${on ? 'on' : ''}`}
+                      className={`pip ${on ? "on" : ""}`}
                       style={on ? { background: color } : undefined}
                       title={on ? `point ${i + 1}` : undefined}
                     >
-                      {on ? i + 1 : ''}
+                      {on ? i + 1 : ""}
                     </span>
                   );
                 })}
@@ -1351,9 +1624,9 @@ function MatchupChip({
 }) {
   return (
     <button
-      className={`mchip ${tough ? 'tough' : 'fav'} ${active ? 'active' : ''}`}
+      className={`mchip ${tough ? "tough" : "fav"} ${active ? "active" : ""}`}
       onClick={onClick}
-      title={`${hero?.name ?? '?'}: ${(m.winRate * 100).toFixed(0)}% win rate (${m.delta >= 0 ? '+' : ''}${(m.delta * 100).toFixed(0)} vs avg), n=${m.sample.toLocaleString()}${m.laneCsDelta < -10 ? ` · you average ${Math.round(m.laneCsDelta)} CS in lane` : ''}`}
+      title={`${hero?.name ?? "?"}: ${(m.winRate * 100).toFixed(0)}% win rate (${m.delta >= 0 ? "+" : ""}${(m.delta * 100).toFixed(0)} vs avg), n=${m.sample.toLocaleString()}${m.laneCsDelta < -10 ? ` · you average ${Math.round(m.laneCsDelta)} CS in lane` : ""}`}
     >
       {hero?.image && <img src={hero.image} alt="" loading="lazy" />}
       <span className="mname">{hero?.name ?? m.enemyHeroId}</span>
@@ -1370,8 +1643,8 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
 function CounterBubble({ mark, hero }: { mark: CounterMark; hero?: Hero }) {
   return (
     <span
-      className={`cbubble ${mark.lowSample ? 'low' : ''}`}
-      title={`vs ${hero?.name ?? '?'}: +${(mark.delta * 100).toFixed(1)} win rate${mark.lowSample ? ' (thin sample)' : ''}`}
+      className={`cbubble ${mark.lowSample ? "low" : ""}`}
+      title={`vs ${hero?.name ?? "?"}: +${(mark.delta * 100).toFixed(1)} win rate${mark.lowSample ? " (thin sample)" : ""}`}
     >
       {hero?.image && <img src={hero.image} alt={hero.name} loading="lazy" />}+
       {(mark.delta * 100).toFixed(1)}
@@ -1388,7 +1661,7 @@ function ItemTags({
   imbue,
   weakEdge,
   swapFor,
-  swapLabel = 'swap for',
+  swapLabel = "swap for",
   coreLater,
   coreRush,
   rawWr,
@@ -1437,15 +1710,25 @@ function ItemTags({
       {imbue && (
         <span
           className="rel imbue"
-          style={imbue.colorIndex >= 0 ? { borderColor: ABILITY_COLORS[imbue.colorIndex] } : undefined}
+          style={
+            imbue.colorIndex >= 0
+              ? { borderColor: ABILITY_COLORS[imbue.colorIndex] }
+              : undefined
+          }
           title={`${Math.round(imbue.share * 100)}% of the ${imbue.sample} community builds that set a target imbue this onto ${imbue.ability.name}`}
         >
-          {imbue.ability.image && <img src={imbue.ability.image} alt="" loading="lazy" />}
+          {imbue.ability.image && (
+            <img src={imbue.ability.image} alt="" loading="lazy" />
+          )}
           imbue → {imbue.ability.name}
         </span>
       )}
       {bubbles.map((m) => (
-        <CounterBubble key={m.enemyHeroId} mark={m} hero={enemiesById!.get(m.enemyHeroId)} />
+        <CounterBubble
+          key={m.enemyHeroId}
+          mark={m}
+          hero={enemiesById!.get(m.enemyHeroId)}
+        />
       ))}
       {weakEdge !== undefined && (
         <span className="weakcomp" title="Weak into the selected comp">
@@ -1461,7 +1744,8 @@ function ItemTags({
               : `Core by ${coreLater} — but it does worse bought this early, so don't rush it`
           }
         >
-          core by {coreLater}{coreRush ? ' · rush if ahead' : ' · buy later'}
+          core by {coreLater}
+          {coreRush ? " · rush if ahead" : " · buy later"}
         </span>
       )}
       {swapFor && (
@@ -1473,12 +1757,12 @@ function ItemTags({
         <span
           className={`statetag ${state}`}
           title={
-            state === 'winmore'
+            state === "winmore"
               ? `Win-more: raw ${pct(rawWr!)} ≫ adjusted ${pct(adjWr!)} — its win rate leans on already being ahead`
               : `Comeback: adjusted ${pct(adjWr!)} ≫ raw ${pct(rawWr!)} — holds up even when bought behind`
           }
         >
-          {state === 'winmore' ? 'win more' : 'comeback'}
+          {state === "winmore" ? "win more" : "comeback"}
         </span>
       )}
     </div>
@@ -1489,11 +1773,18 @@ function ItemTags({
  * number is the raw per-enemy delta (item-stats has no adjusted rate). */
 /** The core pick a counter item should swap in for: the weakest same-slot core item for this
  * comp (lowest comp-aware score) — the one to drop to make room. */
-function swapTargetFor(phase: BuildPhase, c: ItemCounters, baseline: number): ItemRef | undefined {
+function swapTargetFor(
+  phase: BuildPhase,
+  c: ItemCounters,
+  baseline: number,
+): ItemRef | undefined {
   // Only a non-staple core pick is a fair thing to drop for an experimental counter.
-  const slotCore = phase.core.filter((b) => b.item.slot === c.item.slot && b.role !== 'universal');
+  const slotCore = phase.core.filter(
+    (b) => b.item.slot === c.item.slot && b.role !== "universal",
+  );
   if (!slotCore.length) return undefined;
-  const sc = (b: BuildItem) => (b.compEdge ?? 0) + (b.adjustedWinRate - baseline);
+  const sc = (b: BuildItem) =>
+    (b.compEdge ?? 0) + (b.adjustedWinRate - baseline);
   const worst = slotCore.reduce((w, b) => (sc(b) < sc(w) ? b : w));
   return { id: worst.item.id, name: worst.item.name };
 }
@@ -1535,12 +1826,17 @@ function CounterAddRow({
             <span className="wrabs">{(top.winRate * 100).toFixed(0)}%</span>
           </span>
           <span className="pick">counters comp</span>
-          <span className={`n ${top.lowSample ? 'low' : ''}`}>
+          <span className={`n ${top.lowSample ? "low" : ""}`}>
             n={top.sample.toLocaleString()}
-            {top.lowSample ? ' ⚠' : ''}
+            {top.lowSample ? " ⚠" : ""}
           </span>
         </div>
-        <ItemTags counter={c} enemiesById={enemiesById} swapFor={swapFor} swapLabel="in for" />
+        <ItemTags
+          counter={c}
+          enemiesById={enemiesById}
+          swapFor={swapFor}
+          swapLabel="in for"
+        />
       </div>
     </ItemHover>
   );
@@ -1551,7 +1847,8 @@ function CounterAddRow({
  * When that discount applies, show the marginal price with the full sticker struck through. */
 function CostTag({ b }: { b: BuildItem }) {
   const eff = b.effectiveCost ?? b.item.cost;
-  if (eff >= b.item.cost) return <span className="cost">{b.item.cost.toLocaleString()}</span>;
+  if (eff >= b.item.cost)
+    return <span className="cost">{b.item.cost.toLocaleString()}</span>;
   const saved = b.item.cost - eff;
   return (
     <span
@@ -1591,7 +1888,7 @@ function ItemRow({
     <ItemHover
       item={b.item}
       items={items}
-      className={`item ${muted ? 'muted' : ''} ${b.transient ? 'transient' : ''}`}
+      className={`item ${muted ? "muted" : ""} ${b.transient ? "transient" : ""}`}
       style={{ borderLeftColor: color }}
       counter={counter}
       enemiesById={enemiesById}
@@ -1604,8 +1901,8 @@ function ItemRow({
         <div className="line1">
           <span className="name">
             {!muted && (
-              <span className={`role role-${b.transient ? 'temp' : b.role}`}>
-                {b.transient ? 'TEMP' : roleLabel(b.role)}
+              <span className={`role role-${b.transient ? "temp" : b.role}`}>
+                {b.transient ? "TEMP" : roleLabel(b.role)}
               </span>
             )}
             {b.item.name}
@@ -1619,7 +1916,9 @@ function ItemRow({
             title={`${(b.adjustedWinRate * 100).toFixed(1)}% adjusted WR · hero avg ${(baseline * 100).toFixed(1)}%`}
           >
             {fmtDelta(b.adjustedWinRate - baseline)}
-            <span className="wrabs">{(b.adjustedWinRate * 100).toFixed(0)}%</span>
+            <span className="wrabs">
+              {(b.adjustedWinRate * 100).toFixed(0)}%
+            </span>
           </span>
           <span className="pick">{(b.pickRate * 100).toFixed(0)}% pick</span>
           <span className="n">n={b.sample.toLocaleString()}</span>
@@ -1673,7 +1972,9 @@ function ItemHover({
       ref={ref}
       className={className}
       style={style}
-      onMouseEnter={() => ref.current && setAnchor(ref.current.getBoundingClientRect())}
+      onMouseEnter={() =>
+        ref.current && setAnchor(ref.current.getBoundingClientRect())
+      }
       onMouseLeave={() => setAnchor(null)}
     >
       {children}
@@ -1729,7 +2030,11 @@ function ItemCard({
     .filter((n): n is string => !!n);
 
   return createPortal(
-    <div ref={ref} className="itemcard" style={{ left: pos.left, top: pos.top, borderColor: color }}>
+    <div
+      ref={ref}
+      className="itemcard"
+      style={{ left: pos.left, top: pos.top, borderColor: color }}
+    >
       <div className="ic-head" style={{ background: color }}>
         {item.image && <img src={item.image} alt="" />}
         <div className="ic-title">
@@ -1752,32 +2057,41 @@ function ItemCard({
                   <span className="cn">{h?.name ?? `#${m.enemyHeroId}`}</span>
                   <span className="cd">+{(m.delta * 100).toFixed(1)}</span>
                   <span className="cw">
-                    {(m.winRate * 100).toFixed(0)}% WR{m.lowSample ? ' · thin' : ''}
+                    {(m.winRate * 100).toFixed(0)}% WR
+                    {m.lowSample ? " · thin" : ""}
                   </span>
                 </li>
               );
             })}
           </ul>
-          <p className="ic-note">Win-rate gain above the general matchup, vs each enemy.</p>
+          <p className="ic-note">
+            Win-rate gain above the general matchup, vs each enemy.
+          </p>
         </div>
       )}
 
       {item.card?.sections.map((s, i) => (
         <div className={`ic-sec ${s.kind}`} key={i}>
-          {s.kind !== 'innate' && (
-            <span className="ic-kind">{s.kind === 'active' ? 'Active' : 'Passive'}</span>
+          {s.kind !== "innate" && (
+            <span className="ic-kind">
+              {s.kind === "active" ? "Active" : "Passive"}
+            </span>
           )}
           {s.text && s.text.length > 0 && (
             <p className="ic-text">
               {s.text.map((seg, j) =>
-                seg.highlight ? <strong key={j}>{seg.text}</strong> : <span key={j}>{seg.text}</span>,
+                seg.highlight ? (
+                  <strong key={j}>{seg.text}</strong>
+                ) : (
+                  <span key={j}>{seg.text}</span>
+                ),
               )}
             </p>
           )}
           {s.stats.length > 0 && (
             <ul className="ic-stats">
               {s.stats.map((st, j) => (
-                <li key={j} className={st.strong ? 'strong' : undefined}>
+                <li key={j} className={st.strong ? "strong" : undefined}>
                   <span className="v">{st.value}</span> {st.label}
                 </li>
               ))}
@@ -1786,9 +2100,11 @@ function ItemCard({
         </div>
       ))}
 
-      {!item.card && item.effect && <p className="ic-text plain">{item.effect}</p>}
+      {!item.card && item.effect && (
+        <p className="ic-text plain">{item.effect}</p>
+      )}
       {components.length > 0 && (
-        <div className="ic-comp">Builds from: {components.join(', ')}</div>
+        <div className="ic-comp">Builds from: {components.join(", ")}</div>
       )}
       {buildsToward && (
         <div className="ic-comp">Most build toward: {buildsToward.name}</div>
@@ -1821,17 +2137,22 @@ function CommunityRow({
   const total = rb.build.itemIds.length;
 
   const copyId = () => {
-    navigator.clipboard?.writeText(String(rb.build.id)).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    }, () => {});
+    navigator.clipboard?.writeText(String(rb.build.id)).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+      },
+      () => {},
+    );
   };
 
   return (
     <div
       ref={ref}
-      className={`crow ${agree ? 'agree' : ''}`}
-      onMouseEnter={() => ref.current && setAnchor(ref.current.getBoundingClientRect())}
+      className={`crow ${agree ? "agree" : ""}`}
+      onMouseEnter={() =>
+        ref.current && setAnchor(ref.current.getBoundingClientRect())
+      }
       onMouseLeave={() => setAnchor(null)}
     >
       <span className="ctag">{tag}</span>
@@ -1855,7 +2176,7 @@ function CommunityRow({
             `${rb.shared} of your ${our.coreCount} core picks are in their ${coreSize}-item core.` +
             (our.situCount > 0
               ? ` Flex: ${rb.situShared} of your ${our.situCount} situational picks appear in their situational list (${total - coreSize} items) — secondary, not ranked.`
-              : '')
+              : "")
           }
         >
           core {rb.shared}/{our.coreCount}
@@ -1869,11 +2190,16 @@ function CommunityRow({
           onClick={copyId}
           title="Copy build ID — paste into the in-game build search"
         >
-          {copied ? 'copied ✓' : `#${rb.build.id}`}
+          {copied ? "copied ✓" : `#${rb.build.id}`}
         </button>
       </div>
       {anchor && items && (
-        <BuildPreview build={rb.build} items={items} ourIds={ourIds} anchor={anchor} />
+        <BuildPreview
+          build={rb.build}
+          items={items}
+          ourIds={ourIds}
+          anchor={anchor}
+        />
       )}
     </div>
   );
@@ -1938,21 +2264,29 @@ function BuildPreview({
   );
 
   return createPortal(
-    <div ref={ref} className="buildprev" style={{ left: pos.left, top: pos.top }}>
+    <div
+      ref={ref}
+      className="buildprev"
+      style={{ left: pos.left, top: pos.top }}
+    >
       <div className="bp-head">
         <span className="bp-name">{build.name}</span>
         <span className="bp-id">#{build.id}</span>
       </div>
-      <div className="bp-grid">{resolved.map((i) => icon(i, ourIds.has(i.id) ? 'shared' : ''))}</div>
+      <div className="bp-grid">
+        {resolved.map((i) => icon(i, ourIds.has(i.id) ? "shared" : ""))}
+      </div>
       {missing.length > 0 && (
         <>
           <div className="bp-sub">Only in our build ({missing.length})</div>
-          <div className="bp-grid">{missing.map((i) => icon(i, 'missing'))}</div>
+          <div className="bp-grid">
+            {missing.map((i) => icon(i, "missing"))}
+          </div>
         </>
       )}
       <div className="bp-foot">
         {shared} of your {ourIds.size} picks shared
-        {missing.length > 0 ? ` · ${missing.length} only in ours` : ''}
+        {missing.length > 0 ? ` · ${missing.length} only in ours` : ""}
       </div>
     </div>,
     document.body,
@@ -1960,33 +2294,33 @@ function BuildPreview({
 }
 
 function fmtDate(unixS: number): string {
-  return unixS ? new Date(unixS * 1000).toISOString().slice(0, 10) : '—';
+  return unixS ? new Date(unixS * 1000).toISOString().slice(0, 10) : "—";
 }
 
 function wrColor(wr: number): string {
-  if (wr >= 0.56) return '#54c66b';
-  if (wr >= 0.52) return '#a6cf57';
-  if (wr >= 0.48) return '#d8c14a';
-  return '#d87a7a';
+  if (wr >= 0.56) return "#54c66b";
+  if (wr >= 0.52) return "#a6cf57";
+  if (wr >= 0.48) return "#d8c14a";
+  return "#d87a7a";
 }
 
-function roleLabel(role: BuildItem['role']): string {
-  if (role === 'universal') return 'CORE';
-  if (role === 'filler') return 'FILLER';
-  if (role === 'need') return 'SUSTAIN'; // the only NeedKind we classify
-  return 'VALUE';
+function roleLabel(role: BuildItem["role"]): string {
+  if (role === "universal") return "CORE";
+  if (role === "filler") return "FILLER";
+  if (role === "need") return "SUSTAIN"; // the only NeedKind we classify
+  return "VALUE";
 }
 
 /** Win rate as a signed delta vs the hero baseline (e.g. "+7.2", "−0.7"). */
 function fmtDelta(d: number): string {
   const v = d * 100;
-  return `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}`;
+  return `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}`;
 }
 
 /** Color a WR delta: centered on the baseline, so 0 reads neutral, not "bad". */
 function deltaColor(d: number): string {
-  if (d >= 0.04) return '#54c66b';
-  if (d >= 0.02) return '#a6cf57';
-  if (d >= -0.02) return '#d8c14a';
-  return '#d87a7a';
+  if (d >= 0.04) return "#54c66b";
+  if (d >= 0.02) return "#a6cf57";
+  if (d >= -0.02) return "#d8c14a";
+  return "#d87a7a";
 }
