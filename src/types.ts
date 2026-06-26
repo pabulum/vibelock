@@ -207,9 +207,10 @@ export interface BuildItem {
   /** If this situational pick is *core* in a later phase: that phase's label — a "core item by
    * then" clue, not a true swap. */
   coreLater?: string;
-  /** True only when rushing it early is actually supported: its win rate in *this* (earlier) phase
-   * isn't materially worse than in the later phase where it's core. When false, `coreLater` still
-   * says it becomes core later, but we don't tell the player to rush it (early buys do worse). */
+  /** Default true ("rush if ahead"): rushing it early is supported unless the later core phase wins
+   * *significantly and meaningfully* more than this early buy (sample-aware — see significantlyHigher).
+   * When false, `coreLater` still says it becomes core later, but we say "buy later" — early buys do
+   * measurably worse, beyond what sampling noise explains. */
   coreRush?: boolean;
 }
 

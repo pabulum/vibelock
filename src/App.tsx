@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type DependencyList,
   type ReactNode,
   type Ref,
 } from 'react';
@@ -25,7 +26,14 @@ import {
   type TimeWindow,
 } from './api/deadlock';
 import { assembleArchetypes, pickSignatures } from './lib/archetypes';
-import { rerankBuildForComp, SLOT_CAP, SLOT_COLORS } from './lib/buildGenerator';
+import {
+  classifyWinState,
+  phaseTempo,
+  rerankBuildForComp,
+  SLOT_CAP,
+  SLOT_COLORS,
+  type PhaseTempo,
+} from './lib/buildGenerator';
 import { matchCommunityBuilds } from './lib/communityBuilds';
 import { computeItemCounters } from './lib/counters';
 import { buildSynergyLookup, singleRecordsFromFlow } from './lib/synergy';
@@ -135,6 +143,39 @@ function useSettle<T extends HTMLElement>(loading: boolean) {
   return ref;
 }
 
+/**
+ * Runs an abortable async task whenever `deps` change and reports whether it's in flight — the shared
+ * scaffolding behind every data fetch here: abort the previous run on change/unmount, flip a loading
+ * flag, and funnel failures to one error sink. Pass `null`/`false` as `run` to stand down (no fetch, not
+ * loading) when a precondition isn't met. The task gets the AbortSignal; guard your setState calls with
+ * `!signal.aborted` so a superseded fetch can't clobber the current selection.
+ *
+ * Lifting the fetch bodies out of `useEffect` and into a task argument is also what keeps the
+ * set-state-in-effect rule satisfied: their setState calls no longer sit lexically inside an effect. The
+ * single remaining in-effect transition is `setLoading(true)` below — and that render is exactly what we
+ * want (it shows the panel's veil), so it's deliberately exempted.
+ */
+function useAsyncTask(
+  run: ((signal: AbortSignal) => Promise<void>) | null | false,
+  deps: DependencyList,
+  onError: (message: string) => void,
+): boolean {
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (!run) return;
+    const ctrl = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: render the loading veil
+    setLoading(true);
+    run(ctrl.signal)
+      .catch((e) => !ctrl.signal.aborted && onError(String(e)))
+      .finally(() => !ctrl.signal.aborted && setLoading(false));
+    return () => ctrl.abort();
+    // deps are forwarded by the caller; exhaustive-deps validates them at the call site (additionalHooks).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return loading && !!run;
+}
+
 export default function App() {
   const [heroes, setHeroes] = useState<Hero[]>([]);
   const [items, setItems] = useState<Map<number, Item> | null>(null);
@@ -147,19 +188,14 @@ export default function App() {
   const [archetypeSet, setArchetypeSet] = useState<ArchetypeSet | null>(null);
   const [archKey, setArchKey] = useState<ArchetypeKey>('all');
   const [counterMatrix, setCounterMatrix] = useState<HeroCounterRow[] | null>(null);
-  const [matrixLoading, setMatrixLoading] = useState(false);
   const [abilities, setAbilities] = useState<Map<number, Ability> | null>(null);
   const [skillBuild, setSkillBuild] = useState<SkillBuild | null>(null);
-  const [skillLoading, setSkillLoading] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [counters, setCounters] = useState<ItemCounters[] | null>(null);
   const [compEdges, setCompEdges] = useState<Map<number, number> | null>(null);
-  const [countersLoading, setCountersLoading] = useState(false);
   const [community, setCommunity] = useState<{
     builds: CommunityBuild[];
     stats: HeroBuildStatRow[];
   } | null>(null);
-  const [communityLoading, setCommunityLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
 
@@ -180,17 +216,14 @@ export default function App() {
   const minBadge = tierToMinBadge(tier);
 
   // Generate builds, split by archetype for flex heroes.
-  useEffect(() => {
-    if (!hero || !items) return;
-    const ctrl = new AbortController();
-    setLoading(true);
-    setError(null);
+  const loading = useAsyncTask(
+    async (signal) => {
+      if (!hero || !items) return;
+      setError(null);
+      const window = windowFor(patches, patchIdx);
+      const flowFor = (includeItemIds?: number[]) =>
+        getItemFlowStats({ heroId: hero.id, minBadge, ...window, includeItemIds });
 
-    const window = windowFor(patches, patchIdx);
-    const flowFor = (includeItemIds?: number[]) =>
-      getItemFlowStats({ heroId: hero.id, minBadge, ...window, includeItemIds });
-
-    (async () => {
       // Base population + buy times (for buy-order) + item-pair permutation stats, in parallel. The
       // permutation payload is large but overlaps the flow fetches below; a failure is non-fatal (the
       // build just ranks on win rate alone and the synergy panel hides).
@@ -218,7 +251,7 @@ export default function App() {
         sig.gun ? flowFor([sig.gun]) : Promise.resolve(undefined),
         sig.spirit ? flowFor([sig.spirit]) : Promise.resolve(undefined),
       ]);
-      if (ctrl.signal.aborted) return;
+      if (signal.aborted) return;
 
       const set = assembleArchetypes(
         hero,
@@ -232,62 +265,55 @@ export default function App() {
       );
       setArchetypeSet(set);
       setArchKey(set.archetypes[0].key); // best win rate (or "all")
-    })()
-      .catch((e) => !ctrl.signal.aborted && setError(String(e)))
-      .finally(() => !ctrl.signal.aborted && setLoading(false));
-
-    return () => ctrl.abort();
-  }, [hero, items, minBadge, tier, patchIdx, patches]);
+    },
+    [hero, items, minBadge, tier, patchIdx, patches],
+    setError,
+  );
 
   const activeArchetype =
     archetypeSet?.archetypes.find((a) => a.key === archKey) ?? archetypeSet?.archetypes[0] ?? null;
   const build = activeArchetype?.build ?? null;
 
   // Compute counters vs the chosen enemies.
-  useEffect(() => {
-    if (!hero || !items || enemies.length === 0) {
-      setCounters(null);
-      setCompEdges(null);
-      return;
-    }
-    const ctrl = new AbortController();
-    setCountersLoading(true);
-    const window = windowFor(patches, patchIdx);
-    const base = { heroId: hero.id, minBadge, ...window };
+  const countersLoading = useAsyncTask(
+    async (signal) => {
+      if (!hero || !items || enemies.length === 0) {
+        setCounters(null);
+        setCompEdges(null);
+        return;
+      }
+      const window = windowFor(patches, patchIdx);
+      const base = { heroId: hero.id, minBadge, ...window };
 
-    // One query per enemy (not a combined `any-of` query) so each item keeps a per-enemy
-    // delta — that's what lets a row carry the portrait of the specific hero it answers.
-    Promise.all([
-      getItemStats(base),
-      Promise.all(
-        enemies.map((id) =>
-          getItemStats({ ...base, enemyHeroIds: [id] }).then((stats) => ({ enemyHeroId: id, stats })),
+      // One query per enemy (not a combined `any-of` query) so each item keeps a per-enemy
+      // delta — that's what lets a row carry the portrait of the specific hero it answers.
+      const [baseStats, perEnemy] = await Promise.all([
+        getItemStats(base),
+        Promise.all(
+          enemies.map((id) =>
+            getItemStats({ ...base, enemyHeroIds: [id] }).then((stats) => ({ enemyHeroId: id, stats })),
+          ),
         ),
-      ),
-    ])
-      .then(([baseStats, perEnemy]) => {
-        if (ctrl.signal.aborted) return;
-        const { counters: cs, edgeByItem } = computeItemCounters(baseStats, perEnemy, items);
-        setCounters(cs);
-        setCompEdges(edgeByItem);
-      })
-      .catch((e) => !ctrl.signal.aborted && setError(String(e)))
-      .finally(() => !ctrl.signal.aborted && setCountersLoading(false));
-
-    return () => ctrl.abort();
-  }, [hero, items, enemies, minBadge, patchIdx, patches]);
+      ]);
+      if (signal.aborted) return;
+      const { counters: cs, edgeByItem } = computeItemCounters(baseStats, perEnemy, items);
+      setCounters(cs);
+      setCompEdges(edgeByItem);
+    },
+    [hero, items, enemies, minBadge, patchIdx, patches],
+    setError,
+  );
 
   // The counter matrix is hero-independent, so fetch once per rank/patch and filter by hero.
-  useEffect(() => {
-    if (!items) return;
-    const ctrl = new AbortController();
-    setMatrixLoading(true);
-    getHeroCounters({ minBadge, ...windowFor(patches, patchIdx) })
-      .then((m) => !ctrl.signal.aborted && setCounterMatrix(m))
-      .catch((e) => !ctrl.signal.aborted && setError(String(e)))
-      .finally(() => !ctrl.signal.aborted && setMatrixLoading(false));
-    return () => ctrl.abort();
-  }, [items, minBadge, patchIdx, patches]);
+  const matrixLoading = useAsyncTask(
+    async (signal) => {
+      if (!items) return;
+      const m = await getHeroCounters({ minBadge, ...windowFor(patches, patchIdx) });
+      if (!signal.aborted) setCounterMatrix(m);
+    },
+    [items, minBadge, patchIdx, patches],
+    setError,
+  );
 
   const matchups = useMemo(
     () => (counterMatrix && hero ? heroMatchups(counterMatrix, hero.id) : null),
@@ -307,13 +333,10 @@ export default function App() {
   // Skill (ability upgrade) build, conditioned on the active archetype so gun/spirit
   // builds get their own order (they differ — and the spirit order often wins more).
   const activeSignatureId = activeArchetype?.signature?.id;
-  useEffect(() => {
-    if (!hero) return;
-    const ctrl = new AbortController();
-    setSkillLoading(true);
-    const base = { heroId: hero.id, minBadge, ...windowFor(patches, patchIdx) };
-
-    (async () => {
+  const skillLoading = useAsyncTask(
+    async (signal) => {
+      if (!hero) return;
+      const base = { heroId: hero.id, minBadge, ...windowFor(patches, patchIdx) };
       // Prefer the order players ran *with* this archetype's signature item — but that
       // slice is narrow, so at a high rank floor on one patch it can come back empty.
       // Fall back to the hero's overall order so we always have something to show.
@@ -325,30 +348,27 @@ export default function App() {
       if (!build && activeSignatureId) {
         build = bestSkillBuild(await getAbilityOrder(base));
       }
-      if (!ctrl.signal.aborted) setSkillBuild(build);
-    })()
-      .catch((e) => !ctrl.signal.aborted && setError(String(e)))
-      .finally(() => !ctrl.signal.aborted && setSkillLoading(false));
-
-    return () => ctrl.abort();
-  }, [hero, minBadge, patchIdx, patches, activeSignatureId]);
+      if (!signal.aborted) setSkillBuild(build);
+    },
+    [hero, minBadge, patchIdx, patches, activeSignatureId],
+    setError,
+  );
 
   // Community builds + their win rate at this rank/patch. Joined and scored against the
   // generated build in a memo below, so changing the active archetype re-scores without
   // refetching.
-  useEffect(() => {
-    if (!hero) return;
-    const ctrl = new AbortController();
-    setCommunityLoading(true);
-    Promise.all([
-      getCommunityBuilds(hero.id),
-      getHeroBuildStats({ heroId: hero.id, minBadge, ...windowFor(patches, patchIdx) }),
-    ])
-      .then(([builds, stats]) => !ctrl.signal.aborted && setCommunity({ builds, stats }))
-      .catch((e) => !ctrl.signal.aborted && setError(String(e)))
-      .finally(() => !ctrl.signal.aborted && setCommunityLoading(false));
-    return () => ctrl.abort();
-  }, [hero, minBadge, patchIdx, patches]);
+  const communityLoading = useAsyncTask(
+    async (signal) => {
+      if (!hero) return;
+      const [builds, stats] = await Promise.all([
+        getCommunityBuilds(hero.id),
+        getHeroBuildStats({ heroId: hero.id, minBadge, ...windowFor(patches, patchIdx) }),
+      ]);
+      if (!signal.aborted) setCommunity({ builds, stats });
+    },
+    [hero, minBadge, patchIdx, patches],
+    setError,
+  );
 
   // Items the generated build recommends (core picks across phases) — the set we match
   // community builds against.
@@ -704,6 +724,10 @@ export default function App() {
                   {Math.round(phase.soulBudget).toLocaleString()} souls
                 </div>
                 <CategoryBar split={phase.categorySouls} />
+
+                <PhaseTempoLines
+                  tempo={phaseTempo(phase, displayBuild.population.baselineWinRate)}
+                />
 
                 <h3 className="grouphdr core">Build</h3>
                 {phase.core.length ? (
@@ -1080,6 +1104,57 @@ function SkillEmpty() {
 // A thin stacked bar of the souls this phase's build invests per category — the
 // "soul investment" split, so a weapon-leaning build that still buys defense reads
 // at a glance and the greens aren't lost among the orange/purple.
+/** The per-phase tempo lines: one for when you're ahead of the soul pace — pull a later-core pick
+ * forward — and one for when you're behind — favor resilient picks over snowbally ones. Renders only the
+ * lines that have picks, and nothing at all when there's no signal. */
+function PhaseTempoLines({ tempo }: { tempo: PhaseTempo | null }) {
+  if (!tempo) return null;
+  const { rush, lean, hold } = tempo;
+  const chip = (b: BuildItem) => (
+    <span
+      key={b.item.id}
+      className="tchip"
+      style={{ borderColor: SLOT_COLORS[b.item.slot] ?? SLOT_COLORS.unknown }}
+    >
+      {b.item.name}
+    </span>
+  );
+  return (
+    <div className="tempo">
+      {rush.length > 0 && (
+        <div
+          className="tline ahead"
+          title="Ahead of the soul pace? Pull these later-core picks forward now instead of adding a situational."
+        >
+          <span className="tlbl">▲ ahead</span>
+          <span className="tact">rush</span>
+          {rush.map(chip)}
+        </div>
+      )}
+      {(lean.length > 0 || hold.length > 0) && (
+        <div
+          className="tline behind"
+          title="Behind the soul pace? Favor the picks that hold up from behind; the win-more picks need a lead to pay off."
+        >
+          <span className="tlbl">▼ behind</span>
+          {lean.length > 0 && (
+            <>
+              <span className="tact">favor</span>
+              {lean.map(chip)}
+            </>
+          )}
+          {hold.length > 0 && (
+            <>
+              <span className="tact risky">risky</span>
+              {hold.map(chip)}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CategoryBar({ split }: { split: Record<'weapon' | 'vitality' | 'spirit', number> }) {
   const total = split.weapon + split.vitality + split.spirit;
   if (total <= 0) return null;
@@ -1284,9 +1359,6 @@ function MatchupChip({
 }
 
 const COUNTER_ADDS_PER_PHASE = 3; // cap on counter-only picks folded into a phase's swaps
-const STATE_GAP = 0.035; // raw−adjusted WR gap that flags a "win more" / "comeback" pick
-const WIN_STATE_WR_FLOOR = 0.03; // ...but only on a pick within ~3 pts of baseline: a clear loser tagged
-// "win more" would read as a viable snowball option when it's just a bad pick correlated with leads.
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 /** One compact bubble: a single enemy's portrait + this item's edge vs that enemy. */
@@ -1338,13 +1410,13 @@ function ItemTags({
   baseline?: number;
 }) {
   const bubbles = counter && enemiesById ? counter.marks : [];
-  // raw ≫ adj ⇒ the win rate leans on already being ahead ("win more"); adj ≫ raw ⇒ it holds up even
-  // when bought behind ("comeback"). Only flag a clear gap — and only on a pick that's at least roughly
-  // viable: a clear loser (adj well below baseline) isn't "win more", it's just bad and correlated with
-  // being ahead, so the tag would dress up a losing pick as a snowball option.
-  const gap = rawWr !== undefined && adjWr !== undefined ? rawWr - adjWr : 0;
-  const viable = adjWr !== undefined && (baseline === undefined || adjWr >= baseline - WIN_STATE_WR_FLOOR);
-  const state = !viable ? undefined : gap >= STATE_GAP ? 'winmore' : gap <= -STATE_GAP ? 'comeback' : undefined;
+  // raw ≫ adj ⇒ the win rate leans on already being ahead ("win more"); adj ≫ raw ⇒ it holds up even when
+  // bought behind ("comeback"). Same classifier the per-phase tempo block uses, so the row tag and the
+  // tempo lists never disagree about a pick's character.
+  const state =
+    rawWr !== undefined && adjWr !== undefined && baseline !== undefined
+      ? classifyWinState(rawWr, adjWr, baseline)
+      : undefined;
   const hasTags =
     !!reason ||
     bubbles.length > 0 ||

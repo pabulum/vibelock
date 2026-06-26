@@ -63,9 +63,13 @@ const SOUL_SLACK = 1.15; // allow 15% over the soul budget before stopping
 const SITUATIONAL_MAX = 5;
 const COMEBACK_GAP = 0.035; // adj−raw this big ⇒ a reactive "hold up when behind" pick
 const COMEBACK_RESERVE = 2; // situational slots held for the best comeback picks (vs damage)
-const RUSH_WR_TOLERANCE = 0.015; // a "core later, rush if ahead" pick must not win meaningfully *less*
-// bought this early than in its later core phase: allow a small (≤1.5pt) dip as noise, but a bigger early
-// drop means rushing it does worse, so we drop the rush advice and just say it's core later.
+// Effect-size floor for retracting "rush if ahead". We default to *rush* and only downgrade to "buy
+// later" when the later core phase wins both meaningfully (>this margin on the point estimate) *and*
+// significantly (clear of sampling noise) more than the early buy — see significantlyHigher, which scales
+// the noise half by each phase's sample. Kept small because it's now purely the "gap I care about" knob;
+// the old flat 1.5pt was doing double duty as margin *and* noise cushion, so it ignored sample size and
+// mis-tagged thin-sample wobble as "buy later" and real large-sample gaps as "rush".
+const RUSH_MARGIN = 0.005;
 const SELL_BEFORE_S = 1500; // a cheap item sold before ~25 min is a placeholder
 export const SLOT_CAP = 12; // 9 base + 3 flex slots (unlocked via Walker kills)
 const SELL_FOR_SLOTS_MAX_TIER = 2; // only cheap stat-sticks/components (≤T2) are sold to free a slot; T3+
@@ -687,12 +691,13 @@ function annotateRelations(phases: BuildPhase[], flow: ItemFlowStats, items: Map
 export function annotateSlotRelations(phases: BuildPhase[]): void {
   // Each item's later core appearances, keyed by column, so a situational pick can find both the phase
   // it becomes core in *and* that phase's win rate (to decide whether rushing it early is supported).
-  const coreCols = new Map<number, Array<{ column: number; adjWr: number }>>();
+  const coreCols = new Map<number, Array<{ column: number; adjWr: number; decided: number }>>();
   for (const p of phases)
     for (const b of p.core) {
+      const entry = { column: p.column, adjWr: b.adjustedWinRate, decided: b.decided };
       const arr = coreCols.get(b.item.id);
-      if (arr) arr.push({ column: p.column, adjWr: b.adjustedWinRate });
-      else coreCols.set(b.item.id, [{ column: p.column, adjWr: b.adjustedWinRate }]);
+      if (arr) arr.push(entry);
+      else coreCols.set(b.item.id, [entry]);
     }
 
   for (const p of phases) {
@@ -714,13 +719,14 @@ export function annotateSlotRelations(phases: BuildPhase[]): void {
           continue;
         }
       }
-      // Same item core in a later phase ⇒ it becomes core by then. Only call it a *rush* target ("buy
-      // early if ahead") when its win rate bought this early isn't materially worse than in that later
-      // phase — otherwise the data argues against rushing, so we just note it's core later.
+      // Same item core in a later phase ⇒ it becomes core by then. Default to a *rush* target ("buy early
+      // if ahead"); only retract to "buy later" when the later core phase wins both meaningfully *and*
+      // significantly more than this early buy — i.e. the data genuinely argues against rushing, not just a
+      // sampling wobble. significantlyHigher scales the noise bar by each phase's own sample.
       const later = (coreCols.get(s.item.id) ?? []).find((c) => c.column > p.column);
       if (later !== undefined) {
         s.coreLater = PHASE_META[later.column].label;
-        s.coreRush = s.adjustedWinRate >= later.adjWr - RUSH_WR_TOLERANCE;
+        s.coreRush = !significantlyHigher(later.adjWr, later.decided, s.adjustedWinRate, s.decided, RUSH_MARGIN);
         continue;
       }
       // Else pair with a same-slot core pick of *comparable cost* — a real alternative, not a
@@ -736,6 +742,63 @@ export function annotateSlotRelations(phases: BuildPhase[]): void {
       }
     }
   }
+}
+
+// Raw vs adjusted win-rate gap that flags a pick's win-state character: raw ≫ adj ⇒ "win more" (the win
+// rate leans on already being ahead), adj ≫ raw ⇒ "comeback" (holds up when bought from behind). Only on a
+// pick that's at least roughly viable — a clear loser tagged "win more" would read as a snowball option
+// when it's just bad and correlated with leads.
+export const WIN_STATE_GAP = 0.035;
+export const WIN_STATE_WR_FLOOR = 0.03;
+export type WinState = 'winmore' | 'comeback';
+
+/** A pick's win-state character from its raw vs adjusted (game-state-corrected) win rate — or undefined
+ * when the gap is within noise or the pick isn't viable enough to read as a snowball/comeback option. */
+export function classifyWinState(rawWr: number, adjWr: number, baseline: number): WinState | undefined {
+  if (adjWr < baseline - WIN_STATE_WR_FLOOR) return undefined; // a clear loser isn't "win more", just bad
+  const gap = rawWr - adjWr;
+  if (gap >= WIN_STATE_GAP) return 'winmore';
+  if (gap <= -WIN_STATE_GAP) return 'comeback';
+  return undefined;
+}
+
+/** Per-phase tempo guidance: what to do when you're ahead of (or behind) the phase's soul pace. */
+export interface PhaseTempo {
+  /** Ahead of pace: pull these later-core picks forward now instead of adding a situational — the
+   * phase's "rush if ahead" picks (`coreRush`). */
+  rush: BuildItem[];
+  /** Behind: favor these — they hold up bought from behind ("comeback": adj ≫ raw). */
+  lean: BuildItem[];
+  /** Behind: these lean on already being ahead ("win more": raw ≫ adj), so they're the riskier spend. */
+  hold: BuildItem[];
+}
+
+const TEMPO_LIST_MAX = 3; // cap each tempo list so a phase stays a glance, not a paragraph
+
+/**
+ * Tempo guidance for one phase, derived purely from signals already on the build — no new data. If you're
+ * *ahead* of the phase's soul pace, the cleanest spend is to pull a later-core pick forward (its
+ * `coreRush` picks) rather than add another situational; if you're *behind*, favor the resilient
+ * "comeback" picks and treat the snowbally "win-more" ones as the riskier buy. Returns null when no list
+ * has confident signal, so a phase stays quiet rather than inventing advice (signal high, noise low). Pure.
+ */
+export function phaseTempo(phase: BuildPhase, baseline: number): PhaseTempo | null {
+  const rush = phase.situational
+    .filter((b) => b.coreRush && b.coreLater)
+    .sort((a, b) => b.adjustedWinRate - a.adjustedWinRate)
+    .slice(0, TEMPO_LIST_MAX);
+
+  const all = [...phase.core, ...phase.situational];
+  const byState = (want: WinState, strength: (b: BuildItem) => number) =>
+    all
+      .filter((b) => classifyWinState(b.rawWinRate, b.adjustedWinRate, baseline) === want)
+      .sort((a, b) => strength(b) - strength(a))
+      .slice(0, TEMPO_LIST_MAX);
+  const lean = byState('comeback', (b) => b.adjustedWinRate - b.rawWinRate);
+  const hold = byState('winmore', (b) => b.rawWinRate - b.adjustedWinRate);
+
+  if (!rush.length && !lean.length && !hold.length) return null;
+  return { rush, lean, hold };
 }
 
 function buildPhase(

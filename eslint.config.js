@@ -18,5 +18,9 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // useAsyncTask forwards its deps to an inner useEffect, so validate them like an effect hook.
+      'react-hooks/exhaustive-deps': ['warn', { additionalHooks: '(useAsyncTask)' }],
+    },
   },
 ])

@@ -1004,6 +1004,53 @@ body {
   color: #5fc4c0;
 }
 
+/* Per-phase tempo lines: ahead-of-pace / behind-of-pace advice. */
+.tempo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 2px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #141922;
+}
+.tline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.tlbl {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.tline.ahead .tlbl {
+  color: #79c98f;
+}
+.tline.behind .tlbl {
+  color: #d98b6a;
+}
+.tact {
+  color: var(--muted);
+  font-weight: 600;
+  margin-left: 2px;
+}
+.tact.risky {
+  color: #e0a85a;
+}
+.tchip {
+  padding: 1px 7px;
+  border-radius: 10px;
+  border-left: 2px solid var(--line);
+  background: #1a1f27;
+  color: #c2ccd8;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
 /* "Weak into this comp" flag (negative comp edge, no countering portrait). */
 .weakcomp {
   padding: 1px 6px;
