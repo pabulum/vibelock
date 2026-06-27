@@ -44,15 +44,15 @@ export interface AbilityOrderRow {
   players: number;
 }
 
-/** The recommended skill (ability) build. */
+/** The recommended skill (ability) build — shown descriptively (no win rate; see lib/skills.ts). */
 export interface SkillBuild {
   /** The chosen upgrade order, as ability ids. */
   order: number[];
   /** Distinct abilities in the order they get fully maxed. */
   maxPriority: number[];
-  winRate: number;
+  /** Players running this most-common order. */
   sample: number;
-  /** The most-common order didn't clear the confidence floor — treat as noisy. */
+  /** The most-common order didn't clear the confidence floor — treat as a thin standard. */
   lowSample: boolean;
 }
 
@@ -305,6 +305,12 @@ export interface CommunityBuild {
    * (deliberately) deranked.
    */
   coreItemIds: number[];
+  /**
+   * The author's skill order: ability ids in the sequence points were invested, flattened
+   * from `details.ability_order.currency_changes`. Empty if the build didn't record one.
+   * Used to read the build's first-max (archetype label) for skill-order alignment.
+   */
+  skillOrder: number[];
   /**
    * Authored imbue choices: which ability each imbue-type item was imbued onto. Only mods
    * that actually set a target are kept (authors often leave it null), so this is sparse.

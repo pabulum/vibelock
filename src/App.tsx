@@ -47,7 +47,7 @@ import { buildSynergyLookup, singleRecordsFromFlow } from "./lib/synergy";
 import { bestImbueTargets } from "./lib/imbue";
 import { heroMatchups } from "./lib/matchups";
 import { RANK_TIERS, rankFloorLabel, tierToMinBadge } from "./lib/ranks";
-import { bestSkillBuild } from "./lib/skills";
+import { bestSkillBuild, maxOrder } from "./lib/skills";
 import type {
   Ability,
   ArchetypeKey,
@@ -519,6 +519,10 @@ export default function App() {
     [ourCoreIds, ourSituationalIds],
   );
 
+  // Our recommended max order, shown in the build hover for a like-for-like skill-order
+  // comparison (descriptive only — it doesn't influence the match).
+  const ourMaxOrder = skillBuild?.maxPriority;
+
   const communityMatch = useMemo(
     () =>
       community && (ourCoreIds.length || ourSituationalIds.length)
@@ -765,6 +769,9 @@ export default function App() {
                   our={ourSplit}
                   ourIds={ourIdSet}
                   items={items}
+                  abilities={abilities}
+                  ourMaxOrder={ourMaxOrder}
+                  slotOrder={slotOrder}
                   agree
                 />
               ) : (
@@ -776,6 +783,9 @@ export default function App() {
                       our={ourSplit}
                       ourIds={ourIdSet}
                       items={items}
+                      abilities={abilities}
+                      ourMaxOrder={ourMaxOrder}
+                      slotOrder={slotOrder}
                     />
                   )}
                   {communityMatch.aligned && (
@@ -785,6 +795,9 @@ export default function App() {
                       our={ourSplit}
                       ourIds={ourIdSet}
                       items={items}
+                      abilities={abilities}
+                      ourMaxOrder={ourMaxOrder}
+                      slotOrder={slotOrder}
                     />
                   )}
                 </>
@@ -1562,8 +1575,7 @@ function SkillOrder({
       <h2>
         Skill order{" "}
         <span className="sub">
-          {(skill.winRate * 100).toFixed(0)}% WR · n=
-          {skill.sample.toLocaleString()}
+          the standard order · n={skill.sample.toLocaleString()} players
           {skill.lowSample && <span className="warn"> · ⚠ thin sample</span>}
         </span>
       </h2>
@@ -2120,6 +2132,9 @@ function CommunityRow({
   our,
   ourIds,
   items,
+  abilities,
+  ourMaxOrder,
+  slotOrder,
   agree = false,
 }: {
   tag: string;
@@ -2127,6 +2142,9 @@ function CommunityRow({
   our: { coreCount: number; situCount: number };
   ourIds: Set<number>;
   items: Map<number, Item> | null;
+  abilities?: Map<number, Ability> | null;
+  ourMaxOrder?: number[];
+  slotOrder: number[];
   agree?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -2198,6 +2216,9 @@ function CommunityRow({
           build={rb.build}
           items={items}
           ourIds={ourIds}
+          abilities={abilities}
+          ourMaxOrder={ourMaxOrder}
+          slotOrder={slotOrder}
           anchor={anchor}
         />
       )}
@@ -2212,11 +2233,17 @@ function BuildPreview({
   build,
   items,
   ourIds,
+  abilities,
+  ourMaxOrder,
+  slotOrder,
   anchor,
 }: {
   build: CommunityBuild;
   items: Map<number, Item>;
   ourIds: Set<number>;
+  abilities?: Map<number, Ability> | null;
+  ourMaxOrder?: number[];
+  slotOrder: number[];
   anchor: DOMRect;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -2252,6 +2279,17 @@ function BuildPreview({
     .sort((a, b) => a.slot.localeCompare(b.slot) || a.cost - b.cost);
   const shared = ourIds.size - missing.length;
 
+  // Their skill priority (which ability is maxed 1st→last), shown only in de-biased mode
+  // (when ourMaxOrder is provided) so we can mark where their order diverges from ours.
+  const theirMaxOrder =
+    abilities && ourMaxOrder && build.skillOrder.length
+      ? maxOrder(build.skillOrder)
+      : [];
+  const skillColor = (id: number) => {
+    const i = slotOrder.indexOf(id);
+    return ABILITY_COLORS[(i >= 0 ? i : 0) % ABILITY_COLORS.length];
+  };
+
   const icon = (i: Item, cls: string) => (
     <span
       key={i.id}
@@ -2281,6 +2319,31 @@ function BuildPreview({
           <div className="bp-sub">Only in our build ({missing.length})</div>
           <div className="bp-grid">
             {missing.map((i) => icon(i, "missing"))}
+          </div>
+        </>
+      )}
+      {theirMaxOrder.length > 0 && abilities && (
+        <>
+          <div className="bp-sub">Skill priority (maxed 1st → last)</div>
+          <div className="bp-skills">
+            {theirMaxOrder.map((id, rank) => {
+              const a = abilities.get(id);
+              const moved = ourMaxOrder ? ourMaxOrder.indexOf(id) !== rank : false;
+              const ourRank = ourMaxOrder ? ourMaxOrder.indexOf(id) : -1;
+              return (
+                <span
+                  key={id}
+                  className={`bp-skill ${moved ? "moved" : ""}`}
+                  style={{ borderColor: skillColor(id) }}
+                  title={`${a?.name ?? id} — maxed ${rank + 1}${
+                    moved && ourRank >= 0 ? ` (you: ${ourRank + 1})` : moved ? " (not in yours)" : " (same as yours)"
+                  }`}
+                >
+                  {a?.image ? <img src={a.image} alt="" loading="lazy" /> : a?.name ?? id}
+                  <span className="bp-skrank">{rank + 1}</span>
+                </span>
+              );
+            })}
           </div>
         </>
       )}

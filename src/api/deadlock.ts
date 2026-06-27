@@ -530,6 +530,12 @@ function parseCommunityBuild(env: RawBuildEnvelope, items: Map<number, Item>): C
     }
   }
   if (ids.size === 0) return null;
+  // Skill order: the ability ids in the sequence points were invested. Each currency_changes
+  // entry is one investment; we keep the ability id and preserve order. (Both currency types —
+  // unlocks and upgrades — are kept; first-max is derived downstream and is robust to it.)
+  const skillOrder = (hb.details?.ability_order?.currency_changes ?? [])
+    .map((c) => c.ability_id)
+    .filter((id): id is number => id !== undefined);
   return {
     id: hb.hero_build_id,
     name: hb.name ?? `Build ${hb.hero_build_id}`,
@@ -538,6 +544,7 @@ function parseCommunityBuild(env: RawBuildEnvelope, items: Map<number, Item>): C
     updatedAt: hb.last_updated_timestamp ?? hb.publish_timestamp ?? 0,
     itemIds: [...ids],
     coreItemIds: [...coreIds],
+    skillOrder,
     imbueTargets,
   };
 }
@@ -661,6 +668,10 @@ interface RawBuildEnvelope {
         optional?: boolean | null;
         mods?: Array<{ ability_id?: number; imbue_target_ability_id?: number | null }>;
       }>;
+      // Ordered ability-point investments; we flatten it to the build's skill order.
+      ability_order?: {
+        currency_changes?: Array<{ ability_id?: number }>;
+      };
     };
   };
 }

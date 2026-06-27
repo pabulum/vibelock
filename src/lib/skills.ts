@@ -1,9 +1,11 @@
 // Picks a recommended skill (ability upgrade) build from ability-order-stats.
 //
-// Each row is a full upgrade order with win/loss. Exact orders fragment, so rather
-// than chase a high-variance top win rate we take the most *common* order that
-// still has a solid win rate — the standard build good players run — and derive the
-// "max priority" (which ability gets fully upgraded first) for a quick summary.
+// Each row is a full upgrade order with win/loss. Exact orders fragment, so we take the most
+// *common* order — the standard build good players run — and derive the "max priority" (which
+// ability gets fully upgraded first) for a quick summary. It's shown descriptively, with no
+// win rate: ability-order win rates are survivorship-biased (a completed order only exists in
+// games that lasted), and the de-confounded effect of skill order is ~nil and not estimable
+// from a client-side tool. See the ability-order-survivorship analysis.
 
 import type { AbilityOrderRow, SkillBuild } from '../types';
 
@@ -21,19 +23,18 @@ export function bestSkillBuild(rows: AbilityOrderRow[]): SkillBuild | null {
 
   // Most common order — the meta-standard skill build.
   const r = pool.reduce((best, cur) => (cur.players > best.players ? cur : best));
-  const decided = r.wins + r.losses;
 
   return {
     order: r.abilities,
     maxPriority: maxOrder(r.abilities),
-    winRate: decided > 0 ? r.wins / decided : 0,
     sample: r.players,
     lowSample: r.players < MIN_SAMPLE,
   };
 }
 
-/** Abilities sorted by when they receive their last point (earlier = maxed first). */
-function maxOrder(order: number[]): number[] {
+/** Abilities sorted by when they receive their last point (earlier = maxed first).
+ *  Exported for the build-hover, which shows a community build's max order. */
+export function maxOrder(order: number[]): number[] {
   const lastIndex = new Map<number, number>();
   order.forEach((id, i) => lastIndex.set(id, i));
   return [...new Set(order)].sort((a, b) => (lastIndex.get(a) ?? 0) - (lastIndex.get(b) ?? 0));

@@ -9,7 +9,6 @@ import type {
   HeroBuildStatRow,
   RankedCommunityBuild,
 } from '../types';
-
 // A "best build" win rate is a claim, so it needs a real sample — otherwise a 3-game 100%
 // build is crowned "the meta". Builds below this are still rankable for *alignment* (which
 // doesn't lean on win rate), just not eligible to be the headline performer.
