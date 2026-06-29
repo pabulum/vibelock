@@ -1112,15 +1112,23 @@ function buildPhase(
     }
   }
 
-  // Enrich: the value gate alone can leave a thin 1–2 line list, hiding common picks a player would
-  // want to see (sustain, popular alternatives). Round the list out to the cap with the most-bought
-  // remaining picks even if they don't clear the win-rate bar — labelled honestly (`value` only if it
-  // actually beats the bar, else `filler`) so the chip doesn't oversell a win-rate-neutral pickup.
+  // Enrich: the value gate alone (a *significant* edge over baseline) can leave a thin 1–2 line list,
+  // hiding common picks a player would still want to see. Round the list out toward the cap with the
+  // most-bought remaining picks — but only ones that at least *break even* (adjusted WR ≥ baseline −
+  // FILL_WR_FLOOR, the same "worth building" floor the core fill uses). A clearly-below-baseline pick
+  // is not a choice worth offering, no matter how popular: padding the list with it (Abrams lane:
+  // Mystic Expansion, 30% pick / −2pt) just overloads the player with an option that loses, so we let
+  // the list run short instead. This is the win-rate floor without seatable's universal-pickrate
+  // bypass — "everyone builds it" earns a *core* slot, not a free pass into the optional list. Kept
+  // picks are labelled honestly (`value` only if they actually clear the edge, else `filler` for a
+  // win-rate-neutral pickup, so the chip doesn't oversell it). Loosen FILL_WR_FLOOR to re-admit
+  // near-baseline pickups here and in core together.
   if (situational.length < SITUATIONAL_MAX) {
     const shown = new Set([...core, ...situational].map((b) => b.item.id));
     for (const c of [...candidates].sort((a, b) => b.pickRate - a.pickRate)) {
       if (situational.length >= SITUATIONAL_MAX) break;
       if (shown.has(c.item.id) || benchedIds.has(c.item.id) || owned.has(c.item.id)) continue;
+      if (c.adjustedWinRate < baselineWinRate - FILL_WR_FLOOR) continue; // don't pad with a losing pick
       if (buildsFromAny(c.item, benchedIds, items)) continue; // an upgrade of a swap is that swap's line
       const role: BuildRole = isValuePick(c, baselineWinRate) ? 'value' : 'filler';
       situational.push({ ...c, role });

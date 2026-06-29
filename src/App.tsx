@@ -804,8 +804,9 @@ export default function App() {
               )}
             </div>
             <p className="hint">
-              Hover a build to preview its items; click <code>#id</code> to copy
-              it for the in-game search.{" "}
+              {CAN_HOVER ? "Hover" : "Tap"} a build to preview its items;{" "}
+              {CAN_HOVER ? "click" : "tap"} <code>#id</code> to copy it for the
+              in-game search.{" "}
               <button
                 type="button"
                 className="guidelink"
@@ -1953,9 +1954,66 @@ function ItemRow({
   );
 }
 
-// A row/cell that reveals the item's full shop card on hover. It *is* the styled
-// element (className/style passed through), so there's no extra wrapper. The card is
-// rendered in a portal (anchored to this element's rect) so the row can't clip it.
+// Touch/coarse-pointer devices can't hover, so the portaled popovers — the shop card and the
+// community-build preview, which together are the *learning* layer (what an item does, its stats
+// and build paths, how a build overlaps ours) — would be unreachable on a phone. We detect that
+// once: hover-capable devices keep the pure-hover tooltip; touch devices open on a *tap* instead.
+// matchMedia's comma is an OR, so this is "no hover OR a coarse primary pointer".
+const CAN_HOVER =
+  typeof window === "undefined" || typeof window.matchMedia !== "function"
+    ? true
+    : !window.matchMedia("(hover: none), (pointer: coarse)").matches;
+
+// Selectors of the portaled popovers, so the touch dismissal below doesn't treat a tap (or scroll)
+// *inside* an open popover as a tap outside it.
+const POPOVER_SEL = ".itemcard, .buildprev";
+
+/**
+ * Hover-or-tap popover wiring, shared by the item card and the community-build preview. Hover
+ * devices open on mouseenter and close on mouseleave — the original pure tooltip, unchanged. Touch
+ * devices ({@link CAN_HOVER} false) can't do that, so they open on a *tap* and pin it open until a
+ * tap outside the trigger and popover, a page scroll, or Escape. `sticky` (true only on touch) lets
+ * the popover become a real tappable/scrollable surface instead of a pass-through tooltip. Spread
+ * `handlers` onto the trigger element (which `ref` must point at) and render the popover when
+ * `anchor` is set, passing it `sticky`.
+ */
+function usePinnablePopover<T extends HTMLElement>(ref: { current: T | null }) {
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const open = () =>
+    ref.current && setAnchor(ref.current.getBoundingClientRect());
+  const close = () => setAnchor(null);
+
+  useEffect(() => {
+    if (CAN_HOVER || !anchor) return; // hover devices dismiss via mouseleave; nothing global to wire
+    const inPopover = (t: EventTarget | null) =>
+      t instanceof Element && !!t.closest(POPOVER_SEL);
+    const onDown = (e: PointerEvent) => {
+      if (ref.current?.contains(e.target as Node) || inPopover(e.target)) return;
+      setAnchor(null);
+    };
+    const onScroll = (e: Event) => {
+      if (!inPopover(e.target)) setAnchor(null); // scrolling within a tall popover keeps it open
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setAnchor(null);
+    document.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("scroll", onScroll, true);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("scroll", onScroll, true);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [anchor, ref]);
+
+  const handlers = CAN_HOVER
+    ? { onMouseEnter: open, onMouseLeave: close }
+    : { onClick: () => (anchor ? close() : open()) };
+  return { anchor, handlers, sticky: !CAN_HOVER };
+}
+
+// A row/cell that reveals the item's full shop card on hover (or tap, on touch). It *is* the styled
+// element (className/style passed through), so there's no extra wrapper. The card is rendered in a
+// portal (anchored to this element's rect) so the row can't clip it.
 function ItemHover({
   item,
   items,
@@ -1978,17 +2036,10 @@ function ItemHover({
   buildsToward?: ItemRef;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const { anchor, handlers, sticky } = usePinnablePopover(ref);
+
   return (
-    <div
-      ref={ref}
-      className={className}
-      style={style}
-      onMouseEnter={() =>
-        ref.current && setAnchor(ref.current.getBoundingClientRect())
-      }
-      onMouseLeave={() => setAnchor(null)}
-    >
+    <div ref={ref} className={className} style={style} {...handlers}>
       {children}
       {anchor && (
         <ItemCard
@@ -1998,6 +2049,7 @@ function ItemHover({
           counter={counter}
           enemiesById={enemiesById}
           buildsToward={buildsToward}
+          sticky={sticky}
         />
       )}
     </div>
@@ -2013,6 +2065,7 @@ function ItemCard({
   counter,
   enemiesById,
   buildsToward,
+  sticky = false,
 }: {
   item: Item;
   items: Map<number, Item> | null;
@@ -2020,6 +2073,9 @@ function ItemCard({
   counter?: ItemCounters;
   enemiesById?: Map<number, Hero>;
   buildsToward?: ItemRef;
+  /** Tap-pinned on touch: becomes tappable/scrollable (not a pass-through tooltip) so a tall
+   * card can be read and scrolled on a phone. See {@link ItemHover} and `.itemcard.sticky`. */
+  sticky?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   // Render off-screen first, then measure to flip left/right and clamp vertically.
@@ -2044,7 +2100,7 @@ function ItemCard({
   return createPortal(
     <div
       ref={ref}
-      className="itemcard"
+      className={`itemcard${sticky ? " sticky" : ""}`}
       style={{ left: pos.left, top: pos.top, borderColor: color }}
     >
       <div className="ic-head" style={{ background: color }}>
@@ -2148,7 +2204,7 @@ function CommunityRow({
   agree?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const { anchor, handlers, sticky } = usePinnablePopover(ref);
   const [copied, setCopied] = useState(false);
 
   const coreSize = rb.build.coreItemIds.length;
@@ -2165,14 +2221,7 @@ function CommunityRow({
   };
 
   return (
-    <div
-      ref={ref}
-      className={`crow ${agree ? "agree" : ""}`}
-      onMouseEnter={() =>
-        ref.current && setAnchor(ref.current.getBoundingClientRect())
-      }
-      onMouseLeave={() => setAnchor(null)}
-    >
+    <div ref={ref} className={`crow ${agree ? "agree" : ""}`} {...handlers}>
       <span className="ctag">{tag}</span>
       <span className="cname" title={rb.build.name}>
         {rb.build.name}
@@ -2205,7 +2254,10 @@ function CommunityRow({
         <span className="cmeta">updated {fmtDate(rb.build.updatedAt)}</span>
         <button
           className="cid"
-          onClick={copyId}
+          onClick={(e) => {
+            e.stopPropagation(); // on touch the row toggles the preview; copying shouldn't also toggle it
+            copyId();
+          }}
           title="Copy build ID — paste into the in-game build search"
         >
           {copied ? "copied ✓" : `#${rb.build.id}`}
@@ -2220,6 +2272,7 @@ function CommunityRow({
           ourMaxOrder={ourMaxOrder}
           slotOrder={slotOrder}
           anchor={anchor}
+          sticky={sticky}
         />
       )}
     </div>
@@ -2237,6 +2290,7 @@ function BuildPreview({
   ourMaxOrder,
   slotOrder,
   anchor,
+  sticky = false,
 }: {
   build: CommunityBuild;
   items: Map<number, Item>;
@@ -2245,6 +2299,8 @@ function BuildPreview({
   ourMaxOrder?: number[];
   slotOrder: number[];
   anchor: DOMRect;
+  /** Tap-pinned on touch: makes the preview a tappable/scrollable surface (see {@link usePinnablePopover}). */
+  sticky?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: -9999, top: -9999 });
@@ -2304,7 +2360,7 @@ function BuildPreview({
   return createPortal(
     <div
       ref={ref}
-      className="buildprev"
+      className={`buildprev${sticky ? " sticky" : ""}`}
       style={{ left: pos.left, top: pos.top }}
     >
       <div className="bp-head">

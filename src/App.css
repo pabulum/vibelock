@@ -491,6 +491,14 @@ body {
   /* Portaled to document.body, so it's outside .app and won't inherit its font. */
   font: 12.5px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 }
+/* Tap-pinned on touch (see usePinnablePopover): a real, scrollable surface, not a pass-through
+   tooltip — so a tap lands on it (not the row behind) and a tall preview can be read on a phone. */
+.buildprev.sticky {
+  pointer-events: auto;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
 .buildprev .bp-head {
   display: flex;
   align-items: baseline;
@@ -656,6 +664,13 @@ body {
   color: var(--text);
   /* Portaled to document.body, so it's outside .app and won't inherit its font. */
   font: 12.5px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+/* Tap-pinned on touch (see ItemHover): make it a real surface — tappable and scrollable — so a
+   tall card reads on a phone instead of clipping, and a tap on it doesn't fall through to a row. */
+.itemcard.sticky {
+  pointer-events: auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .itemcard .ic-head {
   display: flex;
