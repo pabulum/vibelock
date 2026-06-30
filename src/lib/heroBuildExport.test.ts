@@ -33,6 +33,24 @@ function parse(b: Uint8Array): Field[] {
 }
 const sub = (fields: Field[], f: number) => parse(fields.find((x) => x.f === f)!.v as Uint8Array);
 const all = (fields: Field[], f: number) => fields.filter((x) => x.f === f);
+
+// Decode one CurrencyChange { 1: ability_id, 2: currency_type, 3: delta(int32) } with a BigInt
+// varint reader so the negative `delta` (a 10-byte two's-complement int32) survives — the float
+// reader in parse() loses the high bits past 2^53.
+function currencyChange(bytes: Uint8Array): { abilityId: number; type: number; delta: number } {
+  let i = 0;
+  const vb = () => {
+    let r = 0n, s = 0n, x: number;
+    do { x = bytes[i++]; r |= BigInt(x & 0x7f) << s; s += 7n; } while (x & 0x80);
+    return r;
+  };
+  const out: Record<number, bigint> = {};
+  while (i < bytes.length) {
+    const f = Number(vb() >> 3n); // all three fields are wire type 0
+    out[f] = vb();
+  }
+  return { abilityId: Number(out[1]), type: Number(out[2]), delta: Number(BigInt.asIntN(32, out[3])) };
+}
 const str = (fields: Field[], f: number) => new TextDecoder().decode(fields.find((x) => x.f === f)!.v as Uint8Array);
 const num = (fields: Field[], f: number) => fields.find((x) => x.f === f)!.v as number;
 
@@ -77,6 +95,30 @@ describe('buildExportCategories', () => {
     expect(cats.find((c) => c.name === 'Lane · swaps')!.itemIds).toEqual([30]); // 11 dropped (core)
     expect(cats.find((c) => c.name === 'Mid · swaps')!.itemIds).toEqual([31]);
     expect(cats.find((c) => c.name === 'Overtime')!.itemIds).toEqual([40]); // 20 dropped (already core)
+  });
+
+  it('drops a situational pick that is core in a later phase (core beats situational)', () => {
+    // item 31 is situational in Lane but core in Mid — should appear only in Mid
+    const b: GeneratedBuild = {
+      ...build(),
+      phases: [phase(0, 'Lane', [10], [31]), phase(1, 'Mid', [31], [])],
+      overtimeBuys: [],
+    };
+    const cats = buildExportCategories(b);
+    expect(cats.find((c) => c.name === 'Lane · swaps')?.itemIds ?? []).not.toContain(31);
+    expect(cats.find((c) => c.name === 'Mid')!.itemIds).toContain(31);
+  });
+
+  it('drops a situational pick that is core in an earlier phase (core beats situational)', () => {
+    // item 10 is core in Lane but also appears as situational in Mid
+    const b: GeneratedBuild = {
+      ...build(),
+      phases: [phase(0, 'Lane', [10], []), phase(1, 'Mid', [20], [10])],
+      overtimeBuys: [],
+    };
+    const cats = buildExportCategories(b);
+    expect(cats.find((c) => c.name === 'Mid · swaps')?.itemIds ?? []).not.toContain(10);
+    expect(cats.find((c) => c.name === 'Lane')!.itemIds).toContain(10);
   });
 
   it('omits the Overtime category when includeOvertime is false', () => {
@@ -139,5 +181,36 @@ describe('encodeHeroBuild', () => {
     const before = Math.floor(Date.now() / 1000);
     const hb = parse(parse(encodeHeroBuild(build(), { name: 'x' })).find((x) => x.f === 1)!.v as Uint8Array);
     expect(num(hb, 4)).toBeGreaterThanOrEqual(before);
+  });
+});
+
+describe('skill order (ability_order)', () => {
+  // Pull details.2 → ability_order's repeated currency_changes (field 1) out of an encoded build.
+  const changesFor = (skillOrder?: number[]) => {
+    const bytes = encodeHeroBuild(build(), { name: 'x', skillOrder });
+    const hb = parse(parse(bytes).find((x) => x.f === 1)!.v as Uint8Array);
+    const details = sub(hb, 10);
+    const ao = details.find((x) => x.f === 2);
+    if (!ao) return null;
+    return all(parse(ao.v as Uint8Array), 1).map((c) => currencyChange(c.v as Uint8Array));
+  };
+
+  it('omits ability_order entirely when no skill order is given', () => {
+    expect(changesFor(undefined)).toBeNull();
+    expect(changesFor([])).toBeNull();
+  });
+
+  it('encodes each point as an unlock then 1/2/5-cost upgrades, in order', () => {
+    // ability 100 invested 4×, ability 200 once — interleaved as the order points were spent.
+    const cc = changesFor([100, 200, 100, 100, 100])!;
+    expect(cc.map((c) => c.abilityId)).toEqual([100, 200, 100, 100, 100]);
+    expect(cc.map((c) => c.type)).toEqual([2, 2, 1, 1, 1]); // first point in each = unlock (type 2)
+    expect(cc.map((c) => c.delta)).toEqual([-1, -1, -1, -2, -5]); // 100's four levels cost 1,1,2,5
+  });
+
+  it('drops investments past an ability’s 4th point (only four levels exist)', () => {
+    const cc = changesFor([7, 7, 7, 7, 7, 7])!; // 6 points in one ability → only 4 survive
+    expect(cc).toHaveLength(4);
+    expect(cc.map((c) => c.delta)).toEqual([-1, -1, -2, -5]);
   });
 });

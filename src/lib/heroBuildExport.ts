@@ -11,13 +11,15 @@
 //     1: build_id  2: hero_id  4: last_updated(unix)  5: name  6: description
 //     8: version   9: build_id  10: details  13: published(unix)
 //   }
-//   details { 1: repeated category }
-//   category { 1: repeated mod{1: item_id}  2: name  4: ui_x(f32)  5: ui_y(f32)  6: optional(bool) }
+//   details { 1: repeated category  2: ability_order }
+//   category { 1: repeated mod{1: item_id}  2: name  3: description  4: ui_x(f32)  5: ui_y(f32)  6: optional(bool) }
+//   ability_order { 1: repeated currency_change{1: ability_id  2: currency_type  3: delta(int32)} }
 //
 // Verified in-game: the categories, their order, the item placement, and the `optional` flag all
 // render correctly; populating the timestamps (4/13) is what stops the game tagging it "[OUTDATED]".
-// Skill order (details.2 = ability_order) is intentionally omitted for now — its per-point encoding
-// isn't fully pinned down, and the build is fully usable without it.
+// Skill order (details.2 = ability_order) is included when a build carries one: each ability-point
+// investment is one CurrencyChange, and its currency_type/delta follow Deadlock's fixed per-level
+// cost (unlock, then 1/2/5 upgrade points) — reverse-engineered from real builds (see encodeAbilityOrder).
 
 import type { GeneratedBuild } from '../types';
 
@@ -43,6 +45,22 @@ function varintField(field: number, value: number): number[] {
   const out: number[] = [];
   pushTag(out, field, 0);
   pushVarint(out, value);
+  return out;
+}
+
+/** wire type 0 — a signed `int32` field. Protobuf sign-extends a negative int32 to 64 bits, so it
+ * always encodes as a 10-byte varint (not zigzag — that's sint32). We need this only for the skill
+ * order's `delta`, which is always negative (points spent). BigInt keeps the 64-bit two's complement
+ * exact, where the float modulo/division in pushVarint would lose the low bits past 2^53. */
+function int32Field(field: number, value: number): number[] {
+  const out: number[] = [];
+  pushTag(out, field, 0);
+  let v = BigInt(Math.trunc(value)) & 0xffffffffffffffffn;
+  while (v >= 0x80n) {
+    out.push(Number((v & 0x7fn) | 0x80n));
+    v >>= 7n;
+  }
+  out.push(Number(v));
   return out;
 }
 
@@ -96,6 +114,10 @@ export interface HeroBuildExportOptions {
   buildId?: number;
   /** Fold `build.overtimeBuys` into a trailing optional "Overtime" category. Default true. */
   includeOvertime?: boolean;
+  /** Ability ids in the order points were invested (each up to 4×, e.g. `SkillBuild.order`). When
+   * present, encoded as the build's in-game skill order so the shop also walks ability upgrades.
+   * Omit/empty to leave the build without a skill order (still fully usable). */
+  skillOrder?: number[];
 }
 
 // Categories carry only an (x, y) and no size; the build *browser* lays them out in list order,
@@ -182,6 +204,36 @@ function encodeCategory(cat: ExportCategory): number[] {
   return body;
 }
 
+// The (currency_type, delta) for the Nth point invested in a single ability. Deadlock charges one
+// "unlock" point (currency_type 2) to put the first point in an ability, then upgrade points
+// (currency_type 1) costing 1, 2, then 5 for its remaining three levels. This table is identical
+// across every real build inspected, so we can rebuild a valid ability_order from just the ordered
+// list of ability ids that ability-order-stats gives us (it carries no per-point cost itself).
+const POINT_COST: ReadonlyArray<{ type: number; delta: number }> = [
+  { type: 2, delta: -1 }, // 1st point — unlock
+  { type: 1, delta: -1 }, // 2nd point
+  { type: 1, delta: -2 }, // 3rd point
+  { type: 1, delta: -5 }, // 4th point
+];
+
+/** Encode the `ability_order` sub-message body from a flat sequence of ability ids in the order
+ * points were invested (each ability appears up to 4×, e.g. `SkillBuild.order`). Each investment
+ * becomes a CurrencyChange { 1: ability_id, 2: currency_type, 3: delta }; investments past an
+ * ability's fourth point are dropped (an ability has only four levels). */
+function encodeAbilityOrder(order: number[]): number[] {
+  const points = new Map<number, number>();
+  let changes: number[] = [];
+  for (const id of order) {
+    const n = points.get(id) ?? 0;
+    if (n >= POINT_COST.length) continue; // can't level an ability past 4 — ignore stray extras
+    points.set(id, n + 1);
+    const { type, delta } = POINT_COST[n];
+    const cc = varintField(1, id).concat(varintField(2, type), int32Field(3, delta));
+    changes = changes.concat(lenField(1, cc)); // currency_changes — repeated field 1
+  }
+  return changes;
+}
+
 /**
  * Encode a generated build as the envelope blob to drop into a `cached_hero_builds.kv3` build bucket
  * (e.g. `Favorites`). Returns the raw protobuf bytes; the KV3 read/inject/write around it is the
@@ -195,6 +247,9 @@ export function encodeHeroBuild(build: GeneratedBuild, opts: HeroBuildExportOpti
   let details: number[] = [];
   for (const cat of cats) {
     details = details.concat(lenField(1, encodeCategory(cat))); // details { 1: repeated category }
+  }
+  if (opts.skillOrder?.length) {
+    details = details.concat(lenField(2, encodeAbilityOrder(opts.skillOrder))); // details { 2: ability_order }
   }
 
   let hb: number[] = [];

@@ -1023,6 +1023,7 @@ export default function App() {
       {showExport && build && (
         <ExportPanel
           build={displayBuild ?? build}
+          skillOrder={skillBuild?.order}
           name={`Vibelock — ${build.hero.name}${
             archetypeSet?.flex && activeArchetype ? ` · ${activeArchetype.label}` : ""
           } (${build.rankLabel})`}
@@ -1064,11 +1065,14 @@ const CACHE_PATHS: Array<[string, string]> = [
  */
 function ExportPanel({
   build,
+  skillOrder,
   name,
   description,
   onClose,
 }: {
   build: GeneratedBuild;
+  /** The recommended skill (ability) upgrade order, exported alongside the items. */
+  skillOrder?: number[];
   name: string;
   description: string;
   onClose: () => void;
@@ -1104,7 +1108,7 @@ function ExportPanel({
     setDownloadUrl(null);
     try {
       if (authorId) localStorage.setItem("vibelock-steam-id", String(authorId));
-      const blob = encodeHeroBuild(build, { name, description, authorId });
+      const blob = encodeHeroBuild(build, { name, description, authorId, skillOrder });
       setStatus("Pick your cached_hero_builds.kv3…");
       const [handle] = await picker!({
         types: [
@@ -1143,7 +1147,7 @@ function ExportPanel({
     setDownloadUrl(null);
     try {
       if (authorId) localStorage.setItem("vibelock-steam-id", String(authorId));
-      const blob = encodeHeroBuild(build, { name, description, authorId });
+      const blob = encodeHeroBuild(build, { name, description, authorId, skillOrder });
       const out = await injectBuildIntoCache(
         new Uint8Array(await file.arrayBuffer()),
         blob,
