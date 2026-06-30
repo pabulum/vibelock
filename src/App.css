@@ -1404,6 +1404,85 @@ body {
   overscroll-behavior: contain;
   padding: 2px 20px 20px;
 }
+
+/* --- Export-to-in-game panel (reuses the guide modal shell) --- */
+.guide.export {
+  max-width: 540px;
+}
+.export-steps {
+  margin: 12px 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.export-steps strong {
+  color: var(--text);
+}
+.export-go {
+  display: inline-block;
+  margin: 4px 0;
+  padding: 9px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--accent, #5fa84a);
+  color: #08130a;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.export-go:hover {
+  filter: brightness(1.08);
+}
+.export-go:disabled,
+.export-go.busy {
+  opacity: 0.6;
+  cursor: default;
+}
+.export-steam {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 14px 0;
+  font-size: 13px;
+}
+.export-steam input {
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel, #1a1d24);
+  color: var(--text);
+  font: inherit;
+  max-width: 220px;
+}
+.export-status {
+  margin: 12px 0 4px;
+  font-size: 13px;
+}
+.export-status.working {
+  color: var(--muted);
+}
+.export-status.done {
+  color: #5fa84a;
+}
+.export-status.error {
+  color: #d9534f;
+}
+.export-where {
+  margin-top: 16px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.export-where summary {
+  cursor: pointer;
+}
+.export-where code {
+  font-size: 11.5px;
+  word-break: break-all;
+}
 .guide-body section {
   padding: 16px 0;
   border-bottom: 1px solid var(--line);
