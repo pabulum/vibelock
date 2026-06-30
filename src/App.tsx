@@ -1211,7 +1211,7 @@ function ExportPanel({
             <input
               type="text"
               inputMode="numeric"
-              placeholder="e.g. 48664091"
+              placeholder="e.g. 22202 (Gaben's)"
               value={steamId}
               onChange={(e) => setSteamId(e.target.value)}
             />
