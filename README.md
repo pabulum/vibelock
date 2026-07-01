@@ -77,9 +77,13 @@ numbers already on the row.
 
 ### Patch filter and counters
 
-- **Patch filter** — `/v1/patches` maps each patch to a `min_unix_timestamp` window. Defaults to
-  *Last 30 days*; picking a patch narrows the window (and a freshly-released patch has little data,
-  so the header flags a low match count).
+- **Patch filter** — `/v1/patches` maps each patch to a `min_unix_timestamp` window. Defaults to the
+  **newest patch**, backfilled from the 30 days before it (`lib/patchBlend.ts`): the pre-patch window
+  enters as a *power prior* worth at most ~K decided games per item (K learned from measured
+  patch-to-patch drift when the data can support the fit, default 1,000), discounted per item when
+  the fresh data contradicts it (the items the patch actually changed). The borrow self-anneals as
+  the patch accumulates games, and the header shows the borrowed share ("N% backfilled") so a
+  day-one build is complete *and* honest about its evidence.
 - **Matchups** — `hero-counter-stats` returns the full hero-vs-hero matrix (it ignores hero filters),
   fetched once per rank/patch and filtered to the selected hero. Each enemy's win rate is compared to
   the hero's overall win rate; **Tough** (they counter you) and **Favored** matchups show as clickable

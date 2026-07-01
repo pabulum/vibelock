@@ -45,6 +45,7 @@ import {
   slugify,
   type UrlState,
 } from "./lib/urlState";
+import { blendFlow, PRIOR_WINDOW_S } from "./lib/patchBlend";
 import { buildSynergyLookup, singleRecordsFromFlow } from "./lib/synergy";
 import { bestImbueTargets } from "./lib/imbue";
 import { heroMatchups } from "./lib/matchups";
@@ -75,12 +76,23 @@ import type {
 // Distinct colors for a hero's four abilities.
 const ABILITY_COLORS = ["#6fb1ff", "#e0a23c", "#5fc08a", "#cc6db1"];
 
-/** Time window for a chosen patch index (null = last 30 days). Patches are newest-first. */
-function windowFor(patches: Patch[], idx: number | null): TimeWindow {
-  if (idx === null || !patches[idx]) return {};
+/** Time window for a chosen patch index. Patches are newest-first. */
+function windowFor(patches: Patch[], idx: number): TimeWindow {
+  if (!patches[idx]) return {};
   return {
     minUnixTimestamp: patches[idx].ts,
     maxUnixTimestamp: idx > 0 ? patches[idx - 1].ts : undefined,
+  };
+}
+
+/** The borrow window that backfills a young patch: the month *before* the patch dropped. This is
+ * where the old "Last 30 days" default went — instead of mixing patches at full weight, the
+ * pre-patch month enters the build as a capped, drift-discounted prior (see lib/patchBlend). */
+function priorWindowFor(patches: Patch[], idx: number): TimeWindow {
+  if (!patches[idx]) return {};
+  return {
+    minUnixTimestamp: patches[idx].ts - PRIOR_WINDOW_S,
+    maxUnixTimestamp: patches[idx].ts,
   };
 }
 
@@ -207,7 +219,7 @@ export default function App() {
   const [patches, setPatches] = useState<Patch[]>([]);
   const [heroId, setHeroId] = useState<number | null>(null);
   const [tier, setTier] = useState<number>(() => url0.tier ?? 11); // default Eternus
-  const [patchIdx, setPatchIdx] = useState<number | null>(null); // null = last 30 days
+  const [patchIdx, setPatchIdx] = useState<number>(0); // newest patch (backfilled from pre-patch data)
   const [enemies, setEnemies] = useState<number[]>([]);
 
   const [archetypeSet, setArchetypeSet] = useState<ArchetypeSet | null>(null);
@@ -228,6 +240,10 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  // Share of the build's win-rate evidence borrowed from the pre-patch window (see lib/patchBlend):
+  // ~0.85 the day after a patch, fading to ~0 as the patch matures. Surfaced in the meta line so
+  // "is this build trustworthy yet?" is a number, not a vibe.
+  const [backfill, setBackfill] = useState<number | null>(null);
 
   // Load assets once, then apply any deep-link selection now that we can resolve slugs/timestamps.
   useEffect(() => {
@@ -266,30 +282,62 @@ export default function App() {
   // Generate builds, split by archetype for flex heroes.
   const loading = useAsyncTask(
     async (signal) => {
-      if (!hero || !items) return;
+      if (!hero || !items || patches.length === 0) return;
       setError(null);
       const window = windowFor(patches, patchIdx);
+      const priorWindow = priorWindowFor(patches, patchIdx);
+      // Every flow is fetched twice — the selected patch and the month before it — and blended
+      // (lib/patchBlend): the pre-patch window backfills a young patch as a capped, drift-discounted
+      // prior, so a day-one build is complete instead of starved by the support/significance gates.
+      // The blend self-anneals, so on a mature patch the prior contributes ~nothing. The fresh fetch
+      // drops the server-side min_matches floor (default 100) to 10 — on day one most nodes are
+      // below 100 matches, and the client-side gates run on the blended effective sample anyway.
       const flowFor = (includeItemIds?: number[]) =>
-        getItemFlowStats({
-          heroId: hero.id,
-          minBadge,
-          ...window,
-          includeItemIds,
-        });
+        Promise.all([
+          getItemFlowStats({
+            heroId: hero.id,
+            minBadge,
+            ...window,
+            minMatches: 10,
+            includeItemIds,
+          }),
+          getItemFlowStats({
+            heroId: hero.id,
+            minBadge,
+            ...priorWindow,
+            includeItemIds,
+          }),
+        ]).then(([f, q]) => blendFlow(f, q));
 
       // Base population + buy times (for buy-order) + item-pair permutation stats, in parallel. The
       // permutation payload is large but overlaps the flow fetches below; a failure is non-fatal (the
-      // build just ranks on win rate alone and the synergy panel hides).
-      const [base, stats, permRows] = await Promise.all([
+      // build just ranks on win rate alone and the synergy panel hides). Buy/sell times come from
+      // both windows too: per item, prefer the fresh average once it has a steady sample, else keep
+      // the pre-patch one (timing barely drifts across patches; ordering stability wins). Permutation
+      // stats span both windows in ONE fetch — synergy is a centered, shrunk tiebreak, so the mixed
+      // window is fine and the payload is too big to double.
+      const [baseBlend, statsFresh, statsPrior, permRows] = await Promise.all([
         flowFor(),
-        getItemStats({ heroId: hero.id, minBadge, ...window }),
-        getItemPermutationStats({ heroId: hero.id, minBadge, ...window }).catch(
-          () => null,
-        ),
+        getItemStats({ heroId: hero.id, minBadge, ...window, minMatches: 5 }),
+        getItemStats({ heroId: hero.id, minBadge, ...priorWindow }),
+        getItemPermutationStats({
+          heroId: hero.id,
+          minBadge,
+          minUnixTimestamp: priorWindow.minUnixTimestamp,
+          maxUnixTimestamp: window.maxUnixTimestamp,
+        }).catch(() => null),
       ]);
-      const buyTimes = new Map(stats.map((s) => [s.item_id, s.avg_buy_time_s]));
+      const base = baseBlend.flow;
+      const BUY_TIME_MIN_MATCHES = 40;
+      const timeStats = new Map(statsPrior.map((s) => [s.item_id, s]));
+      for (const s of statsFresh)
+        if (s.matches >= BUY_TIME_MIN_MATCHES || !timeStats.has(s.item_id))
+          timeStats.set(s.item_id, s);
+      const buyTimes = new Map(
+        [...timeStats.values()].map((s) => [s.item_id, s.avg_buy_time_s]),
+      );
       const sellTimes = new Map(
-        stats.map((s) => [s.item_id, s.avg_sell_time_s]),
+        [...timeStats.values()].map((s) => [s.item_id, s.avg_sell_time_s]),
       );
 
       // Pairwise synergy lookup (#5/#6): centered + shrunk interaction between item ids, from the
@@ -304,11 +352,14 @@ export default function App() {
       // Condition on each archetype's signature item. The gun/spirit overlap (for the
       // flex/hybrid decision) is read out of the gun flow itself, so no extra query.
       const sig = pickSignatures(base, items);
-      const [gun, spirit] = await Promise.all([
+      const [gunBlend, spiritBlend] = await Promise.all([
         sig.gun ? flowFor([sig.gun]) : Promise.resolve(undefined),
         sig.spirit ? flowFor([sig.spirit]) : Promise.resolve(undefined),
       ]);
       if (signal.aborted) return;
+      const gun = gunBlend?.flow;
+      const spirit = spiritBlend?.flow;
+      setBackfill(baseBlend.borrowedShare);
 
       const set = assembleArchetypes(
         hero,
@@ -352,7 +403,7 @@ export default function App() {
     const state: UrlState = {
       hero: slugify(hero.name),
       tier,
-      patchTs: patchIdx !== null ? patches[patchIdx]?.ts : undefined,
+      patchTs: patches[patchIdx]?.ts,
       build: archKey,
       enemies: enemies
         .map((id) => heroes.find((h) => h.id === id)?.name)
@@ -451,7 +502,9 @@ export default function App() {
       };
       // Prefer the order players ran *with* this archetype's signature item — but that
       // slice is narrow, so at a high rank floor on one patch it can come back empty.
-      // Fall back to the hero's overall order so we always have something to show.
+      // Fall back to the hero's overall order, and on a young patch where even that is
+      // empty, to the pre-patch month — a stale-but-real order beats no order (skill
+      // order is descriptive, and patches rarely reshape it).
       const conditioned = await getAbilityOrder({
         ...base,
         includeItemIds: activeSignatureId ? [activeSignatureId] : undefined,
@@ -459,6 +512,15 @@ export default function App() {
       let build = bestSkillBuild(conditioned);
       if (!build && activeSignatureId) {
         build = bestSkillBuild(await getAbilityOrder(base));
+      }
+      if (!build) {
+        build = bestSkillBuild(
+          await getAbilityOrder({
+            heroId: hero.id,
+            minBadge,
+            ...priorWindowFor(patches, patchIdx),
+          }),
+        );
       }
       if (!signal.aborted) setSkillBuild(build);
     },
@@ -546,8 +608,12 @@ export default function App() {
       e.includes(id) ? e.filter((x) => x !== id) : [...e, id],
     );
 
-  const patchLabel =
-    patchIdx === null ? "last 30 days" : patches[patchIdx]?.title;
+  const patchLabel = patches[patchIdx]?.title ?? "…";
+  // "leans N% on pre-patch data" — only worth saying when the borrow is real (≥ 1%).
+  const backfillLabel =
+    backfill !== null && backfill >= 0.01
+      ? ` (${Math.round(backfill * 100)}% backfilled from the prior 30 days)`
+      : "";
   const enemyNames = enemies
     .map((id) => heroes.find((h) => h.id === id)?.name ?? "?")
     .join(", ");
@@ -667,17 +733,13 @@ export default function App() {
           <label>
             Patch
             <select
-              value={patchIdx ?? ""}
-              onChange={(e) =>
-                setPatchIdx(
-                  e.target.value === "" ? null : Number(e.target.value),
-                )
-              }
+              value={patchIdx}
+              onChange={(e) => setPatchIdx(Number(e.target.value))}
             >
-              <option value="">Last 30 days</option>
               {patches.map((p, i) => (
                 <option key={p.ts} value={i}>
                   {p.title}
+                  {i === 0 ? " (latest)" : ""}
                 </option>
               ))}
             </select>
@@ -714,8 +776,9 @@ export default function App() {
             {archetypeSet?.flex && activeArchetype
               ? ` · ${activeArchetype.label}`
               : ""}{" "}
-            · {build.rankLabel} · {patchLabel} ·{" "}
-            {build.population.matches.toLocaleString()} matches · avg game{" "}
+            · {build.rankLabel} · {patchLabel}
+            {backfillLabel} · {build.population.matches.toLocaleString()}{" "}
+            matches · avg game{" "}
             {Math.round(build.population.avgDurationS / 60)} min ·{" "}
             {(build.population.baselineWinRate * 100).toFixed(0)}% avg WR (rows
             show ± vs this) ·{" "}
@@ -1382,9 +1445,21 @@ function GuideModal({ onClose }: { onClose: () => void }) {
                 deadlock-api.com
               </a>
               , filtered to the <strong>rank floor</strong> and{" "}
-              <strong>patch</strong> you select (or the last 30 days). Nothing
-              here is hand-curated — change a control and the whole page
-              recomputes.
+              <strong>patch</strong> you select (the newest patch by default).
+              Nothing here is hand-curated — change a control and the whole
+              page recomputes.
+            </p>
+            <p>
+              A <strong>young patch</strong> has too few games to judge every
+              item on its own, so the build is{" "}
+              <strong>backfilled from the 30 days before the patch</strong>:
+              each item&rsquo;s pre-patch record counts as prior evidence worth
+              at most ~a thousand games, and it fades out automatically as the
+              new patch accumulates data. Items whose fresh numbers clearly
+              disagree with their pre-patch record (the things the patch
+              actually changed) borrow far less, and brand-new items are judged
+              on fresh data alone. The meta line shows what share of the
+              evidence is backfilled.
             </p>
           </section>
 
@@ -1698,8 +1773,8 @@ function SkillEmpty() {
         Skill order <span className="sub">not enough games on this filter</span>
       </h2>
       <p className="empty">
-        No upgrade order has a confident sample here. Try{" "}
-        <strong>Last 30 days</strong> or a lower rank floor.
+        No upgrade order has a confident sample here — even in the pre-patch
+        window. Try a lower rank floor.
       </p>
     </section>
   );
