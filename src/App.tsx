@@ -220,6 +220,9 @@ export default function App() {
   const [heroId, setHeroId] = useState<number | null>(null);
   const [tier, setTier] = useState<number>(() => url0.tier ?? 11); // default Eternus
   const [patchIdx, setPatchIdx] = useState<number>(0); // newest patch (backfilled from pre-patch data)
+  // Pre-patch backfill toggle (lib/patchBlend). Default on — a young patch alone starves the
+  // build's support/significance gates; off = the selected window raw, exactly the old behavior.
+  const [backfillOn, setBackfillOn] = useState<boolean>(url0.backfill ?? true);
   const [enemies, setEnemies] = useState<number[]>([]);
 
   const [archetypeSet, setArchetypeSet] = useState<ArchetypeSet | null>(null);
@@ -286,28 +289,36 @@ export default function App() {
       setError(null);
       const window = windowFor(patches, patchIdx);
       const priorWindow = priorWindowFor(patches, patchIdx);
-      // Every flow is fetched twice — the selected patch and the month before it — and blended
-      // (lib/patchBlend): the pre-patch window backfills a young patch as a capped, drift-discounted
-      // prior, so a day-one build is complete instead of starved by the support/significance gates.
-      // The blend self-anneals, so on a mature patch the prior contributes ~nothing. The fresh fetch
-      // drops the server-side min_matches floor (default 100) to 10 — on day one most nodes are
-      // below 100 matches, and the client-side gates run on the blended effective sample anyway.
+      // With backfill on (default), every flow is fetched twice — the selected patch and the month
+      // before it — and blended (lib/patchBlend): the pre-patch window backfills a young patch as a
+      // capped, drift-discounted prior, so a day-one build is complete instead of starved by the
+      // support/significance gates. The blend self-anneals, so on a mature patch the prior
+      // contributes ~nothing. The fresh fetch drops the server-side min_matches floor (default 100)
+      // to 10 — on day one most nodes are below 100 matches, and the client-side gates run on the
+      // blended effective sample anyway. Backfill off = the selected window raw, single fetch.
       const flowFor = (includeItemIds?: number[]) =>
-        Promise.all([
-          getItemFlowStats({
-            heroId: hero.id,
-            minBadge,
-            ...window,
-            minMatches: 10,
-            includeItemIds,
-          }),
-          getItemFlowStats({
-            heroId: hero.id,
-            minBadge,
-            ...priorWindow,
-            includeItemIds,
-          }),
-        ]).then(([f, q]) => blendFlow(f, q));
+        backfillOn
+          ? Promise.all([
+              getItemFlowStats({
+                heroId: hero.id,
+                minBadge,
+                ...window,
+                minMatches: 10,
+                includeItemIds,
+              }),
+              getItemFlowStats({
+                heroId: hero.id,
+                minBadge,
+                ...priorWindow,
+                includeItemIds,
+              }),
+            ]).then(([f, q]) => blendFlow(f, q))
+          : getItemFlowStats({
+              heroId: hero.id,
+              minBadge,
+              ...window,
+              includeItemIds,
+            }).then((f) => ({ flow: f, borrowedShare: 0, patchK: 0 }));
 
       // Base population + buy times (for buy-order) + item-pair permutation stats, in parallel. The
       // permutation payload is large but overlaps the flow fetches below; a failure is non-fatal (the
@@ -318,13 +329,24 @@ export default function App() {
       // window is fine and the payload is too big to double.
       const [baseBlend, statsFresh, statsPrior, permRows] = await Promise.all([
         flowFor(),
-        getItemStats({ heroId: hero.id, minBadge, ...window, minMatches: 5 }),
-        getItemStats({ heroId: hero.id, minBadge, ...priorWindow }),
+        getItemStats({
+          heroId: hero.id,
+          minBadge,
+          ...window,
+          ...(backfillOn ? { minMatches: 5 } : {}),
+        }),
+        backfillOn
+          ? getItemStats({ heroId: hero.id, minBadge, ...priorWindow })
+          : Promise.resolve([]),
         getItemPermutationStats({
           heroId: hero.id,
           minBadge,
-          minUnixTimestamp: priorWindow.minUnixTimestamp,
-          maxUnixTimestamp: window.maxUnixTimestamp,
+          ...(backfillOn
+            ? {
+                minUnixTimestamp: priorWindow.minUnixTimestamp,
+                maxUnixTimestamp: window.maxUnixTimestamp,
+              }
+            : window),
         }).catch(() => null),
       ]);
       const base = baseBlend.flow;
@@ -359,7 +381,7 @@ export default function App() {
       if (signal.aborted) return;
       const gun = gunBlend?.flow;
       const spirit = spiritBlend?.flow;
-      setBackfill(baseBlend.borrowedShare);
+      setBackfill(backfillOn ? baseBlend.borrowedShare : null);
 
       const set = assembleArchetypes(
         hero,
@@ -385,7 +407,7 @@ export default function App() {
       }
       urlArchApplied.current = true;
     },
-    [hero, items, minBadge, tier, patchIdx, patches, url0.build],
+    [hero, items, minBadge, tier, patchIdx, patches, backfillOn, url0.build],
     setError,
   );
 
@@ -404,6 +426,7 @@ export default function App() {
       hero: slugify(hero.name),
       tier,
       patchTs: patches[patchIdx]?.ts,
+      backfill: backfillOn,
       build: archKey,
       enemies: enemies
         .map((id) => heroes.find((h) => h.id === id)?.name)
@@ -412,7 +435,7 @@ export default function App() {
     };
     const url = `${window.location.pathname}${encodeUrlState(state)}${window.location.hash}`;
     window.history.replaceState(null, "", url);
-  }, [hero, tier, patchIdx, patches, archKey, enemies, heroes]);
+  }, [hero, tier, patchIdx, patches, backfillOn, archKey, enemies, heroes]);
 
   // Reflect the selected hero — and its in-game role flavor line — in the tab title. Nice for
   // bookmarks and shared deep links. Falls back to the brand title while assets load, and to just
@@ -513,7 +536,7 @@ export default function App() {
       if (!build && activeSignatureId) {
         build = bestSkillBuild(await getAbilityOrder(base));
       }
-      if (!build) {
+      if (!build && backfillOn) {
         build = bestSkillBuild(
           await getAbilityOrder({
             heroId: hero.id,
@@ -524,7 +547,7 @@ export default function App() {
       }
       if (!signal.aborted) setSkillBuild(build);
     },
-    [hero, minBadge, patchIdx, patches, activeSignatureId],
+    [hero, minBadge, patchIdx, patches, backfillOn, activeSignatureId],
     setError,
   );
 
@@ -743,6 +766,17 @@ export default function App() {
                 </option>
               ))}
             </select>
+          </label>
+          <label
+            className="checkctl"
+            title="Pad a young patch's thin data with the 30 days before it, as a capped prior that fades out as the patch accumulates games (see How it works). Off = the selected window only."
+          >
+            Backfill
+            <input
+              type="checkbox"
+              checked={backfillOn}
+              onChange={(e) => setBackfillOn(e.target.checked)}
+            />
           </label>
           <button
             type="button"
@@ -1459,7 +1493,9 @@ function GuideModal({ onClose }: { onClose: () => void }) {
               disagree with their pre-patch record (the things the patch
               actually changed) borrow far less, and brand-new items are judged
               on fresh data alone. The meta line shows what share of the
-              evidence is backfilled.
+              evidence is backfilled, and the <strong>Backfill</strong> toggle
+              in the header turns it off — you get the selected window raw,
+              thin as it may be.
             </p>
           </section>
 

@@ -250,6 +250,19 @@ body {
   font-size: 14px;
   min-width: 150px;
 }
+/* The backfill checkbox rides the same label column as the selects; sized/centered to
+   sit on the select row's midline rather than dangling tiny under its caption. */
+.controls .checkctl {
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+.controls .checkctl input {
+  width: 18px;
+  height: 18px;
+  margin: 7px auto;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
 
 /* Top region: the skill-order card floats into the top-right corner and the build
    summary, style tabs, and community check flow up around it — so the card reads as a

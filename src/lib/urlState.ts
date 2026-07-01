@@ -12,11 +12,14 @@ export interface UrlState {
   /** Rank-floor tier, 0–11 (11 = Eternus). */
   tier?: number;
   /**
-   * Selected patch's Unix timestamp; absent ⇒ the default "last 30 days" window. We key off the
-   * timestamp rather than the patch-list index so a link survives newly-released patches shifting the
-   * list out from under it.
+   * Selected patch's Unix timestamp; absent ⇒ the newest patch. We key off the timestamp rather
+   * than the patch-list index so a link survives newly-released patches shifting the list out from
+   * under it.
    */
   patchTs?: number;
+  /** Pre-patch backfill (lib/patchBlend) on/off. Absent ⇒ true (the default); only `false` is
+   * encoded, so ordinary links stay clean. */
+  backfill?: boolean;
   /** Build archetype: "gun" | "spirit". Absent ⇒ "all" (the blended/default build). */
   build?: string;
   /** Enemy lineup, as hero slugs. */
@@ -38,6 +41,7 @@ export function encodeUrlState(s: UrlState): string {
   if (s.hero) p.set('hero', s.hero);
   if (s.tier !== undefined) p.set('rank', String(s.tier));
   if (s.patchTs !== undefined) p.set('patch', String(s.patchTs));
+  if (s.backfill === false) p.set('bf', '0');
   if (s.build && s.build !== 'all') p.set('build', s.build);
   if (s.enemies?.length) p.set('vs', s.enemies.join(','));
   const q = p.toString();
@@ -58,6 +62,8 @@ export function decodeUrlState(search: string): UrlState {
 
   const patch = p.get('patch');
   if (patch !== null && /^\d+$/.test(patch)) out.patchTs = Number(patch);
+
+  if (p.get('bf') === '0') out.backfill = false;
 
   const build = p.get('build');
   if (build === 'gun' || build === 'spirit') out.build = build;
