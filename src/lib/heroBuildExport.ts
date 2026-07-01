@@ -12,8 +12,12 @@
 //     8: version   9: build_id  10: details  13: published(unix)
 //   }
 //   details { 1: repeated category  2: ability_order }
-//   category { 1: repeated mod{1: item_id}  2: name  3: description  4: ui_x(f32)  5: ui_y(f32)  6: optional(bool) }
+//   category { 1: repeated mod  2: name  3: description  4: width(f32)  5: height(f32)  6: optional(bool) }
+//   mod { 1: item_id  2: annotation(string)  5: imbue_target_ability_id }
 //   ability_order { 1: repeated currency_change{1: ability_id  2: currency_type  3: delta(int32)} }
+//
+// The field names/numbers match Valve's CMsgHeroBuild in citadel_gcmessages_common.proto
+// (SteamDatabase/Protobufs) — category = BuildModCategory, mod = BuildModEntry.
 //
 // Verified in-game: the categories, their order, the item placement, and the `optional` flag all
 // render correctly; populating the timestamps (4/13) is what stops the game tagging it "[OUTDATED]".
@@ -21,7 +25,8 @@
 // investment is one CurrencyChange, and its currency_type/delta follow Deadlock's fixed per-level
 // cost (unlock, then 1/2/5 upgrade points) — reverse-engineered from real builds (see encodeAbilityOrder).
 
-import type { GeneratedBuild } from '../types';
+import type { BuildItem, GeneratedBuild, ImbueTarget } from "../types";
+import { classifyWinState } from "./buildGenerator";
 
 // ---- Minimal protobuf wire writer (only the pieces this message needs) ----
 
@@ -88,13 +93,67 @@ function floatField(field: number, value: number): number[] {
 
 // ---- Build → CMsgHeroBuild ----
 
+/** One item in an exported category, with its in-game extras: the annotation (the note icon on the
+ * item — Vibelock's reasoning for the pick) and, for imbue items, the ability to imbue onto. */
+export interface ExportMod {
+  itemId: number;
+  annotation?: string;
+  imbueAbilityId?: number;
+}
+
 /** One in-game build category: a named group of items, an optional always-visible description, and
  * an optional flag marking it a flex/optional row (the game groups optional rows separately). */
 interface ExportCategory {
   name: string;
-  itemIds: number[];
+  mods: ExportMod[];
   description?: string;
   optional?: boolean;
+}
+
+const fmtPts = (d: number) =>
+  `${d >= 0 ? "+" : "-"}${Math.abs(d * 100).toFixed(1)}`;
+
+/**
+ * The in-game annotation for a pick: Vibelock's reasoning, compressed to one scannable line. The
+ * shop already shows the item's own tooltip, so this carries only what the game can't tell you —
+ * the pick's edge vs the hero average and the build clues (same language as the app's row tags:
+ * win-state, core-by-later, swap-for, sell/builds-into notes, comp edge). Single line, most
+ * important first — none of 3,299 real annotations sampled from /v1/builds contain a newline, so
+ * we don't risk one.
+ */
+export function itemAnnotation(
+  b: BuildItem,
+  baseline: number,
+  imbueOn?: string,
+): string {
+  const parts: string[] = [];
+  parts.push(
+    `${fmtPts(b.adjustedWinRate - baseline)} pts vs hero avg (adjusted, n=${b.decided.toLocaleString("en-US")})`,
+  );
+  if (b.role === "universal") parts.push("staple — most players buy this");
+  else if (b.role === "value") parts.push("value pick");
+  else if (b.role === "filler")
+    parts.push("fills the phase budget, not a value pick");
+  if (b.why && b.why !== b.item.effect) parts.push(b.why); // custom rationale only — effect text is on the card
+  const state = classifyWinState(b.rawWinRate, b.adjustedWinRate, baseline);
+  if (state === "winmore")
+    parts.push("win more — its win rate leans on already being ahead");
+  else if (state === "comeback")
+    parts.push("comeback — holds up even bought from behind");
+  if (b.coreLater)
+    parts.push(
+      `core by ${b.coreLater} — ${b.coreRush ? "rush if ahead" : "buy later (worse bought early)"}`,
+    );
+  if (b.swapFor) parts.push(`swap for ${b.swapFor.name}`);
+  if (b.transientReason) parts.push(b.transientReason);
+  else if (b.buildsToward)
+    parts.push(`most build toward ${b.buildsToward.name}`);
+  if (b.weakVsComp && b.compEdge !== undefined)
+    parts.push(`weak into the selected comp (${fmtPts(b.compEdge)} pts)`);
+  else if (b.compEdge !== undefined && b.compEdge > 0)
+    parts.push(`answers the selected comp (${fmtPts(b.compEdge)} pts)`);
+  if (imbueOn) parts.push(`imbue → ${imbueOn} (community pick)`);
+  return parts.join(" · ");
 }
 
 export interface HeroBuildExportOptions {
@@ -118,12 +177,16 @@ export interface HeroBuildExportOptions {
    * present, encoded as the build's in-game skill order so the shop also walks ability upgrades.
    * Omit/empty to leave the build without a skill order (still fully usable). */
   skillOrder?: number[];
+  /** Per item id: the ability the community most often imbues that item onto. Encoded as the mod's
+   * `imbue_target_ability_id` (so the in-game build applies the imbue) and noted in the annotation.
+   * It's author popularity, not a win rate — same epistemic class as the app's imbue tag. */
+  imbues?: Map<number, ImbueTarget>;
 }
 
-// Categories carry only an (x, y) and no size; the build *browser* lays them out in list order,
-// left-to-right and wrapping, and clean in-game-made builds put every category at the *same* point
-// (e.g. one observed default sits all categories at 1000,90). Distinct coordinates made our first
-// columns clip, so we give every category identical coords and let list order drive the layout —
+// Fields 4/5 are width/height in Valve's proto; the build *browser* lays categories out in list
+// order, left-to-right and wrapping, and clean in-game-made builds give every category the *same*
+// values (one observed default sits all categories at 1000,90). Distinct values made our first
+// columns clip, so we give every category identical ones and let list order drive the layout —
 // which is why the list is ordered phase-core → that phase's swaps (see buildExportCategories).
 const UI_X = 1000;
 const UI_Y = 90;
@@ -137,18 +200,29 @@ const UI_Y = 90;
 export function buildExportCategories(
   build: GeneratedBuild,
   includeOvertime = true,
+  imbues?: Map<number, ImbueTarget>,
 ): ExportCategory[] {
+  const baseline = build.population.baselineWinRate;
+  const toMod = (b: BuildItem): ExportMod => {
+    const imbue = imbues?.get(b.item.id);
+    return {
+      itemId: b.item.id,
+      annotation: itemAnnotation(b, baseline, imbue?.ability.name),
+      imbueAbilityId: imbue?.ability.id,
+    };
+  };
+
   // All of a build's core item ids, computed up front so a swap that's *core in a later phase*
   // isn't also listed as a swap (we still want each item to appear exactly once).
   const coreSeen = new Set<number>();
   const coreByPhase = build.phases.map((phase) => {
-    const ids: number[] = [];
+    const mods: ExportMod[] = [];
     for (const b of phase.core) {
       if (coreSeen.has(b.item.id)) continue;
       coreSeen.add(b.item.id);
-      ids.push(b.item.id);
+      mods.push(toMod(b));
     }
-    return ids;
+    return mods;
   });
 
   // Interleave: each phase's core, immediately followed by that phase's optional swaps — so the
@@ -157,35 +231,40 @@ export function buildExportCategories(
   const situSeen = new Set<number>();
   build.phases.forEach((phase, i) => {
     if (coreByPhase[i].length)
-      cats.push({ name: phase.label, description: phase.timeLabel, itemIds: coreByPhase[i] });
-    const swapIds: number[] = [];
+      cats.push({
+        name: phase.label,
+        description: phase.timeLabel,
+        mods: coreByPhase[i],
+      });
+    const swaps: ExportMod[] = [];
     for (const b of phase.situational) {
       if (coreSeen.has(b.item.id) || situSeen.has(b.item.id)) continue;
       situSeen.add(b.item.id);
-      swapIds.push(b.item.id);
+      swaps.push(toMod(b));
     }
-    if (swapIds.length)
+    if (swaps.length)
       cats.push({
         name: `${phase.label} · swaps`,
         description: `Optional alternatives for ${phase.label.toLowerCase()}`,
-        itemIds: swapIds,
+        mods: swaps,
         optional: true,
       });
   });
 
   if (includeOvertime) {
-    const ot: number[] = [];
+    const ot: ExportMod[] = [];
     const seen = new Set<number>([...coreSeen, ...situSeen]);
     for (const b of build.overtimeBuys) {
       if (seen.has(b.item.id)) continue;
       seen.add(b.item.id);
-      ot.push(b.item.id);
+      ot.push(toMod(b));
     }
     if (ot.length)
       cats.push({
-        name: 'Overtime',
-        description: 'Spend surplus souls late — replace your lowest-tier slots',
-        itemIds: ot,
+        name: "Overtime",
+        description:
+          "Spend surplus souls late — replace your lowest-tier slots",
+        mods: ot,
         optional: true,
       });
   }
@@ -193,9 +272,18 @@ export function buildExportCategories(
   return cats;
 }
 
+/** mod (BuildModEntry) { 1: item_id  2: annotation  5: imbue_target_ability_id } */
+function encodeMod(mod: ExportMod): number[] {
+  let body = varintField(1, mod.itemId);
+  if (mod.annotation) body = body.concat(stringField(2, mod.annotation));
+  if (mod.imbueAbilityId)
+    body = body.concat(varintField(5, mod.imbueAbilityId));
+  return body;
+}
+
 function encodeCategory(cat: ExportCategory): number[] {
   let body: number[] = [];
-  for (const id of cat.itemIds) body = body.concat(lenField(1, varintField(1, id))); // mod { 1: item_id }
+  for (const mod of cat.mods) body = body.concat(lenField(1, encodeMod(mod)));
   body = body.concat(stringField(2, cat.name));
   if (cat.description) body = body.concat(stringField(3, cat.description)); // always-visible category note
   body = body.concat(floatField(4, UI_X)); // identical coords for every category…
@@ -228,7 +316,10 @@ function encodeAbilityOrder(order: number[]): number[] {
     if (n >= POINT_COST.length) continue; // can't level an ability past 4 — ignore stray extras
     points.set(id, n + 1);
     const { type, delta } = POINT_COST[n];
-    const cc = varintField(1, id).concat(varintField(2, type), int32Field(3, delta));
+    const cc = varintField(1, id).concat(
+      varintField(2, type),
+      int32Field(3, delta),
+    );
     changes = changes.concat(lenField(1, cc)); // currency_changes — repeated field 1
   }
   return changes;
@@ -239,10 +330,17 @@ function encodeAbilityOrder(order: number[]): number[] {
  * (e.g. `Favorites`). Returns the raw protobuf bytes; the KV3 read/inject/write around it is the
  * backend's job (the game accepts a text-format KV3, so no binary writer is needed).
  */
-export function encodeHeroBuild(build: GeneratedBuild, opts: HeroBuildExportOptions): Uint8Array {
+export function encodeHeroBuild(
+  build: GeneratedBuild,
+  opts: HeroBuildExportOptions,
+): Uint8Array {
   const ts = Math.floor(opts.timestamp ?? Date.now() / 1000);
   const buildId = opts.buildId ?? ts;
-  const cats = buildExportCategories(build, opts.includeOvertime !== false);
+  const cats = buildExportCategories(
+    build,
+    opts.includeOvertime !== false,
+    opts.imbues,
+  );
 
   let details: number[] = [];
   for (const cat of cats) {
@@ -258,7 +356,7 @@ export function encodeHeroBuild(build: GeneratedBuild, opts: HeroBuildExportOpti
   if (opts.authorId) hb = hb.concat(varintField(3, opts.authorId)); // owner — lets them edit/delete in-game
   hb = hb.concat(varintField(4, ts)); // last_updated — kills "[OUTDATED]"
   hb = hb.concat(stringField(5, opts.name));
-  hb = hb.concat(stringField(6, opts.description ?? ''));
+  hb = hb.concat(stringField(6, opts.description ?? ""));
   hb = hb.concat(varintField(8, 1)); // version
   hb = hb.concat(varintField(9, buildId));
   hb = hb.concat(lenField(10, details));

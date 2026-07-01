@@ -25,14 +25,15 @@ import type {
   ItemFlowStats,
   NeedKind,
   SlotType,
-} from '../types';
-import { significantlyHigher } from './stats';
+} from "../types";
+import { GATE_Z, significantlyHigher } from "./stats";
+import type { CompEdge } from "./counters";
 
 const PHASE_META = [
-  { label: 'Lane', timeLabel: '0–9 min' },
-  { label: 'Early mid', timeLabel: '9–20 min' },
-  { label: 'Mid', timeLabel: '20–30 min' },
-  { label: 'Late', timeLabel: '30+ min' },
+  { label: "Lane", timeLabel: "0–9 min" },
+  { label: "Early mid", timeLabel: "9–20 min" },
+  { label: "Mid", timeLabel: "20–30 min" },
+  { label: "Late", timeLabel: "30+ min" },
 ];
 
 // --- Tuning knobs (top of file on purpose; no math needed to adjust) ---
@@ -75,7 +76,7 @@ export const SLOT_CAP = 12; // 9 base + 3 flex slots (unlocked via Walker kills)
 const SELL_FOR_SLOTS_MAX_TIER = 2; // only cheap stat-sticks/components (≤T2) are sold to free a slot; T3+
 // are "build complete" and never sold for room unless you're giga-late (which we don't assume — see
 // capStandingSlots). This is why builds read fine without a hard cap: the overflow is the stuff you sell.
-const SOLD_FOR_SLOTS = 'sold late for a slot';
+const SOLD_FOR_SLOTS = "sold late for a slot";
 // --- Overtime buy-list ranking (see overtimeBuyList) ---
 const OVERTIME_MIN_TIER = 3; // an overtime buy is an upgrade you spend surplus souls on, never a cheap
 // stat-stick you're replacing. T4 dominates the late window, but standout T3s (Kelvin's Rapid Recharge,
@@ -113,7 +114,12 @@ const EB_MAX_K = 4000; // ...or a freak-tight one shrink everything flat to base
 /** Empirical-Bayes prior mean of an item's win rate: a weighted average of its observed (adjusted) rate
  * and the hero baseline, where the baseline carries the weight of `k` games. `n` = the item's decided
  * games. n≫k ⇒ ≈ the item's own rate; n≪k ⇒ ≈ baseline; n=k ⇒ exactly halfway. */
-function shrinkToBaseline(winRate: number, n: number, baseline: number, k: number): number {
+function shrinkToBaseline(
+  winRate: number,
+  n: number,
+  baseline: number,
+  k: number,
+): number {
   return (n * winRate + k * baseline) / (n + k);
 }
 
@@ -133,7 +139,12 @@ const RANK_CONFIDENCE_Z = 1.0;
  * small-sample shines, with both the shrink *and* the uncertainty baked into one number. (Same posterior
  * as #1 — that read the mean; this reads its lower edge.)
  */
-function lowerConfidenceWinRate(winRate: number, n: number, baseline: number, k: number): number {
+function lowerConfidenceWinRate(
+  winRate: number,
+  n: number,
+  baseline: number,
+  k: number,
+): number {
   const mean = shrinkToBaseline(winRate, n, baseline, k);
   const sd = Math.sqrt((mean * (1 - mean)) / (n + k + 1));
   return mean - RANK_CONFIDENCE_Z * sd;
@@ -147,7 +158,13 @@ function lowerConfidenceWinRate(winRate: number, n: number, baseline: number, k:
  * rate, so its own sampling noise is negligible next to a single item's.
  */
 function isValuePick(b: BuildItem, baseline: number): boolean {
-  return significantlyHigher(b.adjustedWinRate, b.decided, baseline, Number.POSITIVE_INFINITY, VALUE_EDGE);
+  return significantlyHigher(
+    b.adjustedWinRate,
+    b.decided,
+    baseline,
+    Number.POSITIVE_INFINITY,
+    VALUE_EDGE,
+  );
 }
 
 /**
@@ -159,15 +176,20 @@ function isValuePick(b: BuildItem, baseline: number): boolean {
  * little real spread ⇒ large K (shrink hard). Falls back to EB_DEFAULT_K when there aren't enough items,
  * and clamps to [EB_MIN_K, EB_MAX_K] so a freak sample can't push the build to one extreme.
  */
-function priorStrength(rates: Array<{ winRate: number; decided: number }>, baseline: number): number {
+function priorStrength(
+  rates: Array<{ winRate: number; decided: number }>,
+  baseline: number,
+): number {
   const pts = rates.filter((r) => r.decided >= EB_MIN_SAMPLE);
   if (pts.length < EB_MIN_ITEMS) return EB_DEFAULT_K;
   const m = baseline;
   // Total spread of the observed win rates around baseline...
-  const observedVar = pts.reduce((s, r) => s + (r.winRate - m) ** 2, 0) / pts.length;
+  const observedVar =
+    pts.reduce((s, r) => s + (r.winRate - m) ** 2, 0) / pts.length;
   // ...minus the part that's just finite-sample coin-flip noise (a baseline-rate item over n games has
   // sampling variance m(1−m)/n), averaged across items.
-  const samplingVar = pts.reduce((s, r) => s + (m * (1 - m)) / r.decided, 0) / pts.length;
+  const samplingVar =
+    pts.reduce((s, r) => s + (m * (1 - m)) / r.decided, 0) / pts.length;
   const trueVar = observedVar - samplingVar;
   if (trueVar <= 0) return EB_MAX_K; // no real spread beyond noise ⇒ trust the baseline, not the items
   const k = (m * (1 - m)) / trueVar - 1;
@@ -187,7 +209,9 @@ const CORE_SLOT_TARGET = SLOT_CAP; // committed standing slots at which efficien
 /** The efficiency weight to use for a phase, given how many standing slots are already committed. Linear fade
  * from CORE_COST_POWER_MAX (nothing committed — souls bind) to 0 (slots full — per-slot power decides). */
 function costPowerForSlots(slotsCommitted: number): number {
-  return CORE_COST_POWER_MAX * Math.max(0, 1 - slotsCommitted / CORE_SLOT_TARGET);
+  return (
+    CORE_COST_POWER_MAX * Math.max(0, 1 - slotsCommitted / CORE_SLOT_TARGET)
+  );
 }
 
 /** Discretionary core ranking. Combines: the adjusted-WR edge over baseline measured at the item's
@@ -231,7 +255,11 @@ const NEED_MAX_WR_DROP = 0.03; // ...and skip it if buyers win this far below ba
 // Categories we budget across, in fill order. Weapon is filled last on purpose: it's
 // the plurality buy most phases, so giving the reactively-bought categories (greens,
 // then spirit) first claim on the budget stops weapon from starving them of a slot.
-const FILL_ORDER: Array<'weapon' | 'vitality' | 'spirit'> = ['vitality', 'spirit', 'weapon'];
+const FILL_ORDER: Array<"weapon" | "vitality" | "spirit"> = [
+  "vitality",
+  "spirit",
+  "weapon",
+];
 
 // End of each phase's time window (seconds): Lane 0–9, Early mid 9–20, Mid 20–30, Late 30+. Used to
 // reject re-homing a cheap placeholder into a phase it's typically already sold within (see buildPhase).
@@ -272,7 +300,10 @@ export function generateBuild(
   // hero-wide K is steadier than re-estimating per phase, and the shrink itself still uses each item's
   // own decided-game count, so a thin pick in any phase is pulled back regardless.
   const priorK = priorStrength(
-    flow.nodes.map((n) => ({ winRate: n.adjusted_win_rate, decided: n.wins + n.losses })),
+    flow.nodes.map((n) => ({
+      winRate: n.adjusted_win_rate,
+      decided: n.wins + n.losses,
+    })),
     baselineWinRate,
   );
 
@@ -289,7 +320,19 @@ export function generateBuild(
   const claimed = new Set<number>();
   const phases: BuildPhase[] = [];
   for (let col = 0; col < PHASE_META.length; col++) {
-    const phase = buildPhase(col, flow, items, baselineWinRate, buyTimes, sellTimes, opts, primaryCol, owned, claimed, priorK);
+    const phase = buildPhase(
+      col,
+      flow,
+      items,
+      baselineWinRate,
+      buyTimes,
+      sellTimes,
+      opts,
+      primaryCol,
+      owned,
+      claimed,
+      priorK,
+    );
     phases.push(phase);
     for (const b of phase.core) owned.add(b.item.id);
   }
@@ -339,14 +382,17 @@ function overtimeBuyList(
   let maxCol = 0;
   for (const n of flow.nodes) if (n.column > maxCol) maxCol = n.column;
   const lateCol = Math.min(PHASE_META.length - 1, maxCol);
-  const reached = flow.reached_per_column[lateCol] || flow.baseline.matches || 1;
+  const reached =
+    flow.reached_per_column[lateCol] || flow.baseline.matches || 1;
 
   let pool = flow.nodes
     .filter((n) => n.column === lateCol)
     .map((n) => toCandidate(n, reached, items))
     .filter(
       (c): c is BuildItem =>
-        c !== null && c.item.tier >= OVERTIME_MIN_TIER && c.sample >= MIN_SUPPORT_ABS,
+        c !== null &&
+        c.item.tier >= OVERTIME_MIN_TIER &&
+        c.sample >= MIN_SUPPORT_ABS,
     );
 
   // Keep the upgrade, not its parts: drop any candidate that's a (transitive) component of another.
@@ -359,22 +405,36 @@ function overtimeBuyList(
   // (Refresher, 2% pick / n≈130 / +18pt) can't outrank the proven late staples. A small commit bonus still
   // nudges a widely-bought late pick past an equally-rated rarity.
   const rankEdge = (b: BuildItem) =>
-    lowerConfidenceWinRate(b.adjustedWinRate, b.decided, baselineWinRate, k) - baselineWinRate;
-  const score = (b: BuildItem) => rankEdge(b) + OVERTIME_COMMIT_WEIGHT * b.pickRate;
+    lowerConfidenceWinRate(b.adjustedWinRate, b.decided, baselineWinRate, k) -
+    baselineWinRate;
+  const score = (b: BuildItem) =>
+    rankEdge(b) + OVERTIME_COMMIT_WEIGHT * b.pickRate;
   const role = (b: BuildItem): BuildRole =>
-    b.pickRate >= UNIVERSAL_PICK ? 'universal' : isValuePick(b, baselineWinRate) ? 'value' : 'filler';
+    b.pickRate >= UNIVERSAL_PICK
+      ? "universal"
+      : isValuePick(b, baselineWinRate)
+        ? "value"
+        : "filler";
 
   // Only items that actually win late, highest priority (regularized late edge) first.
   return pool
     .filter((b) => edge(b) > 0)
     .sort((a, b) => score(b) - score(a))
     .slice(0, OVERTIME_MAX)
-    .map<BuildItem>((b) => ({ ...b, role: role(b), effectiveCost: b.item.cost, why: b.item.effect ?? '' }));
+    .map<BuildItem>((b) => ({
+      ...b,
+      role: role(b),
+      effectiveCost: b.item.cost,
+      why: b.item.effect ?? "",
+    }));
 }
 
 /** Item ids in `pool` that are a (transitive) component of some *other* item in `pool` — the parts
  * you've already built into a finished item, so they shouldn't hold their own endgame slot. */
-function supersededComponents(pool: BuildItem[], items: Map<number, Item>): Set<number> {
+function supersededComponents(
+  pool: BuildItem[],
+  items: Map<number, Item>,
+): Set<number> {
   const poolIds = new Set(pool.map((b) => b.item.id));
   const out = new Set<number>();
   const walk = (item: Item) => {
@@ -392,7 +452,8 @@ function supersededComponents(pool: BuildItem[], items: Map<number, Item>): Set<
 function primaryColumnByItem(flow: ItemFlowStats): Map<number, number> {
   const best = new Map<number, { col: number; pick: number }>();
   for (const n of flow.nodes) {
-    const reached = flow.reached_per_column[n.column] || flow.baseline.matches || 1;
+    const reached =
+      flow.reached_per_column[n.column] || flow.baseline.matches || 1;
     const pick = reached > 0 ? n.players / reached : 0;
     const cur = best.get(n.item_id);
     if (!cur || pick > cur.pick) best.set(n.item_id, { col: n.column, pick });
@@ -408,7 +469,11 @@ function dedupeAcrossPhases(phases: BuildPhase[]): void {
   phases.forEach((p, i) => {
     for (const b of p.core) {
       const cur = bestPhase.get(b.item.id);
-      if (cur === undefined || b.pickRate > phases[cur].core.find((x) => x.item.id === b.item.id)!.pickRate) {
+      if (
+        cur === undefined ||
+        b.pickRate >
+          phases[cur].core.find((x) => x.item.id === b.item.id)!.pickRate
+      ) {
         bestPhase.set(b.item.id, i);
       }
     }
@@ -479,7 +544,8 @@ function absorptionMap(core: BuildItem[]): Map<number, Item> {
   const coreIds = new Set(core.map((b) => b.item.id));
   const into = new Map<number, Item>();
   for (const b of core)
-    for (const compId of b.item.componentIds) if (coreIds.has(compId)) into.set(compId, b.item);
+    for (const compId of b.item.componentIds)
+      if (coreIds.has(compId)) into.set(compId, b.item);
   return into;
 }
 
@@ -488,7 +554,10 @@ function absorptionMap(core: BuildItem[]): Map<number, Item> {
  * recommended item (a shared slot) or they're a cheap item players typically sell —
  * and returns the count of items that *do* hold a slot. Mutates the phases' core items.
  */
-function markTransient(phases: BuildPhase[], sellTimes: Map<number, number>): number {
+function markTransient(
+  phases: BuildPhase[],
+  sellTimes: Map<number, number>,
+): number {
   const core = phases.flatMap((p) => p.core);
   const buildsInto = absorptionMap(core); // component → the one upgrade that absorbs it
 
@@ -498,7 +567,12 @@ function markTransient(phases: BuildPhase[], sellTimes: Map<number, number>): nu
     if (upgrade) {
       b.transient = true;
       b.transientReason = `builds into ${upgrade.name}`;
-    } else if (b.item.tier <= 1 && sellTime !== undefined && sellTime > 0 && sellTime < SELL_BEFORE_S) {
+    } else if (
+      b.item.tier <= 1 &&
+      sellTime !== undefined &&
+      sellTime > 0 &&
+      sellTime < SELL_BEFORE_S
+    ) {
       b.transient = true;
       b.transientReason = `often sold ~${mmss(sellTime)}`;
     }
@@ -532,7 +606,8 @@ function capStandingSlots(phases: BuildPhase[], cap: number): number {
   let held = standing.length;
   if (held <= cap) return held;
 
-  const roleWeakness = (r: BuildRole) => (r === 'filler' ? 0 : r === 'value' ? 1 : 2);
+  const roleWeakness = (r: BuildRole) =>
+    r === "filler" ? 0 : r === "value" ? 1 : 2;
   const sellable = standing
     .filter((b) => b.item.tier <= SELL_FOR_SLOTS_MAX_TIER)
     .sort(
@@ -553,7 +628,7 @@ function capStandingSlots(phases: BuildPhase[], cap: number): number {
 }
 
 function mmss(s: number): string {
-  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 }
 
 const COST_BAND = 1.6; // a "swap" only makes sense between items of comparable cost
@@ -571,9 +646,14 @@ function withinCostBand(a: number, b: number): boolean {
  * (A→B→C, all kept) nets to the top item's price because each link credits the one below it. Floored
  * at 0 so a malformed cost can't go negative.
  */
-function marginalCost(item: Item, owns: (id: number) => boolean, items: Map<number, Item>): number {
+function marginalCost(
+  item: Item,
+  owns: (id: number) => boolean,
+  items: Map<number, Item>,
+): number {
   let c = item.cost;
-  for (const compId of item.componentIds) if (owns(compId)) c -= items.get(compId)?.cost ?? 0;
+  for (const compId of item.componentIds)
+    if (owns(compId)) c -= items.get(compId)?.cost ?? 0;
   return Math.max(0, c);
 }
 
@@ -590,11 +670,18 @@ function recomputeCosts(phases: BuildPhase[], items: Map<number, Item>): void {
   const into = absorptionMap(phases.flatMap((p) => p.core)); // component id → its absorbing upgrade
   const refund = new Map<number, number>(); // upgrade id → souls its absorbed components refund
   for (const [compId, up] of into)
-    refund.set(up.id, (refund.get(up.id) ?? 0) + (items.get(compId)?.cost ?? 0));
+    refund.set(
+      up.id,
+      (refund.get(up.id) ?? 0) + (items.get(compId)?.cost ?? 0),
+    );
 
   for (const p of phases) {
-    for (const b of p.core) b.effectiveCost = Math.max(0, b.item.cost - (refund.get(b.item.id) ?? 0));
-    p.coreSouls = p.core.reduce((s, b) => s + (b.effectiveCost ?? b.item.cost), 0);
+    for (const b of p.core)
+      b.effectiveCost = Math.max(0, b.item.cost - (refund.get(b.item.id) ?? 0));
+    p.coreSouls = p.core.reduce(
+      (s, b) => s + (b.effectiveCost ?? b.item.cost),
+      0,
+    );
     p.categorySouls = categorySouls(p.core);
   }
 }
@@ -610,7 +697,10 @@ function recomputeCosts(phases: BuildPhase[], items: Map<number, Item>): void {
  * "could be disjoint", which would wrongly bench scaling items (Opening Rounds, Headhunter) that
  * are bought *alongside* the cheap stat-sticks, not instead of them.
  */
-function substituteRival(c: BuildItem, core: BuildItem[]): BuildItem | undefined {
+function substituteRival(
+  c: BuildItem,
+  core: BuildItem[],
+): BuildItem | undefined {
   if (c.pickRate < UNIVERSAL_PICK) return undefined;
   return core.find(
     (b) =>
@@ -627,7 +717,11 @@ function substituteRival(c: BuildItem, core: BuildItem[]): BuildItem | undefined
  * and should be filled, but not by the swap's own upgrade (Opening Rounds is built from
  * High-Velocity Rounds) — that would put the upgrade in core *and* the component as its swap.
  */
-function buildsFromAny(item: Item, roots: Set<number>, items: Map<number, Item>): boolean {
+function buildsFromAny(
+  item: Item,
+  roots: Set<number>,
+  items: Map<number, Item>,
+): boolean {
   if (roots.size === 0) return false;
   return item.componentIds.some((c) => {
     if (roots.has(c)) return true;
@@ -643,7 +737,11 @@ function buildsFromAny(item: Item, roots: Set<number>, items: Map<number, Item>)
  *  - `swapFor` (situational only): the same-slot core pick whose cost is closest — the slot
  *    this situational item is competing for.
  */
-function annotateRelations(phases: BuildPhase[], flow: ItemFlowStats, items: Map<number, Item>): void {
+function annotateRelations(
+  phases: BuildPhase[],
+  flow: ItemFlowStats,
+  items: Map<number, Item>,
+): void {
   // Edge weights: players who went from item X to item Y next, summed across columns.
   const edgeW = new Map<number, Map<number, number>>();
   for (const e of flow.edges) {
@@ -653,7 +751,8 @@ function annotateRelations(phases: BuildPhase[], flow: ItemFlowStats, items: Map
   }
   // How many of this hero's players touch each item at all (relevance gate + tiebreak).
   const flowPlayers = new Map<number, number>();
-  for (const n of flow.nodes) flowPlayers.set(n.item_id, (flowPlayers.get(n.item_id) ?? 0) + n.players);
+  for (const n of flow.nodes)
+    flowPlayers.set(n.item_id, (flowPlayers.get(n.item_id) ?? 0) + n.players);
   // Reverse component tree: component id → items built from it.
   const builtFrom = new Map<number, Item[]>();
   for (const it of items.values())
@@ -663,9 +762,13 @@ function annotateRelations(phases: BuildPhase[], flow: ItemFlowStats, items: Map
       else builtFrom.set(c, [it]);
     }
 
-  const buildsToward = (id: number): { id: number; name: string } | undefined => {
+  const buildsToward = (
+    id: number,
+  ): { id: number; name: string } | undefined => {
     // Only upgrades this hero's players actually make (in the flow), best transition first.
-    const cands = (builtFrom.get(id) ?? []).filter((y) => flowPlayers.has(y.id));
+    const cands = (builtFrom.get(id) ?? []).filter((y) =>
+      flowPlayers.has(y.id),
+    );
     if (cands.length === 0) return undefined;
     const w = edgeW.get(id);
     cands.sort(
@@ -678,7 +781,8 @@ function annotateRelations(phases: BuildPhase[], flow: ItemFlowStats, items: Map
 
   for (const p of phases) {
     // Transient core picks already say "builds into X"; don't double up.
-    for (const b of p.core) if (!b.transient) b.buildsToward = buildsToward(b.item.id);
+    for (const b of p.core)
+      if (!b.transient) b.buildsToward = buildsToward(b.item.id);
     for (const s of p.situational) s.buildsToward = buildsToward(s.item.id);
   }
 }
@@ -691,10 +795,17 @@ function annotateRelations(phases: BuildPhase[], flow: ItemFlowStats, items: Map
 export function annotateSlotRelations(phases: BuildPhase[]): void {
   // Each item's later core appearances, keyed by column, so a situational pick can find both the phase
   // it becomes core in *and* that phase's win rate (to decide whether rushing it early is supported).
-  const coreCols = new Map<number, Array<{ column: number; adjWr: number; decided: number }>>();
+  const coreCols = new Map<
+    number,
+    Array<{ column: number; adjWr: number; decided: number }>
+  >();
   for (const p of phases)
     for (const b of p.core) {
-      const entry = { column: p.column, adjWr: b.adjustedWinRate, decided: b.decided };
+      const entry = {
+        column: p.column,
+        adjWr: b.adjustedWinRate,
+        decided: b.decided,
+      };
       const arr = coreCols.get(b.item.id);
       if (arr) arr.push(entry);
       else coreCols.set(b.item.id, [entry]);
@@ -723,20 +834,33 @@ export function annotateSlotRelations(phases: BuildPhase[]): void {
       // if ahead"); only retract to "buy later" when the later core phase wins both meaningfully *and*
       // significantly more than this early buy — i.e. the data genuinely argues against rushing, not just a
       // sampling wobble. significantlyHigher scales the noise bar by each phase's own sample.
-      const later = (coreCols.get(s.item.id) ?? []).find((c) => c.column > p.column);
+      const later = (coreCols.get(s.item.id) ?? []).find(
+        (c) => c.column > p.column,
+      );
       if (later !== undefined) {
         s.coreLater = PHASE_META[later.column].label;
-        s.coreRush = !significantlyHigher(later.adjWr, later.decided, s.adjustedWinRate, s.decided, RUSH_MARGIN);
+        s.coreRush = !significantlyHigher(
+          later.adjWr,
+          later.decided,
+          s.adjustedWinRate,
+          s.decided,
+          RUSH_MARGIN,
+        );
         continue;
       }
       // Else pair with a same-slot core pick of *comparable cost* — a real alternative, not a
       // 6.4k item dressed up as a swap for a 1.6k one.
       const peers = p.core.filter(
-        (c) => c.item.slot === s.item.slot && withinCostBand(c.item.cost, s.item.cost),
+        (c) =>
+          c.item.slot === s.item.slot &&
+          withinCostBand(c.item.cost, s.item.cost),
       );
       if (peers.length) {
         const closest = peers.reduce((best, c) =>
-          Math.abs(c.item.cost - s.item.cost) < Math.abs(best.item.cost - s.item.cost) ? c : best,
+          Math.abs(c.item.cost - s.item.cost) <
+          Math.abs(best.item.cost - s.item.cost)
+            ? c
+            : best,
         );
         s.swapFor = { id: closest.item.id, name: closest.item.name };
       }
@@ -750,15 +874,19 @@ export function annotateSlotRelations(phases: BuildPhase[]): void {
 // when it's just bad and correlated with leads.
 export const WIN_STATE_GAP = 0.035;
 export const WIN_STATE_WR_FLOOR = 0.03;
-export type WinState = 'winmore' | 'comeback';
+export type WinState = "winmore" | "comeback";
 
 /** A pick's win-state character from its raw vs adjusted (game-state-corrected) win rate — or undefined
  * when the gap is within noise or the pick isn't viable enough to read as a snowball/comeback option. */
-export function classifyWinState(rawWr: number, adjWr: number, baseline: number): WinState | undefined {
+export function classifyWinState(
+  rawWr: number,
+  adjWr: number,
+  baseline: number,
+): WinState | undefined {
   if (adjWr < baseline - WIN_STATE_WR_FLOOR) return undefined; // a clear loser isn't "win more", just bad
   const gap = rawWr - adjWr;
-  if (gap >= WIN_STATE_GAP) return 'winmore';
-  if (gap <= -WIN_STATE_GAP) return 'comeback';
+  if (gap >= WIN_STATE_GAP) return "winmore";
+  if (gap <= -WIN_STATE_GAP) return "comeback";
   return undefined;
 }
 
@@ -782,7 +910,10 @@ const TEMPO_LIST_MAX = 3; // cap each tempo list so a phase stays a glance, not 
  * "comeback" picks and treat the snowbally "win-more" ones as the riskier buy. Returns null when no list
  * has confident signal, so a phase stays quiet rather than inventing advice (signal high, noise low). Pure.
  */
-export function phaseTempo(phase: BuildPhase, baseline: number): PhaseTempo | null {
+export function phaseTempo(
+  phase: BuildPhase,
+  baseline: number,
+): PhaseTempo | null {
   const rush = phase.situational
     .filter((b) => b.coreRush && b.coreLater)
     .sort((a, b) => b.adjustedWinRate - a.adjustedWinRate)
@@ -791,11 +922,14 @@ export function phaseTempo(phase: BuildPhase, baseline: number): PhaseTempo | nu
   const all = [...phase.core, ...phase.situational];
   const byState = (want: WinState, strength: (b: BuildItem) => number) =>
     all
-      .filter((b) => classifyWinState(b.rawWinRate, b.adjustedWinRate, baseline) === want)
+      .filter(
+        (b) =>
+          classifyWinState(b.rawWinRate, b.adjustedWinRate, baseline) === want,
+      )
       .sort((a, b) => strength(b) - strength(a))
       .slice(0, TEMPO_LIST_MAX);
-  const lean = byState('comeback', (b) => b.adjustedWinRate - b.rawWinRate);
-  const hold = byState('winmore', (b) => b.rawWinRate - b.adjustedWinRate);
+  const lean = byState("comeback", (b) => b.adjustedWinRate - b.rawWinRate);
+  const hold = byState("winmore", (b) => b.rawWinRate - b.adjustedWinRate);
 
   if (!rush.length && !lean.length && !hold.length) return null;
   return { rush, lean, hold };
@@ -834,7 +968,10 @@ function buildPhase(
   // Fill ceiling — what we're allowed to spend, using our build's own earlier picks for the component
   // discount (internally consistent with coreSouls, which also credits what we actually own).
   const soulBudget =
-    candidates.reduce((a, c) => a + c.sample * marginalCost(c.item, ownedBefore, items), 0) / reached;
+    candidates.reduce(
+      (a, c) => a + c.sample * marginalCost(c.item, ownedBefore, items),
+      0,
+    ) / reached;
 
   // Displayed budget — a *build-independent* population reference, so flipping a toggle changes our
   // recommendation (coreSouls), never this denominator. It's the average souls a player at this rank
@@ -847,14 +984,24 @@ function buildPhase(
   for (const n of flow.nodes) {
     if (n.column >= col) continue;
     const rc = flow.reached_per_column[n.column] || flow.baseline.matches || 1; // that column's own denominator
-    ownedShareBefore.set(n.item_id, Math.min(1, (ownedShareBefore.get(n.item_id) ?? 0) + n.players / rc));
+    ownedShareBefore.set(
+      n.item_id,
+      Math.min(1, (ownedShareBefore.get(n.item_id) ?? 0) + n.players / rc),
+    );
   }
   const popMarginal = (it: Item): number =>
     Math.max(
       0,
-      it.cost - it.componentIds.reduce((s, cid) => s + (items.get(cid)?.cost ?? 0) * (ownedShareBefore.get(cid) ?? 0), 0),
+      it.cost -
+        it.componentIds.reduce(
+          (s, cid) =>
+            s + (items.get(cid)?.cost ?? 0) * (ownedShareBefore.get(cid) ?? 0),
+          0,
+        ),
     );
-  const popSoulBudget = candidates.reduce((a, c) => a + c.sample * popMarginal(c.item), 0) / reached;
+  const popSoulBudget =
+    candidates.reduce((a, c) => a + c.sample * popMarginal(c.item), 0) /
+    reached;
 
   // Bias the phase's items across weapon/vitality/spirit toward the proportion real players of this
   // hero *buy* in each category (count share, not soul share — slots are bodies, so an expensive
@@ -864,7 +1011,7 @@ function buildPhase(
   // bias the build is category-blind: defensive greens are bought reactively, miss the pick/WR
   // gates, and the budget goes entirely to weapon/spirit — e.g. zero greens in lane.
   const share = categoryCountShare(candidates);
-  const fracTarget: Record<'weapon' | 'vitality' | 'spirit', number> = {
+  const fracTarget: Record<"weapon" | "vitality" | "spirit", number> = {
     weapon: share.weapon * targetItems,
     vitality: share.vitality * targetItems,
     spirit: share.spirit * targetItems,
@@ -881,9 +1028,14 @@ function buildPhase(
   // can mark them claimed once `c` actually seats — that's what stops a shared component (Sprint Boots)
   // from discounting two upgrades. Each is consumed at most once; the second upgrade pays full.
   const absorbs = (c: BuildItem): number[] =>
-    c.item.componentIds.filter((id) => (owned.has(id) || chosen.has(id)) && !claimed.has(id));
+    c.item.componentIds.filter(
+      (id) => (owned.has(id) || chosen.has(id)) && !claimed.has(id),
+    );
   const costAfter = (c: BuildItem, absorb: number[]): number =>
-    Math.max(0, c.item.cost - absorb.reduce((s, id) => s + (items.get(id)?.cost ?? 0), 0));
+    Math.max(
+      0,
+      c.item.cost - absorb.reduce((s, id) => s + (items.get(id)?.cost ?? 0), 0),
+    );
 
   // Try to seat one candidate in core. Returns true only when it actually took a slot (so the caller
   // decrements its quota); a soul/line/phase miss or a benched substitute returns false.
@@ -891,7 +1043,12 @@ function buildPhase(
     // Already bought in an earlier phase: it holds its slot there, you don't re-buy it. Seating it
     // again only for dedupeAcrossPhases to strip it back out is what left later phases short of their
     // item target with budget to spare — skip it so this slot goes to a genuinely new pick.
-    if (chosen.has(c.item.id) || benchedIds.has(c.item.id) || owned.has(c.item.id)) return false;
+    if (
+      chosen.has(c.item.id) ||
+      benchedIds.has(c.item.id) ||
+      owned.has(c.item.id)
+    )
+      return false;
     // Don't seat a component whose upgrade is already in this phase's core — buying the upgrade already
     // includes it, so it would just fold away (dropSamePhaseComponents) and waste the slot. Skip it so
     // the slot goes to a genuinely new item (Victor early-mid: skip Sprint Boots once Enduring Speed is
@@ -942,18 +1099,26 @@ function buildPhase(
       // edge between two stat-sticks each over a few hundred games is a coin-flip, and shouldn't flip a
       // core slot. significantlyHigher requires the gap to clear SUBSTITUTE_WR_EDGE *and* the combined
       // sampling noise of both picks.
-      if (significantlyHigher(c.adjustedWinRate, c.decided, rival.adjustedWinRate, rival.decided, SUBSTITUTE_WR_EDGE)) {
+      if (
+        significantlyHigher(
+          c.adjustedWinRate,
+          c.decided,
+          rival.adjustedWinRate,
+          rival.decided,
+          SUBSTITUTE_WR_EDGE,
+        )
+      ) {
         core.splice(core.indexOf(rival), 1);
         coreSouls -= rival.item.cost; // a substitute is a stat-stick with no in-build component to net out
         chosen.delete(rival.item.id);
-        core.push({ ...c, role: 'universal' }); // a substitute is by definition over the pick bar
+        core.push({ ...c, role: "universal" }); // a substitute is by definition over the pick bar
         coreSouls += cost;
         chosen.add(c.item.id);
         absorb.forEach((id) => claimed.add(id));
-        swaps.push({ ...rival, role: 'situational', swapForId: c.item.id });
+        swaps.push({ ...rival, role: "situational", swapForId: c.item.id });
         benchedIds.add(rival.item.id);
       } else {
-        swaps.push({ ...c, role: 'situational', swapForId: rival.item.id });
+        swaps.push({ ...c, role: "situational", swapForId: rival.item.id });
         benchedIds.add(c.item.id);
       }
       return false;
@@ -961,7 +1126,11 @@ function buildPhase(
     // Mirror the bucket logic in categoryPriority: a quota-filling pick that beats neither the
     // pick-rate bar nor the value gate is `filler`, not a `value` pick.
     const role: BuildRole =
-      c.pickRate >= UNIVERSAL_PICK ? 'universal' : isValuePick(c, baselineWinRate) ? 'value' : 'filler';
+      c.pickRate >= UNIVERSAL_PICK
+        ? "universal"
+        : isValuePick(c, baselineWinRate)
+          ? "value"
+          : "filler";
     core.push({ ...c, role });
     coreSouls += cost;
     chosen.add(c.item.id);
@@ -988,28 +1157,71 @@ function buildPhase(
   if (opts.synergyOf && ownedIds.length) {
     const syn = opts.synergyOf;
     for (const c of candidates)
-      synBonus.set(c.item.id, ownedIds.reduce((s, o) => s + syn(c.item.id, o), 0));
+      synBonus.set(
+        c.item.id,
+        ownedIds.reduce((s, o) => s + syn(c.item.id, o), 0),
+      );
   }
-  const pools: Record<'weapon' | 'vitality' | 'spirit', BuildItem[]> = {
-    weapon: categoryPriority(candidates, 'weapon', baselineWinRate, chosen, costPower, k, synBonus),
-    vitality: categoryPriority(candidates, 'vitality', baselineWinRate, chosen, costPower, k, synBonus),
-    spirit: categoryPriority(candidates, 'spirit', baselineWinRate, chosen, costPower, k, synBonus),
+  const pools: Record<"weapon" | "vitality" | "spirit", BuildItem[]> = {
+    weapon: categoryPriority(
+      candidates,
+      "weapon",
+      baselineWinRate,
+      chosen,
+      costPower,
+      k,
+      synBonus,
+    ),
+    vitality: categoryPriority(
+      candidates,
+      "vitality",
+      baselineWinRate,
+      chosen,
+      costPower,
+      k,
+      synBonus,
+    ),
+    spirit: categoryPriority(
+      candidates,
+      "spirit",
+      baselineWinRate,
+      chosen,
+      costPower,
+      k,
+      synBonus,
+    ),
   };
-  const cursor: Record<'weapon' | 'vitality' | 'spirit', number> = { weapon: 0, vitality: 0, spirit: 0 };
-  const allocated: Record<'weapon' | 'vitality' | 'spirit', number> = { weapon: 0, vitality: 0, spirit: 0 };
+  const cursor: Record<"weapon" | "vitality" | "spirit", number> = {
+    weapon: 0,
+    vitality: 0,
+    spirit: 0,
+  };
+  const allocated: Record<"weapon" | "vitality" | "spirit", number> = {
+    weapon: 0,
+    vitality: 0,
+    spirit: 0,
+  };
   // Deliberately *not* significance-gated (unlike the value/substitute/counter gates in #3). This is a
   // risk-averse break-even floor, not a "is this a real edge" claim: we'd rather a category sit a slot out
   // than fill it with a losing pick, even one whose loss isn't yet statistically confirmed. Adding
   // significance here would loosen it the wrong way — re-admitting not-quite-significant losers (a thin
   // −1.5pt spirit pick) into core, the exact thing FILL_WR_FLOOR exists to keep out.
   const seatable = (c: BuildItem) =>
-    c.pickRate >= UNIVERSAL_PICK || c.adjustedWinRate >= baselineWinRate - FILL_WR_FLOOR;
+    c.pickRate >= UNIVERSAL_PICK ||
+    c.adjustedWinRate >= baselineWinRate - FILL_WR_FLOOR;
   // The category's next candidate worth trying — skipping ones already taken, benched, or losing —
   // or undefined once it's spent. Advances the cursor past the skips it walks over.
-  const peek = (slot: 'weapon' | 'vitality' | 'spirit'): BuildItem | undefined => {
+  const peek = (
+    slot: "weapon" | "vitality" | "spirit",
+  ): BuildItem | undefined => {
     while (cursor[slot] < pools[slot].length) {
       const c = pools[slot][cursor[slot]];
-      if (chosen.has(c.item.id) || benchedIds.has(c.item.id) || owned.has(c.item.id) || !seatable(c)) {
+      if (
+        chosen.has(c.item.id) ||
+        benchedIds.has(c.item.id) ||
+        owned.has(c.item.id) ||
+        !seatable(c)
+      ) {
         cursor[slot]++;
         continue;
       }
@@ -1026,7 +1238,7 @@ function buildPhase(
   const RATIO_SLOT = 0.5;
   for (;;) {
     if (core.length >= targetItems) break;
-    let pick: 'weapon' | 'vitality' | 'spirit' | undefined;
+    let pick: "weapon" | "vitality" | "spirit" | undefined;
     let bestDeficit = RATIO_SLOT;
     for (const slot of FILL_ORDER) {
       if (!peek(slot)) continue; // no pick worth building in this category — it sits out
@@ -1049,11 +1261,29 @@ function buildPhase(
   // dragged in to hit the number. A phase with nothing worth building simply runs short.
   if (core.length < targetItems) {
     const rest = candidates
-      .filter((c) => !chosen.has(c.item.id) && !benchedIds.has(c.item.id) && !owned.has(c.item.id) && seatable(c))
+      .filter(
+        (c) =>
+          !chosen.has(c.item.id) &&
+          !benchedIds.has(c.item.id) &&
+          !owned.has(c.item.id) &&
+          seatable(c),
+      )
       .sort(
         (a, b) =>
-          coreWrScore(b, baselineWinRate, costPower, k, synBonus.get(b.item.id) ?? 0) -
-          coreWrScore(a, baselineWinRate, costPower, k, synBonus.get(a.item.id) ?? 0),
+          coreWrScore(
+            b,
+            baselineWinRate,
+            costPower,
+            k,
+            synBonus.get(b.item.id) ?? 0,
+          ) -
+          coreWrScore(
+            a,
+            baselineWinRate,
+            costPower,
+            k,
+            synBonus.get(a.item.id) ?? 0,
+          ),
       );
     for (const c of rest) {
       if (core.length >= targetItems) break;
@@ -1074,9 +1304,17 @@ function buildPhase(
   const synOf = opts.synergyOf;
   const committedNow = synOf ? [...owned, ...chosen] : [];
   const rankWr = (c: BuildItem) => {
-    const lcb = lowerConfidenceWinRate(c.adjustedWinRate, c.decided, baselineWinRate, k);
+    const lcb = lowerConfidenceWinRate(
+      c.adjustedWinRate,
+      c.decided,
+      baselineWinRate,
+      k,
+    );
     if (!synOf || !committedNow.length) return lcb;
-    return lcb + SYNERGY_WEIGHT * committedNow.reduce((s, o) => s + synOf(c.item.id, o), 0);
+    return (
+      lcb +
+      SYNERGY_WEIGHT * committedNow.reduce((s, o) => s + synOf(c.item.id, o), 0)
+    );
   };
   const eligible = candidates
     .filter(
@@ -1094,10 +1332,13 @@ function buildPhase(
   const reservedIds = new Set(reserved.map((c) => c.item.id));
   // Substitution swaps lead the list (they're the explicit alternative to a core pick); the
   // strongest value/comeback leftovers fill whatever cap is left.
-  const value = [...reserved, ...eligible.filter((c) => !reservedIds.has(c.item.id))]
+  const value = [
+    ...reserved,
+    ...eligible.filter((c) => !reservedIds.has(c.item.id)),
+  ]
     .slice(0, Math.max(0, SITUATIONAL_MAX - swaps.length))
     .sort((a, b) => rankWr(b) - rankWr(a))
-    .map<BuildItem>((c) => ({ ...c, role: 'situational' }));
+    .map<BuildItem>((c) => ({ ...c, role: "situational" }));
   const situational = [...swaps, ...value];
 
   // Conditional need pick: when a near-universal, win-rate-neutral need (sustain) is split across
@@ -1105,9 +1346,18 @@ function buildPhase(
   // item here as a flagged optional pickup — "most players grab one; no win-rate cost" — rather
   // than forcing it into the every-game core. Skipped when it's already in the build.
   if (opts.needs !== false) {
-    const need = dominantNeed(candidates, 'sustain', baselineWinRate);
-    if (need && !chosen.has(need.item.id) && !owned.has(need.item.id) && !situational.some((s) => s.item.id === need.item.id)) {
-      situational.unshift({ ...need, role: 'need', why: 'optional lane sustain — most players grab one' });
+    const need = dominantNeed(candidates, "sustain", baselineWinRate);
+    if (
+      need &&
+      !chosen.has(need.item.id) &&
+      !owned.has(need.item.id) &&
+      !situational.some((s) => s.item.id === need.item.id)
+    ) {
+      situational.unshift({
+        ...need,
+        role: "need",
+        why: "optional lane sustain — most players grab one",
+      });
       if (situational.length > SITUATIONAL_MAX) situational.pop(); // keep the cap; drops the weakest WR pick
     }
   }
@@ -1127,20 +1377,32 @@ function buildPhase(
     const shown = new Set([...core, ...situational].map((b) => b.item.id));
     for (const c of [...candidates].sort((a, b) => b.pickRate - a.pickRate)) {
       if (situational.length >= SITUATIONAL_MAX) break;
-      if (shown.has(c.item.id) || benchedIds.has(c.item.id) || owned.has(c.item.id)) continue;
+      if (
+        shown.has(c.item.id) ||
+        benchedIds.has(c.item.id) ||
+        owned.has(c.item.id)
+      )
+        continue;
       if (c.adjustedWinRate < baselineWinRate - FILL_WR_FLOOR) continue; // don't pad with a losing pick
       if (buildsFromAny(c.item, benchedIds, items)) continue; // an upgrade of a swap is that swap's line
-      const role: BuildRole = isValuePick(c, baselineWinRate) ? 'value' : 'filler';
+      const role: BuildRole = isValuePick(c, baselineWinRate)
+        ? "value"
+        : "filler";
       situational.push({ ...c, role });
       shown.add(c.item.id);
     }
   }
 
-  const buyTime = (b: BuildItem) => buyTimes.get(b.item.id) ?? Number.POSITIVE_INFINITY;
+  const buyTime = (b: BuildItem) =>
+    buyTimes.get(b.item.id) ?? Number.POSITIVE_INFINITY;
   // The "why" is what the item does — the WR/pick numbers are already on the row — unless a pick
   // set its own rationale (the conditional need note above), which we keep. Also stamp each item's
   // buy time so a later comp re-rank can re-sort a phase into buy order without the buyTimes map.
-  const withWhy = (b: BuildItem) => ({ ...b, why: b.why || b.item.effect || '', buyTimeS: buyTimes.get(b.item.id) });
+  const withWhy = (b: BuildItem) => ({
+    ...b,
+    why: b.why || b.item.effect || "",
+    buyTimeS: buyTimes.get(b.item.id),
+  });
 
   return {
     column: col,
@@ -1167,13 +1429,19 @@ function buildPhase(
  * actually has a pick worth building before honoring its share.
  */
 function categoryCountShare(candidates: BuildItem[]): Record<SlotType, number> {
-  const buys: Record<SlotType, number> = { weapon: 0, vitality: 0, spirit: 0, unknown: 0 };
+  const buys: Record<SlotType, number> = {
+    weapon: 0,
+    vitality: 0,
+    spirit: 0,
+    unknown: 0,
+  };
   let total = 0;
   for (const c of candidates) {
     buys[c.item.slot] += c.sample;
     total += c.sample;
   }
-  if (total > 0) for (const k of Object.keys(buys) as SlotType[]) buys[k] /= total;
+  if (total > 0)
+    for (const k of Object.keys(buys) as SlotType[]) buys[k] /= total;
   return buys;
 }
 
@@ -1186,12 +1454,20 @@ function categoryCountShare(candidates: BuildItem[]): Record<SlotType, number> {
  * the demand is split with no clear leader, or it's a loser, returns undefined — the value/
  * pick-rate fill handles it (or, honestly, nothing should be surfaced).
  */
-function dominantNeed(candidates: BuildItem[], need: NeedKind, baselineWinRate: number): BuildItem | undefined {
-  const members = candidates.filter((c) => c.item.need === need && c.item.tier <= NEED_MAX_TIER);
+function dominantNeed(
+  candidates: BuildItem[],
+  need: NeedKind,
+  baselineWinRate: number,
+): BuildItem | undefined {
+  const members = candidates.filter(
+    (c) => c.item.need === need && c.item.tier <= NEED_MAX_TIER,
+  );
   if (members.length === 0) return undefined;
   const demand = members.reduce((a, c) => a + c.pickRate, 0);
   if (demand < NEED_DEMAND_FLOOR) return undefined; // not a near-universal need for this hero
-  const lead = members.reduce((best, c) => (c.pickRate > best.pickRate ? c : best));
+  const lead = members.reduce((best, c) =>
+    c.pickRate > best.pickRate ? c : best,
+  );
   if (lead.pickRate >= UNIVERSAL_PICK) return undefined; // already a core pick — don't relabel it
   if (lead.pickRate < NEED_PLURALITY * demand) return undefined; // genuinely split — don't name one
   if (lead.rawWinRate < baselineWinRate - NEED_MAX_WR_DROP) return undefined; // a trap, not QOL
@@ -1220,13 +1496,25 @@ function categoryPriority(
   // Discretionary picks (staples + rest) order by efficiency-aware shrunk adjusted WR + synergy bonus.
   // Universals stay by pick rate — they're mandatory regardless.
   const byDiscretionary = (a: BuildItem, b: BuildItem) =>
-    coreWrScore(b, baselineWinRate, costPower, k, synBonus.get(b.item.id) ?? 0) -
+    coreWrScore(
+      b,
+      baselineWinRate,
+      costPower,
+      k,
+      synBonus.get(b.item.id) ?? 0,
+    ) -
     coreWrScore(a, baselineWinRate, costPower, k, synBonus.get(a.item.id) ?? 0);
-  const universal = pool.filter((c) => c.pickRate >= UNIVERSAL_PICK).sort(byPick);
+  const universal = pool
+    .filter((c) => c.pickRate >= UNIVERSAL_PICK)
+    .sort(byPick);
   const staples = pool
-    .filter((c) => c.pickRate < UNIVERSAL_PICK && isValuePick(c, baselineWinRate))
+    .filter(
+      (c) => c.pickRate < UNIVERSAL_PICK && isValuePick(c, baselineWinRate),
+    )
     .sort(byDiscretionary);
-  const rest = pool.filter((c) => !universal.includes(c) && !staples.includes(c)).sort(byDiscretionary);
+  const rest = pool
+    .filter((c) => !universal.includes(c) && !staples.includes(c))
+    .sort(byDiscretionary);
 
   const ordered: BuildItem[] = [];
   const seen = new Set<number>(chosen);
@@ -1240,31 +1528,48 @@ function categoryPriority(
 
 /** Souls the chosen core spends per shown category — marginal (net of absorbed components), to
  * match coreSouls. `effectiveCost` is set by recomputeCosts; falls back to sticker before then. */
-function categorySouls(core: BuildItem[]): Record<'weapon' | 'vitality' | 'spirit', number> {
+function categorySouls(
+  core: BuildItem[],
+): Record<"weapon" | "vitality" | "spirit", number> {
   const out = { weapon: 0, vitality: 0, spirit: 0 };
   for (const b of core)
-    if (b.item.slot in out) out[b.item.slot as 'weapon' | 'vitality' | 'spirit'] += b.effectiveCost ?? b.item.cost;
+    if (b.item.slot in out)
+      out[b.item.slot as "weapon" | "vitality" | "spirit"] +=
+        b.effectiveCost ?? b.item.cost;
   return out;
 }
 
-function toCandidate(n: FlowNode, reached: number, items: Map<number, Item>): BuildItem | null {
+function toCandidate(
+  n: FlowNode,
+  reached: number,
+  items: Map<number, Item>,
+): BuildItem | null {
   const item = items.get(n.item_id);
   if (!item) return null;
   const decided = n.wins + n.losses;
   return {
     item,
-    role: 'value', // refined by buildPhase
+    role: "value", // refined by buildPhase
     pickRate: reached > 0 ? n.players / reached : 0,
     adjustedWinRate: n.adjusted_win_rate,
     rawWinRate: decided > 0 ? n.wins / decided : 0,
     sample: n.players,
     decided,
     avgNetWorthAtBuy: n.avg_net_worth_at_buy,
-    why: '',
+    why: "",
   };
 }
 
-const COMP_DEMOTE = -0.03; // a build pick this far below the matchup lean is "weak vs comp"
+const COMP_DEMOTE = 0.03; // effect floor: a pick this far below the matchup lean is "weak vs comp"
+
+/** The ▼ demote gate: flag a pick weak-vs-comp only when its negative edge clears BOTH the effect
+ * floor and {@link GATE_Z} standard errors — the mirror image of `significantlyHigher` and the same
+ * bar value-pick/counter marks must clear. Asymmetry is deliberate: the positive marks run
+ * recall-first (hiding a good counter costs the player), but a false ▼ *scares them off a fine
+ * pick*, so the scary flag is precision-first and must be significant, not just past a cutoff. */
+export function isWeakVsComp(e: CompEdge): boolean {
+  return e.edge <= -Math.max(COMP_DEMOTE, GATE_Z * e.se);
+}
 
 /**
  * Re-rank an already-generated build for a selected enemy comp, using each item's signed
@@ -1275,18 +1580,23 @@ const COMP_DEMOTE = -0.03; // a build pick this far below the matchup lean is "w
  */
 export function rerankBuildForComp(
   build: GeneratedBuild,
-  edgeByItem: Map<number, number>,
+  edgeByItem: Map<number, CompEdge>,
   items: Map<number, Item>,
 ): GeneratedBuild {
   const baseline = build.population.baselineWinRate;
   // Combined score: general strength over baseline, plus the comp-specific edge.
-  const score = (b: BuildItem) => b.adjustedWinRate - baseline + (edgeByItem.get(b.item.id) ?? 0);
+  const score = (b: BuildItem) =>
+    b.adjustedWinRate - baseline + (edgeByItem.get(b.item.id)?.edge ?? 0);
   const annotate = (b: BuildItem): BuildItem => {
-    const compEdge = edgeByItem.get(b.item.id);
-    return { ...b, compEdge, weakVsComp: compEdge !== undefined && compEdge <= COMP_DEMOTE };
+    const e = edgeByItem.get(b.item.id);
+    return {
+      ...b,
+      compEdge: e?.edge,
+      weakVsComp: e !== undefined && isWeakVsComp(e),
+    };
   };
 
-  const cats: SlotType[] = ['weapon', 'vitality', 'spirit', 'unknown'];
+  const cats: SlotType[] = ["weapon", "vitality", "spirit", "unknown"];
 
   // An item may hold a *core* slot in only one phase. The per-phase re-rank below rebuilds each phase's
   // core independently from that phase's pool (its base core + situational), and a situational pick in an
@@ -1298,7 +1608,8 @@ export function rerankBuildForComp(
   // deduped to a single phase), else — for an item that's only ever situational but repeats across phases —
   // its highest-pick-rate phase (mirroring dedupeAcrossPhases' choice).
   const coreHome = new Map<number, number>();
-  for (const phase of build.phases) for (const b of phase.core) coreHome.set(b.item.id, phase.column);
+  for (const phase of build.phases)
+    for (const b of phase.core) coreHome.set(b.item.id, phase.column);
   const situHomePick = new Map<number, number>();
   for (const phase of build.phases)
     for (const b of phase.situational) {
@@ -1309,7 +1620,8 @@ export function rerankBuildForComp(
         coreHome.set(b.item.id, phase.column);
       }
     }
-  const coreEligibleHere = (b: BuildItem, column: number) => coreHome.get(b.item.id) === column;
+  const coreEligibleHere = (b: BuildItem, column: number) =>
+    coreHome.get(b.item.id) === column;
 
   const phases = build.phases.map((phase) => {
     const pool = [...phase.core, ...phase.situational].map(annotate);
@@ -1337,7 +1649,10 @@ export function rerankBuildForComp(
       for (const u of universals) {
         // A staple whose core home is another phase stays situational here (it holds its slot there) —
         // promoting it would put the same item in core twice. Otherwise seat it until the slots run out.
-        if (!coreEligibleHere(u, phase.column) || coreUniv.length >= coreSlots) {
+        if (
+          !coreEligibleHere(u, phase.column) ||
+          coreUniv.length >= coreSlots
+        ) {
           benched.push(u);
           continue;
         }
@@ -1349,14 +1664,26 @@ export function rerankBuildForComp(
       // Only non-staples whose core home is *this* phase can fill the leftover slots; the rest stay
       // situational. The home phase keeps its full count — its own base-core items are eligible here, so
       // there are always at least `coreSlots` candidates — and the duplicate is dropped from the others.
-      const eligibleOthers = others.filter((b) => coreEligibleHere(b, phase.column));
-      const ineligibleOthers = others.filter((b) => !coreEligibleHere(b, phase.column));
+      const eligibleOthers = others.filter((b) =>
+        coreEligibleHere(b, phase.column),
+      );
+      const ineligibleOthers = others.filter(
+        (b) => !coreEligibleHere(b, phase.column),
+      );
       const coreCat = [...coreUniv, ...eligibleOthers.slice(0, fill)];
-      leftover = leftover.concat(benched, eligibleOthers.slice(fill), ineligibleOthers);
+      leftover = leftover.concat(
+        benched,
+        eligibleOthers.slice(fill),
+        ineligibleOthers,
+      );
 
       for (const b of coreCat) {
         const role: BuildRole =
-          b.pickRate >= UNIVERSAL_PICK ? 'universal' : score(b) >= VALUE_EDGE ? 'value' : 'filler';
+          b.pickRate >= UNIVERSAL_PICK
+            ? "universal"
+            : score(b) >= VALUE_EDGE
+              ? "value"
+              : "filler";
         newCore.push({ ...b, role });
       }
     }
@@ -1370,13 +1697,17 @@ export function rerankBuildForComp(
       .filter((b) => !situIds.has(b.item.id))
       .sort((a, b) => score(b) - score(a))
       .slice(0, Math.max(0, SITUATIONAL_MAX - kept.length))
-      .map<BuildItem>((b) => ({ ...b, role: 'situational' }));
+      .map<BuildItem>((b) => ({ ...b, role: "situational" }));
     const newSitu = [...kept, ...demoted].sort((a, b) => score(b) - score(a));
 
     // The comp decides *which* items are core (and their roles), but you still buy them in time
     // order — so order the phase by buy time, same as the base build, not by comp relevance. (Buy
     // time is stamped on each item at generation; missing times sort last.)
-    newCore.sort((a, b) => (a.buyTimeS ?? Number.POSITIVE_INFINITY) - (b.buyTimeS ?? Number.POSITIVE_INFINITY));
+    newCore.sort(
+      (a, b) =>
+        (a.buyTimeS ?? Number.POSITIVE_INFINITY) -
+        (b.buyTimeS ?? Number.POSITIVE_INFINITY),
+    );
     // coreSouls/categorySouls are finalized by recomputeCosts below, once every phase's new core
     // membership is settled (component discounts span phases, so they can't be summed per-phase here).
     return { ...phase, core: newCore, situational: newSitu };
@@ -1391,8 +1722,8 @@ export function rerankBuildForComp(
 }
 
 export const SLOT_COLORS: Record<string, string> = {
-  weapon: '#d97b34',
-  vitality: '#5fa84a',
-  spirit: '#9b6dd1',
-  unknown: '#6b7280',
+  weapon: "#d97b34",
+  vitality: "#5fa84a",
+  spirit: "#9b6dd1",
+  unknown: "#6b7280",
 };

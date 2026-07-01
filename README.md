@@ -125,6 +125,16 @@ Win-rate builds (this one and the popular sites) still partly measure *who* buys
 item itself — good players buy good items. `adjusted_win_rate` shrinks that effect but doesn't erase
 it. Treat it as a strong prior, not gospel.
 
+A second, measured residual is **buy-timing**: the adjustment conditions on *absolute* net worth at
+buy, which is a lossy proxy for actually being ahead (an offline spike on 3,000 Eternus matches:
+net-worth-*difference*+time predicts winning at AUC 0.80, absolute net worth+time only 0.70). Win
+probability at the moment of purchase climbs from ~50% for tier-1 buys to ~56% for tier-4 — players
+buy expensive items disproportionately when already winning — so late/expensive items' win rates
+stay slightly flattered even after adjustment. No aggregate-only correction can remove this (the
+same spike showed a poor-man's WPA from absolute net worth *scrambles* the ranking, ρ=0.15 vs the
+model's local WPA); a real fix needs match-level timelines, i.e. a backend. The per-item
+**comeback / win more** tags are the honest per-pick read on this bias.
+
 ## Ideas for next
 
 - **Threat-grouped counters** (optional): group counter movers by what they answer (vs-gun,

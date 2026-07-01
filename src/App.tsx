@@ -37,7 +37,7 @@ import {
 import { matchCommunityBuilds } from "./lib/communityBuilds";
 import { encodeHeroBuild } from "./lib/heroBuildExport";
 import { injectBuildIntoCache } from "./lib/heroBuildCache";
-import { computeItemCounters } from "./lib/counters";
+import { computeItemCounters, type CompEdge } from "./lib/counters";
 import { friendlyError } from "./lib/errors";
 import {
   decodeUrlState,
@@ -218,7 +218,9 @@ export default function App() {
   const [abilities, setAbilities] = useState<Map<number, Ability> | null>(null);
   const [skillBuild, setSkillBuild] = useState<SkillBuild | null>(null);
   const [counters, setCounters] = useState<ItemCounters[] | null>(null);
-  const [compEdges, setCompEdges] = useState<Map<number, number> | null>(null);
+  const [compEdges, setCompEdges] = useState<Map<number, CompEdge> | null>(
+    null,
+  );
   const [community, setCommunity] = useState<{
     builds: CommunityBuild[];
     stats: HeroBuildStatRow[];
@@ -1024,10 +1026,13 @@ export default function App() {
         <ExportPanel
           build={displayBuild ?? build}
           skillOrder={skillBuild?.order}
+          imbues={imbueByItem}
           name={`Vibelock — ${build.hero.name}${
-            archetypeSet?.flex && activeArchetype ? ` · ${activeArchetype.label}` : ""
+            archetypeSet?.flex && activeArchetype
+              ? ` · ${activeArchetype.label}`
+              : ""
           } (${build.rankLabel})`}
-          description={`Top-to-bottom build from Vibelock · ${build.rankLabel} · ${patchLabel} · ${build.population.matches.toLocaleString()} matches. Core phases + a Situational (optional) row. Made with vibelock.`}
+          description={`Top-to-bottom build from Vibelock · ${build.rankLabel} · ${patchLabel} · ${build.population.matches.toLocaleString()} matches. Core phases + a Situational (optional) row; each item's note says why it's picked. Made with vibelock.`}
           onClose={() => setShowExport(false)}
         />
       )}
@@ -1052,8 +1057,14 @@ type FsPicker = (opts?: {
 const CACHE_FILENAME = "cached_hero_builds.kv3";
 const CACHE_PATHS: Array<[string, string]> = [
   ["Linux", "~/.steam/steam/userdata/<id>/1422450/remote/cfg/"],
-  ["Windows", "C:\\Program Files (x86)\\Steam\\userdata\\<id>\\1422450\\remote\\cfg\\"],
-  ["macOS", "~/Library/Application Support/Steam/userdata/<id>/1422450/remote/cfg/"],
+  [
+    "Windows",
+    "C:\\Program Files (x86)\\Steam\\userdata\\<id>\\1422450\\remote\\cfg\\",
+  ],
+  [
+    "macOS",
+    "~/Library/Application Support/Steam/userdata/<id>/1422450/remote/cfg/",
+  ],
 ];
 
 /**
@@ -1066,6 +1077,7 @@ const CACHE_PATHS: Array<[string, string]> = [
 function ExportPanel({
   build,
   skillOrder,
+  imbues,
   name,
   description,
   onClose,
@@ -1073,19 +1085,25 @@ function ExportPanel({
   build: GeneratedBuild;
   /** The recommended skill (ability) upgrade order, exported alongside the items. */
   skillOrder?: number[];
+  /** Community-plurality imbue targets, applied to the exported items in-game. */
+  imbues?: Map<number, ImbueTarget>;
   name: string;
   description: string;
   onClose: () => void;
 }) {
   const [status, setStatus] = useState("");
-  const [stage, setStage] = useState<"idle" | "working" | "done" | "error">("idle");
+  const [stage, setStage] = useState<"idle" | "working" | "done" | "error">(
+    "idle",
+  );
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   // Steam account id (the number in the userdata/<id> path), remembered locally. Stamped as the
   // build's author so the logged-in owner can edit/delete it in-game. Optional but recommended.
   const [steamId, setSteamId] = useState(
     () => localStorage.getItem("vibelock-steam-id") ?? "",
   );
-  const authorId = /^\d+$/.test(steamId.trim()) ? Number(steamId.trim()) : undefined;
+  const authorId = /^\d+$/.test(steamId.trim())
+    ? Number(steamId.trim())
+    : undefined;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -1108,7 +1126,13 @@ function ExportPanel({
     setDownloadUrl(null);
     try {
       if (authorId) localStorage.setItem("vibelock-steam-id", String(authorId));
-      const blob = encodeHeroBuild(build, { name, description, authorId, skillOrder });
+      const blob = encodeHeroBuild(build, {
+        name,
+        description,
+        authorId,
+        skillOrder,
+        imbues,
+      });
       setStatus("Pick your cached_hero_builds.kv3…");
       const [handle] = await picker!({
         types: [
@@ -1147,7 +1171,13 @@ function ExportPanel({
     setDownloadUrl(null);
     try {
       if (authorId) localStorage.setItem("vibelock-steam-id", String(authorId));
-      const blob = encodeHeroBuild(build, { name, description, authorId, skillOrder });
+      const blob = encodeHeroBuild(build, {
+        name,
+        description,
+        authorId,
+        skillOrder,
+        imbues,
+      });
       const out = await injectBuildIntoCache(
         new Uint8Array(await file.arrayBuffer()),
         blob,
@@ -1158,10 +1188,14 @@ function ExportPanel({
       const buf = new ArrayBuffer(out.byteLength);
       new Uint8Array(buf).set(out);
       setDownloadUrl(
-        URL.createObjectURL(new Blob([buf], { type: "application/octet-stream" })),
+        URL.createObjectURL(
+          new Blob([buf], { type: "application/octet-stream" }),
+        ),
       );
       setStage("done");
-      setStatus("Done — download below and drop it back into your cfg folder (replace the original).");
+      setStatus(
+        "Done — download below and drop it back into your cfg folder (replace the original).",
+      );
     } catch (e) {
       setStage("error");
       setStatus(`Couldn't build the file: ${(e as Error)?.message ?? e}`);
@@ -1179,20 +1213,26 @@ function ExportPanel({
       >
         <header className="guide-head">
           <h2>Export to in-game build</h2>
-          <button type="button" className="guide-x" onClick={onClose} aria-label="Close">
+          <button
+            type="button"
+            className="guide-x"
+            onClick={onClose}
+            aria-label="Close"
+          >
             ✕
           </button>
         </header>
 
         <div className="guide-body">
           <p>
-            Adds <strong>{name}</strong> to your Deadlock build list so the in-game shop walks you
-            through it top-to-bottom. Runs entirely in your browser — your save file never leaves
-            your machine.
+            Adds <strong>{name}</strong> to your Deadlock build list so the
+            in-game shop walks you through it top-to-bottom. Runs entirely in
+            your browser — your save file never leaves your machine.
           </p>
           <ol className="export-steps">
             <li>
-              <strong>Fully quit Deadlock</strong> first (the game overwrites this file on exit).
+              <strong>Fully quit Deadlock</strong> first (the game overwrites
+              this file on exit).
             </li>
             <li>
               {canEditInPlace
@@ -1200,13 +1240,15 @@ function ExportPanel({
                 : "Pick your cached_hero_builds.kv3, then download the updated file and drop it back into the same folder (back up the original first)."}
             </li>
             <li>
-              Launch Deadlock → <strong>{build.hero.name}</strong> → <strong>My Builds</strong>.
+              Launch Deadlock → <strong>{build.hero.name}</strong> →{" "}
+              <strong>My Builds</strong>.
             </li>
           </ol>
 
           <label className="export-steam">
             <span>
-              Steam account ID <span className="hint">(optional, recommended)</span>
+              Steam account ID{" "}
+              <span className="hint">(optional, recommended)</span>
             </span>
             <input
               type="text"
@@ -1216,9 +1258,9 @@ function ExportPanel({
               onChange={(e) => setSteamId(e.target.value)}
             />
             <span className="hint">
-              The number in your Steam <code>userdata/&lt;id&gt;</code> folder (or your profile). Lets
-              you edit &amp; delete the build in-game — without it, the build can't be removed except
-              by editing the file.
+              The number in your Steam <code>userdata/&lt;id&gt;</code> folder
+              (or your profile). Lets you edit &amp; delete the build in-game —
+              without it, the build can't be removed except by editing the file.
             </span>
           </label>
 
@@ -1233,7 +1275,9 @@ function ExportPanel({
             </button>
           ) : (
             <label className={`export-go ${stage === "working" ? "busy" : ""}`}>
-              {stage === "working" ? "Working…" : "Choose cached_hero_builds.kv3"}
+              {stage === "working"
+                ? "Working…"
+                : "Choose cached_hero_builds.kv3"}
               <input
                 type="file"
                 accept=".kv3"
@@ -1250,7 +1294,11 @@ function ExportPanel({
           {status && <p className={`export-status ${stage}`}>{status}</p>}
           {downloadUrl && (
             <p>
-              <a className="export-go" href={downloadUrl} download={CACHE_FILENAME}>
+              <a
+                className="export-go"
+                href={downloadUrl}
+                download={CACHE_FILENAME}
+              >
                 ⬇ Download {CACHE_FILENAME}
               </a>
             </p>
@@ -1261,13 +1309,18 @@ function ExportPanel({
             <ul>
               {CACHE_PATHS.map(([os, p]) => (
                 <li key={os}>
-                  <strong>{os}:</strong> <code>{p}{CACHE_FILENAME}</code>
+                  <strong>{os}:</strong>{" "}
+                  <code>
+                    {p}
+                    {CACHE_FILENAME}
+                  </code>
                 </li>
               ))}
             </ul>
             <p className="hint">
-              Not showing up after launch? Steam Cloud may have reverted it — redo it with Deadlock
-              closed, or turn off Steam Cloud for Deadlock while importing.
+              Not showing up after launch? Steam Cloud may have reverted it —
+              redo it with Deadlock closed, or turn off Steam Cloud for Deadlock
+              while importing.
             </p>
           </details>
         </div>
@@ -1349,6 +1402,19 @@ function GuideModal({ onClose }: { onClose: () => void }) {
               correction. We fall back to it wherever no adjusted figure exists
               — counter deltas, hero matchups, and whole community builds — so
               in those spots, <strong>lean on the larger samples</strong>.
+            </p>
+            <p className="fine">
+              One honest limit: the correction knows your net worth at purchase,
+              not your <em>lead</em> — and players buy expensive items
+              disproportionately when already winning. We measured it against a
+              win-probability model built from real match timelines: at the
+              moment of purchase, a tier-4 buy sits at roughly 56% win
+              probability versus ~50% for tier 1. So late, expensive picks stay
+              a touch flattered even after adjustment — the{" "}
+              <span className="statetag winmore">win more</span> /{" "}
+              <span className="statetag comeback">comeback</span> tags are the
+              per-pick read on it, and no aggregate correction can fully remove
+              it.
             </p>
           </section>
 
@@ -2254,7 +2320,8 @@ function usePinnablePopover<T extends HTMLElement>(ref: { current: T | null }) {
     const inPopover = (t: EventTarget | null) =>
       t instanceof Element && !!t.closest(POPOVER_SEL);
     const onDown = (e: PointerEvent) => {
-      if (ref.current?.contains(e.target as Node) || inPopover(e.target)) return;
+      if (ref.current?.contains(e.target as Node) || inPopover(e.target))
+        return;
       setAnchor(null);
     };
     const onScroll = (e: Event) => {
@@ -2650,7 +2717,9 @@ function BuildPreview({
           <div className="bp-skills">
             {theirMaxOrder.map((id, rank) => {
               const a = abilities.get(id);
-              const moved = ourMaxOrder ? ourMaxOrder.indexOf(id) !== rank : false;
+              const moved = ourMaxOrder
+                ? ourMaxOrder.indexOf(id) !== rank
+                : false;
               const ourRank = ourMaxOrder ? ourMaxOrder.indexOf(id) : -1;
               return (
                 <span
@@ -2658,10 +2727,18 @@ function BuildPreview({
                   className={`bp-skill ${moved ? "moved" : ""}`}
                   style={{ borderColor: skillColor(id) }}
                   title={`${a?.name ?? id} — maxed ${rank + 1}${
-                    moved && ourRank >= 0 ? ` (you: ${ourRank + 1})` : moved ? " (not in yours)" : " (same as yours)"
+                    moved && ourRank >= 0
+                      ? ` (you: ${ourRank + 1})`
+                      : moved
+                        ? " (not in yours)"
+                        : " (same as yours)"
                   }`}
                 >
-                  {a?.image ? <img src={a.image} alt="" loading="lazy" /> : a?.name ?? id}
+                  {a?.image ? (
+                    <img src={a.image} alt="" loading="lazy" />
+                  ) : (
+                    (a?.name ?? id)
+                  )}
                   <span className="bp-skrank">{rank + 1}</span>
                 </span>
               );

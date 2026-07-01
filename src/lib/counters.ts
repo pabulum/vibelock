@@ -23,11 +23,11 @@
 // The shrink+lower-bound is still honest about noise: a thin sample has a wide interval and a low
 // bound, so it self-rejects — we get recall without minting flukes. Thin marks are flagged for the UI.
 
-import type { ItemCounters, Item, ItemStat } from '../types';
-import { GATE_Z } from './stats';
+import type { ItemCounters, Item, ItemStat } from "../types";
+import { GATE_Z } from "./stats";
 
 const PHASE_BOUNDS_S = [540, 1200, 1800]; // 9m / 20m / 30m
-const PHASE_LABELS = ['Lane', 'Early mid', 'Mid', 'Late'];
+const PHASE_LABELS = ["Lane", "Early mid", "Mid", "Late"];
 
 const MIN_SAMPLE = 50; // candidacy floor: below this a cell can't inform the lean or earn a mark. Kept low
 // because the shrink + lower-bound below does the real noise control — it's not a hard significance cutoff.
@@ -40,16 +40,26 @@ const COUNTER_PRIOR_K = 60; // empirical-Bayes prior strength, in "equivalent ga
 // cells get pulled to ~no-edge, well-sampled ones keep theirs. Lower ⇒ more recall (trust small samples
 // sooner); higher ⇒ more caution. Modest on purpose — the lower-confidence bound is the main guard.
 
+/** An item's signed comp edge with its sampling error, so downstream decisions (the build
+ * re-rank's "weak vs comp" demote) can require *confidence*, not just a threshold on the
+ * point estimate. `se` is the delta-method standard error of the shrunk weighted mean:
+ * √(Σ nᵢ·pᵢ(1−pᵢ)) / (Σn + K) — each enemy cell contributes its binomial variance. */
+export interface CompEdge {
+  edge: number;
+  se: number;
+}
+
 /** Join per-enemy item stats to the baseline. Returns:
  *  - `counters`: one entry per item that genuinely over-performs vs ≥1 enemy (above that
  *    enemy's matchup lean), with per-enemy marks (strongest first) — for the build tags.
  *  - `edgeByItem`: every item's *signed* comp edge (shrunk sample-weighted mean of its per-enemy
- *    centered edges, so it can be negative) — used to re-rank the build for the comp. */
+ *    centered edges, so it can be negative) with its standard error — used to re-rank the build
+ *    for the comp and to gate the "weak vs comp" demote on significance. */
 export function computeItemCounters(
   baseline: ItemStat[],
   perEnemy: Array<{ enemyHeroId: number; stats: ItemStat[] }>,
   items: Map<number, Item>,
-): { counters: ItemCounters[]; edgeByItem: Map<number, number> } {
+): { counters: ItemCounters[]; edgeByItem: Map<number, CompEdge> } {
   const baseWr = new Map<number, number>();
   for (const r of baseline) {
     const n = r.wins + r.losses;
@@ -59,11 +69,17 @@ export function computeItemCounters(
   const byItem = new Map<number, ItemCounters>();
   const edgeSum = new Map<number, number>(); // Σ edge·n, for the signed average
   const edgeWeight = new Map<number, number>(); // Σ n
+  const edgeVarSum = new Map<number, number>(); // Σ n·p(1−p), for the weighted mean's variance
   for (const { enemyHeroId, stats } of perEnemy) {
     // Pass 1: raw deltas for every item over the sample floor, plus the matchup lean
     // (sample-weighted mean shift) — what an "average" item does vs this enemy.
-    const raw: Array<{ item: Item; winRate: number; rawDelta: number; n: number; buyT: number }> =
-      [];
+    const raw: Array<{
+      item: Item;
+      winRate: number;
+      rawDelta: number;
+      n: number;
+      buyT: number;
+    }> = [];
     let shiftSum = 0;
     let shiftWeight = 0;
     for (const r of stats) {
@@ -87,6 +103,10 @@ export function computeItemCounters(
       const edge = x.rawDelta - lean;
       edgeSum.set(x.item.id, (edgeSum.get(x.item.id) ?? 0) + edge * x.n);
       edgeWeight.set(x.item.id, (edgeWeight.get(x.item.id) ?? 0) + x.n);
+      edgeVarSum.set(
+        x.item.id,
+        (edgeVarSum.get(x.item.id) ?? 0) + x.n * x.winRate * (1 - x.winRate),
+      );
 
       // Empirical-Bayes shrink toward 0 (prior = no counter, worth COUNTER_PRIOR_K games), then a
       // lower-confidence bound on the edge: shrunk mean − GATE_Z posterior SDs. The edge's noise is the
@@ -94,25 +114,43 @@ export function computeItemCounters(
       // so its own noise is negligible), regularized by the prior to concentration n + K. Mirrors
       // buildGenerator's shrinkToBaseline / lowerConfidenceWinRate, but on the centered edge.
       const shrunkEdge = (x.n * edge) / (x.n + COUNTER_PRIOR_K);
-      const sd = Math.sqrt((x.winRate * (1 - x.winRate)) / (x.n + COUNTER_PRIOR_K + 1));
+      const sd = Math.sqrt(
+        (x.winRate * (1 - x.winRate)) / (x.n + COUNTER_PRIOR_K + 1),
+      );
       // Effect floor *and* confidence in one bar (the significantlyHigher idiom): a small sample needs a
       // bigger observed edge to clear GATE_Z·sd, a large one only needs to clear the effect floor.
       if (shrunkEdge < Math.max(MIN_EDGE, GATE_Z * sd)) continue;
 
       let entry = byItem.get(x.item.id);
       if (!entry) {
-        entry = { item: x.item, phaseLabel: phaseForTime(x.buyT), marks: [], topDelta: 0 };
+        entry = {
+          item: x.item,
+          phaseLabel: phaseForTime(x.buyT),
+          marks: [],
+          topDelta: 0,
+        };
         byItem.set(x.item.id, entry);
       }
-      entry.marks.push({ enemyHeroId, winRate: x.winRate, delta: shrunkEdge, sample: x.n, lowSample: x.n < LOW_SAMPLE });
+      entry.marks.push({
+        enemyHeroId,
+        winRate: x.winRate,
+        delta: shrunkEdge,
+        sample: x.n,
+        lowSample: x.n < LOW_SAMPLE,
+      });
       entry.topDelta = Math.max(entry.topDelta, shrunkEdge);
     }
   }
 
   // Shrink the per-item comp edge toward 0 too (prior = no edge, worth COUNTER_PRIOR_K games), so a thin
-  // item doesn't swing the build re-rank: Σedge·n / (Σn + K).
-  const edgeByItem = new Map<number, number>();
-  for (const [id, w] of edgeWeight) edgeByItem.set(id, (edgeSum.get(id) ?? 0) / (w + COUNTER_PRIOR_K));
+  // item doesn't swing the build re-rank: Σedge·n / (Σn + K). The SE is the shrunk weighted mean's
+  // delta-method error — thin evidence ⇒ wide SE ⇒ downstream confidence gates won't act on it.
+  const edgeByItem = new Map<number, CompEdge>();
+  for (const [id, w] of edgeWeight)
+    edgeByItem.set(id, {
+      edge: (edgeSum.get(id) ?? 0) / (w + COUNTER_PRIOR_K),
+      se: Math.sqrt(edgeVarSum.get(id) ?? 0) / (w + COUNTER_PRIOR_K),
+    });
 
   const counters = [...byItem.values()];
   for (const e of counters) e.marks.sort((a, b) => b.delta - a.delta);
