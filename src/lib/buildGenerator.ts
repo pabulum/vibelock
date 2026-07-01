@@ -448,6 +448,32 @@ function supersededComponents(
   return out;
 }
 
+/** Every item id that's a (transitive) component of an already-committed (`owned`) item — i.e. it's
+ * already been "spent" building that upgrade. Deadlock won't sell you a component standalone once
+ * its upgrade is owned (only a *different* item built from the same component, at full price), so a
+ * later phase must never re-offer one of these as its own pick — it's not a real purchase, just the
+ * upgrade you already bought under a different name. */
+function componentsConsumedByOwned(
+  owned: Set<number>,
+  items: Map<number, Item>,
+): Set<number> {
+  const out = new Set<number>();
+  const walk = (item: Item) => {
+    for (const c of item.componentIds) {
+      if (!out.has(c)) {
+        out.add(c);
+        const comp = items.get(c);
+        if (comp) walk(comp);
+      }
+    }
+  };
+  for (const id of owned) {
+    const it = items.get(id);
+    if (it) walk(it);
+  }
+  return out;
+}
+
 /** Item id → the column where the largest fraction of players buy it (its primary phase). */
 function primaryColumnByItem(flow: ItemFlowStats): Map<number, number> {
   const best = new Map<number, { col: number; pick: number }>();
@@ -1022,6 +1048,12 @@ function buildPhase(
   const swaps: BuildItem[] = []; // every-game picks held out of core as substitutes (see substituteRival)
   const benchedIds = new Set<number>(); // their upgrade lines are off-limits for filling core (see buildsFromAny)
   let coreSouls = 0;
+  // Components already spent building an earlier-phase pick (e.g. Mid bought the upgrade Escalating
+  // Exposure — Late must not then offer its component Mystic Vulnerability as its own pick; you can't
+  // buy a component standalone once its upgrade is owned). owned-only, not `chosen`: a same-phase
+  // component+upgrade pair is handled later by dropSamePhaseComponents, which still wants both rows to
+  // exist so it can fold one into the other.
+  const consumedByOwned = componentsConsumedByOwned(owned, items);
 
   // The components `c` would absorb: in the build already (earlier phase `owned`, or earlier this
   // phase `chosen`) and not yet consumed by another upgrade (`claimed`). Returns the ids so the caller
@@ -1049,6 +1081,11 @@ function buildPhase(
       owned.has(c.item.id)
     )
       return false;
+    // Don't seat a component of an upgrade already owned from an *earlier* phase — you can't buy it
+    // standalone anymore (Deadlock only lets you buy a component before its upgrade, never after), so
+    // offering it here would recommend an impossible purchase (Escalating Exposure core in Mid ⇒ its
+    // component Mystic Vulnerability must not resurface as its own pick in Late).
+    if (consumedByOwned.has(c.item.id)) return false;
     // Don't seat a component whose upgrade is already in this phase's core — buying the upgrade already
     // includes it, so it would just fold away (dropSamePhaseComponents) and waste the slot. Skip it so
     // the slot goes to a genuinely new item (Victor early-mid: skip Sprint Boots once Enduring Speed is
@@ -1322,6 +1359,7 @@ function buildPhase(
         !chosen.has(c.item.id) &&
         !owned.has(c.item.id) && // bought in an earlier phase already — don't re-surface it as optional
         !swapIds.has(c.item.id) &&
+        !consumedByOwned.has(c.item.id) && // its upgrade is already owned — can't buy it standalone anymore
         !buildsFromAny(c.item, benchedIds, items) && // an upgrade of a swap is that swap's line, not its own pick
         isValuePick(c, baselineWinRate),
     )
@@ -1351,6 +1389,7 @@ function buildPhase(
       need &&
       !chosen.has(need.item.id) &&
       !owned.has(need.item.id) &&
+      !consumedByOwned.has(need.item.id) &&
       !situational.some((s) => s.item.id === need.item.id)
     ) {
       situational.unshift({
@@ -1380,7 +1419,8 @@ function buildPhase(
       if (
         shown.has(c.item.id) ||
         benchedIds.has(c.item.id) ||
-        owned.has(c.item.id)
+        owned.has(c.item.id) ||
+        consumedByOwned.has(c.item.id) // its upgrade is already owned — can't buy it standalone anymore
       )
         continue;
       if (c.adjustedWinRate < baselineWinRate - FILL_WR_FLOOR) continue; // don't pad with a losing pick
