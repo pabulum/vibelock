@@ -276,6 +276,8 @@ export default function App() {
     matches: number;
     wins: number;
   }> | null>(null);
+  // Heroes the profile already plays meaningfully — the exclusion set for "worth picking up".
+  const [playedHeroIds, setPlayedHeroIds] = useState<Set<number> | null>(null);
   // Every hero's blended ladder win rate at the selected rank/patch — the "meta strength" half of
   // the what-to-queue ordering on the your-heroes row. Only fetched when a profile is set.
   const [heroMeta, setHeroMeta] = useState<Map<
@@ -340,6 +342,7 @@ export default function App() {
     async (signal) => {
       if (!accountId || heroes.length === 0) {
         setHeroPool(null);
+        setPlayedHeroIds(null);
         return;
       }
       const [stats, rankTier] = await Promise.all([
@@ -367,6 +370,11 @@ export default function App() {
             wins: x.s.wins,
           })),
       );
+      setPlayedHeroIds(
+        new Set(
+          stats.filter((s) => s.matches_played >= 10).map((s) => s.hero_id),
+        ),
+      );
       if (!tierTouched.current && rankTier !== null) setTier(rankTier);
     },
     [accountId, heroes],
@@ -377,14 +385,17 @@ export default function App() {
   // like items are — hero rows quack enough like ItemStat that the same power-prior blend applies.
   const heroMetaLoading = useAsyncTask(
     async (signal) => {
-      if (!accountId || patches.length === 0) {
+      if (!accountId || !items) {
+        // `items` is just the assets-resolved marker here — by then the patch feed has loaded or
+        // degraded to [], so the query below runs windowed or patch-less, never twice.
         setHeroMeta(null);
         return;
       }
+      const canBackfill = backfillOn && patches.length > 0;
       const window = windowFor(patches, patchIdx);
       const [f, q] = await Promise.all([
         getHeroLadderStats({ minBadge, ...window }),
-        backfillOn
+        canBackfill
           ? getHeroLadderStats({
               minBadge,
               ...priorWindowFor(patches, patchIdx),
@@ -401,9 +412,10 @@ export default function App() {
         avg_buy_time_s: 0,
         avg_sell_time_s: 0,
       });
-      const rows = backfillOn
-        ? blendItemStats(f.map(toItemStat), q.map(toItemStat)).stats
-        : f.map(toItemStat);
+      const rows =
+        q.length > 0
+          ? blendItemStats(f.map(toItemStat), q.map(toItemStat)).stats
+          : f.map(toItemStat);
       setHeroMeta(
         new Map(
           rows.map((r) => {
@@ -416,7 +428,7 @@ export default function App() {
         ),
       );
     },
-    [accountId, minBadge, patchIdx, patches, backfillOn],
+    [accountId, items, minBadge, patchIdx, patches, backfillOn],
     setError,
   );
 
@@ -443,24 +455,53 @@ export default function App() {
     return rows;
   }, [heroPool, heroMeta]);
 
+  // "Worth picking up": the strongest ladder heroes at this rank/patch that the profile doesn't
+  // already play. Learning a hero costs real win rate for the first games (the literature's
+  // hero-switching tax), so the shown number is the hero's current rate minus that tax — the
+  // honest "expected while learning". The tax scales with rank: unfamiliarity is punished harder
+  // the better the lobby (a heuristic in the literature's direction, not fitted — our aggregate
+  // data can't split games by per-hero experience), so picking someone up is cheapest exactly
+  // where it feels cheapest, at the lower tiers.
+  const NEW_HERO_TAX = 0.015 + 0.0015 * tier; // 1.5pt at the bottom → ~3.2pt at Eternus
+  const tryHeroes = useMemo(() => {
+    if (!heroMeta || !playedHeroIds || !heroPool) return null;
+    const out: Array<{ hero: Hero; metaWinRate: number; taxed: number }> = [];
+    for (const [id, m] of heroMeta) {
+      if (playedHeroIds.has(id) || m.decided < 200) continue;
+      const h = heroes.find((x) => x.id === id);
+      if (!h) continue;
+      out.push({
+        hero: h,
+        metaWinRate: m.winRate,
+        taxed: m.winRate - NEW_HERO_TAX,
+      });
+    }
+    // Only suggest heroes still worth it after the tax — a coin flip isn't a recommendation.
+    return out
+      .filter((x) => x.taxed > 0.5)
+      .sort((a, b) => b.metaWinRate - a.metaWinRate)
+      .slice(0, 2);
+  }, [heroMeta, playedHeroIds, heroPool, heroes, NEW_HERO_TAX]);
+
   // Fundamentals benchmark: my typical game vs the ladder at this rank floor. The metrics that
   // actually separate ranks are farm and deaths (see lib/fundamentals), so this is the "what do I
   // fix to climb" card. The ladder slice spans the pre-patch month too when backfill is on — the
   // distributions drift slowly and a day-one window alone is too thin to grid percentiles from.
   const fundamentalsLoading = useAsyncTask(
     async (signal) => {
-      if (!accountId || !hero || patches.length === 0) {
+      if (!accountId || !hero) {
         setFundamentals(null);
         return;
       }
       const window = windowFor(patches, patchIdx);
-      const ladderWindow = backfillOn
-        ? {
-            minUnixTimestamp: priorWindowFor(patches, patchIdx)
-              .minUnixTimestamp,
-            maxUnixTimestamp: window.maxUnixTimestamp,
-          }
-        : window;
+      const ladderWindow =
+        backfillOn && patches.length > 0
+          ? {
+              minUnixTimestamp: priorWindowFor(patches, patchIdx)
+                .minUnixTimestamp,
+              maxUnixTimestamp: window.maxUnixTimestamp,
+            }
+          : window;
       const [me, ladder] = await Promise.all([
         getPlayerMetrics({ accountIds: [accountId], heroId: hero.id }).catch(
           () => ({}),
@@ -490,10 +531,13 @@ export default function App() {
   // Generate builds, split by archetype for flex heroes.
   const loading = useAsyncTask(
     async (signal) => {
-      if (!hero || !items || patches.length === 0) return;
+      if (!hero || !items) return;
       setError(null);
       const window = windowFor(patches, patchIdx);
       const priorWindow = priorWindowFor(patches, patchIdx);
+      // Backfill needs a patch boundary to blend across; when the patch feed is down (empty list,
+      // see getPatches) we degrade to the plain window instead of dead-ending the whole build.
+      const canBackfill = backfillOn && patches.length > 0;
       // With backfill on (default), every flow is fetched twice — the selected patch and the month
       // before it — and blended (lib/patchBlend): the pre-patch window backfills a young patch as a
       // capped, drift-discounted prior, so a day-one build is complete instead of starved by the
@@ -502,7 +546,7 @@ export default function App() {
       // to 10 — on day one most nodes are below 100 matches, and the client-side gates run on the
       // blended effective sample anyway. Backfill off = the selected window raw, single fetch.
       const flowFor = (includeItemIds?: number[]) =>
-        backfillOn
+        canBackfill
           ? Promise.all([
               getItemFlowStats({
                 heroId: hero.id,
@@ -538,15 +582,15 @@ export default function App() {
           heroId: hero.id,
           minBadge,
           ...window,
-          ...(backfillOn ? { minMatches: 5 } : {}),
+          ...(canBackfill ? { minMatches: 5 } : {}),
         }),
-        backfillOn
+        canBackfill
           ? getItemStats({ heroId: hero.id, minBadge, ...priorWindow })
           : Promise.resolve([]),
         getItemPermutationStats({
           heroId: hero.id,
           minBadge,
-          ...(backfillOn
+          ...(canBackfill
             ? {
                 minUnixTimestamp: priorWindow.minUnixTimestamp,
                 maxUnixTimestamp: window.maxUnixTimestamp,
@@ -556,7 +600,9 @@ export default function App() {
       ]);
       const base = baseBlend.flow;
       // Movers compare the RAW windows (blending them first would test the prior against itself).
-      setMovers(backfillOn ? findPatchMovers(statsFresh, statsPrior, items) : null);
+      setMovers(
+        canBackfill ? findPatchMovers(statsFresh, statsPrior, items) : null,
+      );
       const BUY_TIME_MIN_MATCHES = 40;
       const timeStats = new Map(statsPrior.map((s) => [s.item_id, s]));
       for (const s of statsFresh)
@@ -588,7 +634,7 @@ export default function App() {
       if (signal.aborted) return;
       const gun = gunBlend?.flow;
       const spirit = spiritBlend?.flow;
-      setBackfill(backfillOn ? baseBlend.borrowedShare : null);
+      setBackfill(canBackfill ? baseBlend.borrowedShare : null);
 
       const set = assembleArchetypes(
         hero,
@@ -661,7 +707,7 @@ export default function App() {
         setCompEdges(null);
         return;
       }
-      if (patches.length === 0) return;
+      const canBackfill = backfillOn && patches.length > 0;
       const window = windowFor(patches, patchIdx);
       const priorWindow = priorWindowFor(patches, patchIdx);
       const base = { heroId: hero.id, minBadge };
@@ -675,7 +721,7 @@ export default function App() {
       // reads as a fake counter. So the per-item discounts are learned on the base pair and shared
       // into every per-enemy blend (see blendItemStats).
       const slice = (enemyHeroIds?: number[]) =>
-        backfillOn
+        canBackfill
           ? Promise.all([
               getItemStats({ ...base, ...window, minMatches: 5, enemyHeroIds }),
               getItemStats({ ...base, ...priorWindow, enemyHeroIds }),
@@ -695,7 +741,7 @@ export default function App() {
         enemyHeroId: enemies[i],
         stats: pair[0],
       }));
-      if (backfillOn) {
+      if (canBackfill) {
         const baseBlend = blendItemStats(basePair[0], basePair[1]);
         baseStats = baseBlend.stats;
         perEnemy = enemyPairs.map((pair, i) => ({
@@ -775,7 +821,7 @@ export default function App() {
       if (!build && activeSignatureId) {
         build = bestSkillBuild(await getAbilityOrder(base));
       }
-      if (!build && backfillOn) {
+      if (!build && backfillOn && patches.length > 0) {
         build = bestSkillBuild(
           await getAbilityOrder({
             heroId: hero.id,
@@ -870,7 +916,10 @@ export default function App() {
       e.includes(id) ? e.filter((x) => x !== id) : [...e, id],
     );
 
-  const patchLabel = patches[patchIdx]?.title ?? "…";
+  // Empty patch list = the feed failed and getPatches degraded (see api/deadlock) — windowless
+  // queries fall back to the API's default last-30-days, so label it that way.
+  const patchLabel =
+    patches[patchIdx]?.title ?? (patches.length ? "…" : "last 30 days");
   // "leans N% on pre-patch data" — only worth saying when the borrow is real (≥ 1%).
   const backfillLabel =
     backfill !== null && backfill >= 0.01
@@ -983,7 +1032,7 @@ export default function App() {
             </select>
           </label>
           <label>
-            Rank floor
+            Rank
             <select
               value={tier}
               onChange={(e) => {
@@ -1004,6 +1053,9 @@ export default function App() {
               value={patchIdx}
               onChange={(e) => setPatchIdx(Number(e.target.value))}
             >
+              {patches.length === 0 && (
+                <option value={0}>Last 30 days (patch list unavailable)</option>
+              )}
               {patches.map((p, i) => (
                 <option key={p.ts} value={i}>
                   {p.title}
@@ -1049,7 +1101,7 @@ export default function App() {
 
       {error && <div className="banner error">⚠ {error}</div>}
 
-      {movers && movers.length > 0 && (
+      {movers && (
         <div className="movers">
           <span
             className="lbl"
@@ -1057,6 +1109,11 @@ export default function App() {
           >
             Patch movers
           </span>
+          {movers.length === 0 && (
+            <span className="mover none">
+              none confident yet for {hero?.name ?? "this hero"} — early days
+            </span>
+          )}
           {movers.map((m) => (
             <span
               key={m.item.id}
@@ -1082,7 +1139,7 @@ export default function App() {
         <div className="myheroes">
           <span
             className="lbl"
-            title="Your most-played heroes (last 90 days when possible), ordered by expected win rate tonight: your own record on the hero, shrunk toward the hero's current ladder win rate at this rank and patch. Best queue first."
+            title="Your most-played heroes (last 90 days when possible), ordered by expected win rate tonight: your own record on the hero, shrunk toward the hero's current ladder win rate at this rank and patch. You queue 3–4 and the game assigns one — take your picks from the left."
           >
             Your heroes
           </span>
@@ -1100,11 +1157,31 @@ export default function App() {
             >
               <img src={h.image} alt="" loading="lazy" />
               {h.name}
-              {expected !== undefined && (
-                <i>{Math.round(expected * 100)}%</i>
-              )}
+              {expected !== undefined && <i>{Math.round(expected * 100)}%</i>}
             </button>
           ))}
+          {tryHeroes && tryHeroes.length > 0 && (
+            <>
+              <span
+                className="lbl"
+                title={`Strong at this rank/patch and not in your pool — a queue-slot candidate. The number is the hero's current ladder win rate minus a ~${(NEW_HERO_TAX * 100).toFixed(1)}pt new-hero tax (your first games on a hero run below your eventual rate; the tax grows with rank, so picking someone up is cheapest at lower tiers).`}
+              >
+                Worth picking up
+              </span>
+              {tryHeroes.map(({ hero: h, metaWinRate, taxed }) => (
+                <button
+                  key={h.id}
+                  className={`chip try${h.id === heroId ? " active" : ""}`}
+                  onClick={() => setHeroId(h.id)}
+                  title={`${(metaWinRate * 100).toFixed(1)}% at this rank/patch − ~${(NEW_HERO_TAX * 100).toFixed(1)}pt learning tax ≈ ${(taxed * 100).toFixed(1)}% while you pick them up`}
+                >
+                  <img src={h.image} alt="" loading="lazy" />
+                  {h.name}
+                  <i>{Math.round(taxed * 100)}%</i>
+                </button>
+              ))}
+            </>
+          )}
         </div>
       )}
 
@@ -1128,10 +1205,9 @@ export default function App() {
               : ""}{" "}
             · {build.rankLabel} · {patchLabel}
             {backfillLabel} · {build.population.matches.toLocaleString()}{" "}
-            matches · avg game{" "}
-            {Math.round(build.population.avgDurationS / 60)} min ·{" "}
-            {(build.population.baselineWinRate * 100).toFixed(0)}% avg WR (rows
-            show ± vs this) ·{" "}
+            matches · avg game {Math.round(build.population.avgDurationS / 60)}{" "}
+            min · {(build.population.baselineWinRate * 100).toFixed(0)}% avg WR
+            (rows show ± vs this) ·{" "}
             <span
               className={
                 (displayBuild ?? build).standingSlots > SLOT_CAP
@@ -1859,8 +1935,8 @@ function GuideModal({ onClose }: { onClose: () => void }) {
               </a>
               , filtered to the <strong>rank floor</strong> and{" "}
               <strong>patch</strong> you select (the newest patch by default).
-              Nothing here is hand-curated — change a control and the whole
-              page recomputes.
+              Nothing here is hand-curated — change a control and the whole page
+              recomputes.
             </p>
             <p>
               A <strong>young patch</strong> has too few games to judge every
@@ -1873,8 +1949,8 @@ function GuideModal({ onClose }: { onClose: () => void }) {
               actually changed) borrow far less, and brand-new items are judged
               on fresh data alone. The meta line shows what share of the
               evidence is backfilled, and the <strong>Backfill</strong> toggle
-              in the header turns it off — you get the selected window raw,
-              thin as it may be.
+              in the header turns it off — you get the selected window raw, thin
+              as it may be.
             </p>
           </section>
 
@@ -2461,7 +2537,7 @@ function MatchupChip({
     <button
       className={`mchip ${tough ? "tough" : "fav"} ${active ? "active" : ""}`}
       onClick={onClick}
-      title={`${hero?.name ?? "?"}: ${(m.winRate * 100).toFixed(0)}% win rate (${m.delta >= 0 ? "+" : ""}${(m.delta * 100).toFixed(1)}${m.expectedWinRate !== undefined ? ` vs the ${(m.expectedWinRate * 100).toFixed(0)}% hero strengths predict` : " vs avg"}), n=${m.sample.toLocaleString()}${m.laneCsDelta < -10 ? ` · you average ${Math.round(m.laneCsDelta)} CS in lane` : ""}`}
+      title={`${hero?.name ?? "?"}: ${(m.winRate * 100).toFixed(0)}% win rate (${m.delta >= 0 ? "+" : ""}${(m.delta * 100).toFixed(1)}${m.expectedWinRate !== undefined ? ` vs the ${(m.expectedWinRate * 100).toFixed(0)}% hero strengths predict` : " vs avg"}), n=${m.sample.toLocaleString()}${m.laneCsDelta < -10 ? ` · they out-farm you by ~${Math.abs(Math.round(m.laneCsDelta))} CS in lane` : ""}`}
     >
       {hero?.image && <img src={hero.image} alt="" loading="lazy" />}
       <span className="mname">{hero?.name ?? m.enemyHeroId}</span>

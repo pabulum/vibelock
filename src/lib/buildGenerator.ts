@@ -252,6 +252,48 @@ const NEED_MAX_TIER = 2; // ...and we only count cheap *pickups* (≤T2): a T3+ 
 // heal (Headhunter, Leech) is a scaling buy, not the reactive sustain a player grabs to hold a lane
 const NEED_MAX_WR_DROP = 0.03; // ...and skip it if buyers win this far below baseline (a trap, not QOL)
 
+// --- The universal bypass, made falsifiable (the Headhunter fix) ---
+// The pick-rate core seats near-universal items without a win-rate check, and there's a real
+// mathematical reason for that: with pick rate p, the population rate decomposes as
+//   baseline = p·WR(buyers) + (1−p)·WR(non-buyers)
+// so an item's *observable* edge is compressed by its own popularity:
+//   WR(buyers) − baseline = (1−p) · [WR(buyers) − WR(non-buyers)].
+// A 90%-pick staple mathematically CANNOT show a big edge either way — judging it on that number
+// is judging a measurement that can't move, which is why the bypass exists. But the same identity
+// lets the bypass be *checked* instead of assumed: dividing the observed edge by (1−p) recovers
+// the buyer-vs-non-buyer contrast — the quantity that means the same thing at every pick rate —
+// and the bypass is revoked when buyers do significantly AND meaningfully worse than non-buyers
+// (Paradox @ Emissary: Headhunter, 32% pick, −3.2pt observed ⇒ buyers ~4.7pt behind non-buyers).
+// Significance is transform-invariant (the edge and its SE both divide by (1−p), so z is
+// unchanged); only the effect-size margin moves to the contrast scale. Above CONTRAST_MAX_PICK the
+// "non-buyer" complement stops being a real comparison population (sold slots, abandoned games,
+// meme builds), so the contrast is uninterpretable and the benefit of the doubt stands — which is
+// also what protects the true 60–90% staples without a special case.
+const CONTRAST_MARGIN = 0.025; // buyers must run ≥2.5pt behind non-buyers (implied) to lose the seat
+const CONTRAST_MAX_PICK = 0.7; // past this the non-buyer group is too weird to read
+
+/** True when this pick's buyers do significantly and meaningfully worse than its non-buyers — the
+ * evidence that revokes a popular item's core seat. See the contrast identity above. */
+function buyersLoseSignificantly(c: BuildItem, baseline: number): boolean {
+  if (c.pickRate > CONTRAST_MAX_PICK) return false;
+  // The contrast-scale margin mapped back to the observable scale the test runs on.
+  const marginObs = CONTRAST_MARGIN * (1 - c.pickRate);
+  return significantlyHigher(
+    baseline,
+    Number.POSITIVE_INFINITY,
+    c.adjustedWinRate,
+    c.decided,
+    marginObs,
+  );
+}
+
+/** The implied buyer-vs-non-buyer gap in win-rate points (positive = buyers behind), for the
+ * honest "popular but losing" label on a demoted pick. Denominator floored so a data glitch at
+ * pick ≈ 1 can't print a silly number. */
+function buyerContrast(c: BuildItem, baseline: number): number {
+  return (baseline - c.adjustedWinRate) / Math.max(0.05, 1 - c.pickRate);
+}
+
 // Categories we budget across, in fill order. Weapon is filled last on purpose: it's
 // the plurality buy most phases, so giving the reactively-bought categories (greens,
 // then spirit) first claim on the budget stops weapon from starving them of a slot.
@@ -1244,7 +1286,8 @@ function buildPhase(
   // significance here would loosen it the wrong way — re-admitting not-quite-significant losers (a thin
   // −1.5pt spirit pick) into core, the exact thing FILL_WR_FLOOR exists to keep out.
   const seatable = (c: BuildItem) =>
-    c.pickRate >= UNIVERSAL_PICK ||
+    (c.pickRate >= UNIVERSAL_PICK &&
+      !buyersLoseSignificantly(c, baselineWinRate)) ||
     c.adjustedWinRate >= baselineWinRate - FILL_WR_FLOOR;
   // The category's next candidate worth trying — skipping ones already taken, benched, or losing —
   // or undefined once it's spent. Advances the cursor past the skips it walks over.
@@ -1399,6 +1442,32 @@ function buildPhase(
       });
       if (situational.length > SITUATIONAL_MAX) situational.pop(); // keep the cap; drops the weakest WR pick
     }
+  }
+
+  // A demoted universal (popular pick whose buyers verifiably lose — see buyersLoseSignificantly)
+  // still deserves a ROW: a third of the lobby buys it, so silently omitting it reads as an
+  // oversight, not a recommendation. Surface it as an optional pick with an honest why, so the
+  // build *explains* the absence.
+  for (const c of candidates) {
+    if (situational.length >= SITUATIONAL_MAX) break;
+    if (
+      c.pickRate < UNIVERSAL_PICK ||
+      !buyersLoseSignificantly(c, baselineWinRate)
+    )
+      continue;
+    if (
+      chosen.has(c.item.id) ||
+      owned.has(c.item.id) ||
+      consumedByOwned.has(c.item.id) ||
+      situational.some((s) => s.item.id === c.item.id)
+    )
+      continue;
+    const gap = (buyerContrast(c, baselineWinRate) * 100).toFixed(1);
+    situational.push({
+      ...c,
+      role: "filler",
+      why: `${Math.round(c.pickRate * 100)}% of players buy this, but they run ~${gap}pt behind the ones who don't — skip it at this rank`,
+    });
   }
 
   // Enrich: the value gate alone (a *significant* edge over baseline) can leave a thin 1–2 line list,

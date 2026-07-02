@@ -49,11 +49,24 @@ export const FUNDAMENTALS: Array<{
   betterLow?: boolean;
   fmt: (v: number) => string;
 }> = [
-  { key: "net_worth_per_min", label: "Souls/min", fmt: (v) => String(Math.round(v)) },
-  { key: "deaths", label: "Deaths/game", betterLow: true, fmt: (v) => v.toFixed(1) },
+  {
+    key: "net_worth_per_min",
+    label: "Souls/min",
+    fmt: (v) => String(Math.round(v)),
+  },
+  {
+    key: "deaths",
+    label: "Deaths/game",
+    betterLow: true,
+    fmt: (v) => v.toFixed(1),
+  },
   { key: "last_hits", label: "Last hits", fmt: (v) => String(Math.round(v)) },
   { key: "denies", label: "Denies", fmt: (v) => String(Math.round(v)) },
-  { key: "player_damage_per_min", label: "Damage/min", fmt: (v) => String(Math.round(v)) },
+  {
+    key: "player_damage_per_min",
+    label: "Damage/min",
+    fmt: (v) => String(Math.round(v)),
+  },
   { key: "accuracy", label: "Accuracy", fmt: (v) => `${Math.round(v * 100)}%` },
 ];
 
@@ -82,7 +95,17 @@ export function fundamentalsRows(
   for (const f of FUNDAMENTALS) {
     const mine = player[f.key];
     const dist = ladder[f.key];
-    if (!mine || !dist || !(dist.percentile99 > dist.percentile1)) continue;
+    // The endpoint reports an empty slice (no games on this hero, no games at this rank) as
+    // metrics with null fields, not missing keys — treat those as absent or the card renders
+    // p1 bars over "0" values instead of falling back to the all-heroes history.
+    if (
+      !mine ||
+      !dist ||
+      mine.avg == null ||
+      dist.percentile50 == null ||
+      !(dist.percentile99 > dist.percentile1)
+    )
+      continue;
     const p = percentileOf(mine.avg, dist);
     out.push({
       key: f.key,

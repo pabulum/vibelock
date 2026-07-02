@@ -9,8 +9,8 @@
   --purple: #9b6dd1; /* Deadlock spirit purple */
   /* Brand type, matching the Open Graph card. Space Grotesk for the wordmark (and available for
      headings); Archivo for the italic hero flavor lines. Both fall back to the system UI stack. */
-  --font-display: 'Space Grotesk', system-ui, sans-serif;
-  --font-tagline: 'Archivo', system-ui, sans-serif;
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-tagline: "Archivo", system-ui, sans-serif;
 }
 
 * {
@@ -25,7 +25,12 @@ body {
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font:
+    14px/1.45 system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    sans-serif;
   padding: 0 0 40px;
 }
 
@@ -70,10 +75,10 @@ body {
   text-overflow: ellipsis;
 }
 .tagline::before {
-  content: '“';
+  content: "“";
 }
 .tagline::after {
-  content: '”';
+  content: "”";
 }
 @media (max-width: 760px) {
   .tagline {
@@ -127,7 +132,7 @@ body {
   overflow: hidden;
 }
 .loadstrip::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   width: 35%;
@@ -195,7 +200,7 @@ body {
 .phase::after,
 .crow::after,
 .mchip::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   z-index: 3;
@@ -216,7 +221,7 @@ body {
 .phase::before,
 .crow::before,
 .mchip::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   z-index: 4;
@@ -326,6 +331,10 @@ body {
 .movers .newitem b {
   color: var(--accent);
 }
+.movers .none {
+  color: var(--muted);
+  border-style: dashed;
+}
 
 /* "Your fundamentals" card — per-metric percentile bars vs the selected ladder. Same header
    grammar as the community card; bars are the whole message so the rows stay dense. */
@@ -411,6 +420,12 @@ body {
 .myheroes .chip.active {
   border-color: var(--accent);
   color: var(--accent);
+}
+.myheroes .chip.try {
+  border-style: dashed;
+}
+.myheroes .lbl + .chip.try {
+  margin-left: 0;
 }
 .myheroes .chip img {
   width: 22px;
@@ -668,7 +683,12 @@ body {
   pointer-events: none;
   color: var(--text);
   /* Portaled to document.body, so it's outside .app and won't inherit its font. */
-  font: 12.5px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font:
+    12.5px/1.4 system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    sans-serif;
 }
 /* Tap-pinned on touch (see usePinnablePopover): a real, scrollable surface, not a pass-through
    tooltip — so a tap lands on it (not the row behind) and a tall preview can be read on a phone. */
@@ -842,7 +862,12 @@ body {
   pointer-events: none; /* a tooltip — never steals the cursor */
   color: var(--text);
   /* Portaled to document.body, so it's outside .app and won't inherit its font. */
-  font: 12.5px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font:
+    12.5px/1.4 system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    sans-serif;
 }
 /* Tap-pinned on touch (see ItemHover): make it a real surface — tappable and scrollable — so a
    tall card reads on a phone instead of clipping, and a tap on it doesn't fall through to a row. */
@@ -1075,8 +1100,13 @@ body {
    and a faint tint so it reads as the culmination of the Lane→Late progression. */
 .phase.overtime {
   border-color: color-mix(in srgb, var(--accent, #9b6dd1) 55%, var(--line));
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent, #9b6dd1) 7%, var(--panel)), var(--panel) 120px);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #9b6dd1) 20%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent, #9b6dd1) 7%, var(--panel)),
+    var(--panel) 120px
+  );
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--accent, #9b6dd1) 20%, transparent);
 }
 .phase.overtime h2 .time {
   color: color-mix(in srgb, var(--accent, #9b6dd1) 80%, var(--muted));
@@ -1547,7 +1577,12 @@ body {
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
   /* Portaled to <body>, so it doesn't inherit the app's font/color — set them here. */
   color: var(--text);
-  font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font:
+    14px/1.45 system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    sans-serif;
 }
 .guide-head {
   flex: 0 0 auto;

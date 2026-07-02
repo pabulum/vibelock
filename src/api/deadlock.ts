@@ -22,9 +22,9 @@ import type {
   PlayerMetrics,
   SlotType,
   TextSegment,
-} from '../types';
+} from "../types";
 
-const BASE = 'https://api.deadlock-api.com';
+const BASE = "https://api.deadlock-api.com";
 
 // Assets (heroes/items) change rarely; cache them in module scope + localStorage.
 const ASSET_TTL_MS = 24 * 60 * 60 * 1000;
@@ -37,7 +37,7 @@ const MAX_RETRIES = 3;
 // browser only sees `retry-after` / `ratelimit-reset` cross-origin if the server
 // allow-lists them — so treat those as a hint and otherwise back off exponentially.
 function retryAfterMs(res: Response, attempt: number): number {
-  for (const h of ['retry-after', 'ratelimit-reset']) {
+  for (const h of ["retry-after", "ratelimit-reset"]) {
     const v = Number(res.headers.get(h));
     if (Number.isFinite(v) && v > 0) return Math.min(v * 1000, 30_000);
   }
@@ -47,7 +47,10 @@ function retryAfterMs(res: Response, attempt: number): number {
 async function getJson<T>(url: string): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(url);
-    if (res.status === 429 && attempt < MAX_RETRIES) {
+    // Retry rate limits (per the server's hint) and transient 5xx flaps (the API intermittently
+    // 500s under load; one page load fans out enough queries that a single flap otherwise lands
+    // the error banner on a healthy session).
+    if ((res.status === 429 || res.status >= 500) && attempt < MAX_RETRIES) {
       await delay(retryAfterMs(res, attempt));
       continue;
     }
@@ -117,6 +120,18 @@ function cached<T>(key: string): T | null {
   }
 }
 
+/** The cached copy regardless of age — the fallback when a refresh fails and a stale answer
+ * beats no answer (see getPatches). */
+function cachedStale<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return (JSON.parse(raw) as { data: T }).data;
+  } catch {
+    return null;
+  }
+}
+
 function putCache<T>(key: string, data: T): void {
   try {
     localStorage.setItem(key, JSON.stringify({ at: Date.now(), data }));
@@ -130,10 +145,12 @@ let heroesPromise: Promise<Hero[]> | null = null;
 export function getHeroes(): Promise<Hero[]> {
   if (heroesPromise) return heroesPromise;
   heroesPromise = (async () => {
-    const cacheKey = 'dl.heroes.v3';
+    const cacheKey = "dl.heroes.v3";
     const hit = cached<Hero[]>(cacheKey);
     if (hit) return hit;
-    const raw = await getJson<RawHero[]>(`${BASE}/v1/assets/heroes?only_active=true`);
+    const raw = await getJson<RawHero[]>(
+      `${BASE}/v1/assets/heroes?only_active=true`,
+    );
     const heroes = raw
       .filter((h) => h.name)
       .map<Hero>((h) => ({
@@ -143,7 +160,7 @@ export function getHeroes(): Promise<Hero[]> {
         tagline: h.description?.role?.trim() || undefined,
         signatureClasses: [1, 2, 3, 4]
           .map((n) => h.items?.[`signature${n}`])
-          .filter((c): c is string => typeof c === 'string'),
+          .filter((c): c is string => typeof c === "string"),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
     putCache(cacheKey, heroes);
@@ -156,7 +173,8 @@ export function getHeroes(): Promise<Hero[]> {
 // derive both maps from it.
 let rawItemsPromise: Promise<RawItem[]> | null = null;
 function getRawItems(): Promise<RawItem[]> {
-  if (!rawItemsPromise) rawItemsPromise = getJson<RawItem[]>(`${BASE}/v1/assets/items`);
+  if (!rawItemsPromise)
+    rawItemsPromise = getJson<RawItem[]>(`${BASE}/v1/assets/items`);
   return rawItemsPromise;
 }
 
@@ -165,7 +183,7 @@ let itemsPromise: Promise<Map<number, Item>> | null = null;
 export function getItems(): Promise<Map<number, Item>> {
   if (itemsPromise) return itemsPromise;
   itemsPromise = (async () => {
-    const cacheKey = 'dl.items.v5';
+    const cacheKey = "dl.items.v5";
     const hit = cached<Item[]>(cacheKey);
     const list = hit ?? buildItemList(await getRawItems());
     if (!hit) putCache(cacheKey, list);
@@ -179,16 +197,16 @@ let abilitiesPromise: Promise<Map<number, Ability>> | null = null;
 export function getAbilities(): Promise<Map<number, Ability>> {
   if (abilitiesPromise) return abilitiesPromise;
   abilitiesPromise = (async () => {
-    const cacheKey = 'dl.abilities.v2';
+    const cacheKey = "dl.abilities.v2";
     const hit = cached<Ability[]>(cacheKey);
     const list =
       hit ??
       (await getRawItems())
-        .filter((i) => i.type === 'ability' && i.name)
+        .filter((i) => i.type === "ability" && i.name)
         .map<Ability>((i) => ({
           id: i.id,
           name: i.name,
-          className: i.class_name ?? '',
+          className: i.class_name ?? "",
           image: i.image ?? i.shop_image,
         }));
     if (!hit) putCache(cacheKey, list);
@@ -205,20 +223,25 @@ export interface AbilityOrderQuery extends TimeWindow {
   includeItemIds?: number[];
 }
 
-export function getAbilityOrder(q: AbilityOrderQuery): Promise<AbilityOrderRow[]> {
+export function getAbilityOrder(
+  q: AbilityOrderQuery,
+): Promise<AbilityOrderRow[]> {
   const params = new URLSearchParams({
     hero_id: String(q.heroId),
     min_average_badge: String(q.minBadge),
     min_matches: String(q.minMatches ?? 100),
   });
-  if (q.includeItemIds?.length) params.set('include_item_ids', q.includeItemIds.join(','));
+  if (q.includeItemIds?.length)
+    params.set("include_item_ids", q.includeItemIds.join(","));
   applyWindow(params, q);
-  return getAnalytics<AbilityOrderRow[]>(`${BASE}/v1/analytics/ability-order-stats?${params}`);
+  return getAnalytics<AbilityOrderRow[]>(
+    `${BASE}/v1/analytics/ability-order-stats?${params}`,
+  );
 }
 
 function normalizeSlot(s: string | null | undefined): SlotType {
-  if (s === 'weapon' || s === 'vitality' || s === 'spirit') return s;
-  return 'unknown';
+  if (s === "weapon" || s === "vitality" || s === "spirit") return s;
+  return "unknown";
 }
 
 // Property keys that mark an item as *sustain* — self-healing of any mechanism: lifesteal,
@@ -229,26 +252,56 @@ function normalizeSlot(s: string | null | undefined): SlotType {
 // Extra Spirit's spirit power) doesn't read as a sustain pickup.
 const SUSTAIN_PROPS = new Set([
   // lifesteal
-  'BulletLifestealPercent', 'AbilityLifestealPercentHero', 'AbilityLifestealPercentHeroPassive',
-  'LifestealHeal', 'LifestealHealPercent', 'LifestrikeHeal', 'LifestrikeHealPercent',
-  'HealthStealPctHero', 'ActiveBonusLifesteal', 'LowHealthLifeStealPercent', 'AssaultLifestealPercent',
+  "BulletLifestealPercent",
+  "AbilityLifestealPercentHero",
+  "AbilityLifestealPercentHeroPassive",
+  "LifestealHeal",
+  "LifestealHealPercent",
+  "LifestrikeHeal",
+  "LifestrikeHealPercent",
+  "HealthStealPctHero",
+  "ActiveBonusLifesteal",
+  "LowHealthLifeStealPercent",
+  "AssaultLifestealPercent",
   // active / triggered heals
-  'Regeneration', 'RegenerationDuration', 'RegenDuration', 'TotalHealthRegen', 'HealAmount',
-  'HealInterval', 'HealRadius', 'HealOnActivate', 'HealOnSuccess', 'HealPercentAmount', 'HealPerStack',
-  'HealingPerCast', 'ParrySuccessHeal', 'HealOnVeil', 'HealOnKill', 'HealPercentPerHeadshot',
-  'HealFromHero', 'HealFromNPC', 'RespawnHealthPercent',
+  "Regeneration",
+  "RegenerationDuration",
+  "RegenDuration",
+  "TotalHealthRegen",
+  "HealAmount",
+  "HealInterval",
+  "HealRadius",
+  "HealOnActivate",
+  "HealOnSuccess",
+  "HealPercentAmount",
+  "HealPerStack",
+  "HealingPerCast",
+  "ParrySuccessHeal",
+  "HealOnVeil",
+  "HealOnKill",
+  "HealPercentPerHeadshot",
+  "HealFromHero",
+  "HealFromNPC",
+  "RespawnHealthPercent",
   // passive / out-of-combat regen
-  'BonusHealthRegen', 'OutOfCombatHealthRegen', 'HealLifePercentOutOfCombat', 'HealOnLevelHealAmount',
+  "BonusHealthRegen",
+  "OutOfCombatHealthRegen",
+  "HealLifePercentOutOfCombat",
+  "HealOnLevelHealAmount",
   // heal amplification
-  'HealAmpCastPercent', 'HealAmpRegenPercent',
+  "HealAmpCastPercent",
+  "HealAmpRegenPercent",
 ]);
 
 /** The cross-slot need an item primarily fills, from its headline (elevated/important) props. */
 function classifyNeed(i: RawItem): NeedKind | undefined {
   for (const sec of i.tooltip_sections ?? [])
     for (const sa of sec.section_attributes ?? [])
-      for (const key of [...(sa.elevated_properties ?? []), ...(sa.important_properties ?? [])])
-        if (SUSTAIN_PROPS.has(key)) return 'sustain';
+      for (const key of [
+        ...(sa.elevated_properties ?? []),
+        ...(sa.important_properties ?? []),
+      ])
+        if (SUSTAIN_PROPS.has(key)) return "sustain";
   return undefined;
 }
 
@@ -282,18 +335,25 @@ function buildCard(i: RawItem): ItemCard | undefined {
   const sections: CardSection[] = [];
 
   for (const sec of i.tooltip_sections ?? []) {
-    const kind: CardSection['kind'] =
-      sec.section_type === 'innate' ? 'innate' : sec.section_type === 'active' ? 'active' : 'passive';
+    const kind: CardSection["kind"] =
+      sec.section_type === "innate"
+        ? "innate"
+        : sec.section_type === "active"
+          ? "active"
+          : "passive";
     const stats: CardStat[] = [];
     let text: TextSegment[] | undefined;
 
     for (const sa of sec.section_attributes ?? []) {
       if (sa.loc_string && !text) text = parseLoc(sa.loc_string);
       // Bonuses in the stat block read as buffs, so sign them; ability props (cooldown…) don't.
-      const sign = kind === 'innate';
-      for (const key of sa.properties ?? []) pushStat(stats, props[key], false, sign);
-      for (const key of sa.elevated_properties ?? []) pushStat(stats, props[key], true, sign);
-      for (const key of sa.important_properties ?? []) pushStat(stats, props[key], true, sign);
+      const sign = kind === "innate";
+      for (const key of sa.properties ?? [])
+        pushStat(stats, props[key], false, sign);
+      for (const key of sa.elevated_properties ?? [])
+        pushStat(stats, props[key], true, sign);
+      for (const key of sa.important_properties ?? [])
+        pushStat(stats, props[key], true, sign);
     }
 
     if (text?.length || stats.length) sections.push({ kind, text, stats });
@@ -302,7 +362,12 @@ function buildCard(i: RawItem): ItemCard | undefined {
   return sections.length ? { sections } : undefined;
 }
 
-function pushStat(out: CardStat[], p: RawProp | undefined, strong: boolean, sign: boolean): void {
+function pushStat(
+  out: CardStat[],
+  p: RawProp | undefined,
+  strong: boolean,
+  sign: boolean,
+): void {
   if (!p) return;
   const raw = p.value;
   if (raw === undefined || raw === null) return;
@@ -310,13 +375,13 @@ function pushStat(out: CardStat[], p: RawProp | undefined, strong: boolean, sign
   if (!s) return;
   // disable_value / 0 means the stat is inactive for this item — skip it.
   if (p.disable_value !== undefined && s === String(p.disable_value)) return;
-  const label = (p.label ?? '').trim();
+  const label = (p.label ?? "").trim();
   if (!label) return; // label-less props are values inlined into the prose (e.g. thresholds)
 
   const numeric = /^-?\d+(?:\.\d+)?$/.test(s);
   if (numeric && Number(s) === 0) return;
   const n = numeric ? Number(s) : NaN;
-  let value = (numeric ? String(n) : s) + (p.postfix ?? '');
+  let value = (numeric ? String(n) : s) + (p.postfix ?? "");
   if (sign && numeric && n > 0) value = `+${value}`;
   out.push({ label, value, strong });
 }
@@ -324,12 +389,12 @@ function pushStat(out: CardStat[], p: RawProp | undefined, strong: boolean, sign
 // loc_string carries markup: inline <svg> damage-type icons (drop them) and
 // <span class="highlight"> emphasis (keep, flagged). Everything else is stripped.
 function parseLoc(s: string): TextSegment[] {
-  const noSvg = s.replace(/<svg[\s\S]*?<\/svg>/gi, ' ');
+  const noSvg = s.replace(/<svg[\s\S]*?<\/svg>/gi, " ");
   const re = /<span[^>]*class="highlight"[^>]*>([\s\S]*?)<\/span>/gi;
   const segs: TextSegment[] = [];
   const add = (chunk: string, highlight: boolean) => {
-    const clean = chunk.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ');
-    if (clean !== '') segs.push({ text: clean, highlight });
+    const clean = chunk.replace(/<[^>]*>/g, "").replace(/\s+/g, " ");
+    if (clean !== "") segs.push({ text: clean, highlight });
   };
 
   let last = 0;
@@ -342,43 +407,45 @@ function parseLoc(s: string): TextSegment[] {
   add(noSvg.slice(last), false);
 
   if (segs.length) {
-    segs[0].text = segs[0].text.replace(/^ /, '');
-    segs[segs.length - 1].text = segs[segs.length - 1].text.replace(/ $/, '');
+    segs[0].text = segs[0].text.replace(/^ /, "");
+    segs[segs.length - 1].text = segs[segs.length - 1].text.replace(/ $/, "");
   }
-  return segs.filter((seg) => seg.text !== '');
+  return segs.filter((seg) => seg.text !== "");
 }
 
 // Human labels for the headline stats of items that lack a prose description.
 const STAT_LABELS: Record<string, string> = {
-  TechPower: 'Spirit Power',
-  TechResist: 'Spirit Resist',
-  TechLifestealPercent: 'Spirit Lifesteal',
-  AbilityLifestealPercentHero: 'Spirit Lifesteal',
-  BulletResist: 'Bullet Resist',
-  BulletLifestealPercent: 'Bullet Lifesteal',
-  BaseAttackDamagePercent: 'Weapon Damage',
-  BonusFireRate: 'Fire Rate',
-  BonusClipSizePercent: 'Ammo',
-  BonusBulletSpeedPercent: 'Bullet Velocity',
-  BonusAttackRangePercent: 'Attack Range',
-  BonusZoomPercent: 'Zoom',
-  BonusHealth: 'Health',
-  BonusBaseHealth: 'Health',
-  BonusHealthRegen: 'Health Regen',
-  BonusMoveSpeed: 'Move Speed',
-  BonusSprintSpeed: 'Sprint Speed',
-  BonusAbilityCharges: 'Ability Charges',
-  BonusAbilityDurationPercent: 'Ability Duration',
-  BonusMeleeDamagePercent: 'Melee Damage',
+  TechPower: "Spirit Power",
+  TechResist: "Spirit Resist",
+  TechLifestealPercent: "Spirit Lifesteal",
+  AbilityLifestealPercentHero: "Spirit Lifesteal",
+  BulletResist: "Bullet Resist",
+  BulletLifestealPercent: "Bullet Lifesteal",
+  BaseAttackDamagePercent: "Weapon Damage",
+  BonusFireRate: "Fire Rate",
+  BonusClipSizePercent: "Ammo",
+  BonusBulletSpeedPercent: "Bullet Velocity",
+  BonusAttackRangePercent: "Attack Range",
+  BonusZoomPercent: "Zoom",
+  BonusHealth: "Health",
+  BonusBaseHealth: "Health",
+  BonusHealthRegen: "Health Regen",
+  BonusMoveSpeed: "Move Speed",
+  BonusSprintSpeed: "Sprint Speed",
+  BonusAbilityCharges: "Ability Charges",
+  BonusAbilityDurationPercent: "Ability Duration",
+  BonusMeleeDamagePercent: "Melee Damage",
 };
 
 /** A short "what it does" line: prose description if present, else the headline stat. */
 function extractEffect(i: RawItem): string | undefined {
-  const desc = typeof i.description === 'object' ? i.description?.desc : i.description;
+  const desc =
+    typeof i.description === "object" ? i.description?.desc : i.description;
   const cleaned = cleanText(desc);
   if (cleaned) return i.is_active_item ? `Active: ${cleaned}` : cleaned;
 
-  const stat = i.tooltip_sections?.[0]?.section_attributes?.[0]?.elevated_properties?.[0];
+  const stat =
+    i.tooltip_sections?.[0]?.section_attributes?.[0]?.elevated_properties?.[0];
   const label = stat ? STAT_LABELS[stat] : undefined;
   return label ? `+${label}` : undefined;
 }
@@ -386,10 +453,10 @@ function extractEffect(i: RawItem): string | undefined {
 function cleanText(s: string | undefined | null): string | undefined {
   if (!s) return undefined;
   const t = s
-    .replace(/<[^>]*>/g, ' ') // strip markup
-    .replace(/\s+/g, ' ')
-    .replace(/\s+([.,;)])/g, '$1') // tidy spaces left before punctuation
-    .replace(/\(\s+/g, '(')
+    .replace(/<[^>]*>/g, " ") // strip markup
+    .replace(/\s+/g, " ")
+    .replace(/\s+([.,;)])/g, "$1") // tidy spaces left before punctuation
+    .replace(/\(\s+/g, "(")
     .trim();
   if (!t) return undefined;
   return t.length > 120 ? `${t.slice(0, 117)}…` : t;
@@ -402,8 +469,10 @@ export interface TimeWindow {
 }
 
 function applyWindow(params: URLSearchParams, w?: TimeWindow): void {
-  if (w?.minUnixTimestamp) params.set('min_unix_timestamp', String(w.minUnixTimestamp));
-  if (w?.maxUnixTimestamp) params.set('max_unix_timestamp', String(w.maxUnixTimestamp));
+  if (w?.minUnixTimestamp)
+    params.set("min_unix_timestamp", String(w.minUnixTimestamp));
+  if (w?.maxUnixTimestamp)
+    params.set("max_unix_timestamp", String(w.maxUnixTimestamp));
 }
 
 export interface FlowQuery extends TimeWindow {
@@ -429,12 +498,15 @@ export function getItemFlowStats(q: FlowQuery): Promise<ItemFlowStats> {
     min_matches: String(q.minMatches ?? 100),
   });
   if (q.lockedItemIds?.length && q.lockedColumns?.length) {
-    params.set('locked_item_ids', q.lockedItemIds.join(','));
-    params.set('locked_columns', q.lockedColumns.join(','));
+    params.set("locked_item_ids", q.lockedItemIds.join(","));
+    params.set("locked_columns", q.lockedColumns.join(","));
   }
-  if (q.includeItemIds?.length) params.set('include_item_ids', q.includeItemIds.join(','));
+  if (q.includeItemIds?.length)
+    params.set("include_item_ids", q.includeItemIds.join(","));
   applyWindow(params, q);
-  return getAnalytics<ItemFlowStats>(`${BASE}/v1/analytics/item-flow-stats?${params}`);
+  return getAnalytics<ItemFlowStats>(
+    `${BASE}/v1/analytics/item-flow-stats?${params}`,
+  );
 }
 
 export interface ItemStatsQuery extends TimeWindow {
@@ -458,14 +530,18 @@ export interface PermutationQuery extends TimeWindow {
  * is one largish payload (all pairs ≈ 1–2 MB), cached server-side 1h and in our analytics cache, so it's
  * fetched on demand (the synergy view), not on every build. See {@link ItemPermutationStats}.
  */
-export function getItemPermutationStats(q: PermutationQuery): Promise<ItemPermutationStats[]> {
+export function getItemPermutationStats(
+  q: PermutationQuery,
+): Promise<ItemPermutationStats[]> {
   const params = new URLSearchParams({
     hero_id: String(q.heroId),
     comb_size: String(q.combSize ?? 2),
     min_average_badge: String(q.minBadge),
   });
   applyWindow(params, q);
-  return getAnalytics<ItemPermutationStats[]>(`${BASE}/v1/analytics/item-permutation-stats?${params}`);
+  return getAnalytics<ItemPermutationStats[]>(
+    `${BASE}/v1/analytics/item-permutation-stats?${params}`,
+  );
 }
 
 export function getItemStats(q: ItemStatsQuery): Promise<ItemStat[]> {
@@ -474,7 +550,8 @@ export function getItemStats(q: ItemStatsQuery): Promise<ItemStat[]> {
     min_average_badge: String(q.minBadge),
     min_matches: String(q.minMatches ?? 20),
   });
-  if (q.enemyHeroIds?.length) params.set('enemy_hero_ids', q.enemyHeroIds.join(','));
+  if (q.enemyHeroIds?.length)
+    params.set("enemy_hero_ids", q.enemyHeroIds.join(","));
   applyWindow(params, q);
   return getAnalytics<ItemStat[]>(`${BASE}/v1/analytics/item-stats?${params}`);
 }
@@ -482,7 +559,9 @@ export function getItemStats(q: ItemStatsQuery): Promise<ItemStat[]> {
 // Win rate of each player-authored build, over matches in the window at/above the rank
 // floor. `min_average_badge` filters by the *match's* average badge (both teams) — i.e.
 // how the build performs at that rank, not the author's rank.
-export function getHeroBuildStats(q: ItemStatsQuery): Promise<HeroBuildStatRow[]> {
+export function getHeroBuildStats(
+  q: ItemStatsQuery,
+): Promise<HeroBuildStatRow[]> {
   const params = new URLSearchParams({
     min_average_badge: String(q.minBadge),
     min_matches: String(q.minMatches ?? 20),
@@ -495,13 +574,15 @@ export function getHeroBuildStats(q: ItemStatsQuery): Promise<HeroBuildStatRow[]
 
 // The community builds for a hero, latest version of each, most-favorited first, reduced
 // to the items each recommends (mod entries that resolve to a known item; abilities drop).
-export async function getCommunityBuilds(heroId: number): Promise<CommunityBuild[]> {
+export async function getCommunityBuilds(
+  heroId: number,
+): Promise<CommunityBuild[]> {
   const params = new URLSearchParams({
     hero_id: String(heroId),
-    only_latest: 'true',
-    sort_by: 'favorites',
-    sort_direction: 'desc',
-    limit: '200',
+    only_latest: "true",
+    sort_by: "favorites",
+    sort_direction: "desc",
+    limit: "200",
   });
   const [raw, items] = await Promise.all([
     getAnalytics<RawBuildEnvelope[]>(`${BASE}/v1/builds?${params}`),
@@ -512,7 +593,10 @@ export async function getCommunityBuilds(heroId: number): Promise<CommunityBuild
     .filter((b): b is CommunityBuild => b !== null);
 }
 
-function parseCommunityBuild(env: RawBuildEnvelope, items: Map<number, Item>): CommunityBuild | null {
+function parseCommunityBuild(
+  env: RawBuildEnvelope,
+  items: Map<number, Item>,
+): CommunityBuild | null {
   const hb = env.hero_build;
   if (!hb) return null;
   const ids = new Set<number>();
@@ -528,7 +612,10 @@ function parseCommunityBuild(env: RawBuildEnvelope, items: Map<number, Item>): C
       // Only imbue-type items carry a target; most mods leave it null. Keep the raw pair —
       // resolving the target id to an ability happens where the abilities map is loaded.
       if (mod.imbue_target_ability_id) {
-        imbueTargets.push({ itemId: id, abilityId: mod.imbue_target_ability_id });
+        imbueTargets.push({
+          itemId: id,
+          abilityId: mod.imbue_target_ability_id,
+        });
       }
     }
   }
@@ -559,13 +646,17 @@ export interface CounterMatrixQuery extends TimeWindow {
 
 // hero-counter-stats ignores hero filters and returns the whole hero-vs-hero matrix,
 // so we fetch it once per rank/patch and filter to the selected hero client-side.
-export function getHeroCounters(q: CounterMatrixQuery): Promise<HeroCounterRow[]> {
+export function getHeroCounters(
+  q: CounterMatrixQuery,
+): Promise<HeroCounterRow[]> {
   const params = new URLSearchParams({
     min_average_badge: String(q.minBadge),
     min_matches: String(q.minMatches ?? 100),
   });
   applyWindow(params, q);
-  return getAnalytics<HeroCounterRow[]>(`${BASE}/v1/analytics/hero-counter-stats?${params}`);
+  return getAnalytics<HeroCounterRow[]>(
+    `${BASE}/v1/analytics/hero-counter-stats?${params}`,
+  );
 }
 
 let patchesPromise: Promise<Patch[]> | null = null;
@@ -579,19 +670,27 @@ let patchesPromise: Promise<Patch[]> | null = null;
 
 /** The player's all-time record per hero — drives the "your heroes" quick-pick. Returns [] for an
  * account with no Deadlock games (or an unknown id). */
-export function getPlayerHeroStats(accountId: number): Promise<PlayerHeroStat[]> {
-  return getAnalytics<PlayerHeroStat[]>(`${BASE}/v1/players/${accountId}/hero-stats`);
+export function getPlayerHeroStats(
+  accountId: number,
+): Promise<PlayerHeroStat[]> {
+  return getAnalytics<PlayerHeroStat[]>(
+    `${BASE}/v1/players/${accountId}/hero-stats`,
+  );
 }
 
 /** The player's current rank tier on the app's 0–11 rank-floor scale (11 = Eternus), from the batch
  * mmr endpoint's latest entry (`division` is already tier-scaled; `rank` is the full badge). Null
  * when the account has no ranked record yet (division 0 = Obscurus/unranked). */
-export async function getPlayerRankTier(accountId: number): Promise<number | null> {
+export async function getPlayerRankTier(
+  accountId: number,
+): Promise<number | null> {
   const rows = await getAnalytics<Array<{ division?: number }>>(
     `${BASE}/v1/players/mmr?account_ids=${accountId}`,
   );
   const division = rows[0]?.division;
-  return typeof division === 'number' && division > 0 ? Math.min(division, 11) : null;
+  return typeof division === "number" && division > 0
+    ? Math.min(division, 11)
+    : null;
 }
 
 /** Every hero's ladder record at a rank floor + window — the "meta strength" side of the
@@ -601,7 +700,9 @@ export function getHeroLadderStats(
 ): Promise<HeroLadderStat[]> {
   const params = new URLSearchParams({ min_average_badge: String(q.minBadge) });
   applyWindow(params, q);
-  return getAnalytics<HeroLadderStat[]>(`${BASE}/v1/analytics/hero-stats?${params}`);
+  return getAnalytics<HeroLadderStat[]>(
+    `${BASE}/v1/analytics/hero-stats?${params}`,
+  );
 }
 
 export interface PlayerMetricsQuery extends TimeWindow {
@@ -616,33 +717,47 @@ export interface PlayerMetricsQuery extends TimeWindow {
 /** Per-metric distributions (avg + percentile grid) of ~29 per-match player metrics, over whatever
  * slice the query describes: hero+rank ⇒ the ladder to benchmark against; account_ids ⇒ the
  * player's own history. One call either way — see lib/fundamentals. */
-export function getPlayerMetrics(q: PlayerMetricsQuery): Promise<PlayerMetrics> {
+export function getPlayerMetrics(
+  q: PlayerMetricsQuery,
+): Promise<PlayerMetrics> {
   const params = new URLSearchParams();
-  if (q.heroId !== undefined) params.set('hero_ids', String(q.heroId));
-  if (q.minBadge !== undefined) params.set('min_average_badge', String(q.minBadge));
-  if (q.accountIds?.length) params.set('account_ids', q.accountIds.join(','));
+  if (q.heroId !== undefined) params.set("hero_ids", String(q.heroId));
+  if (q.minBadge !== undefined)
+    params.set("min_average_badge", String(q.minBadge));
+  if (q.accountIds?.length) params.set("account_ids", q.accountIds.join(","));
   applyWindow(params, q);
-  return getAnalytics<PlayerMetrics>(`${BASE}/v1/analytics/player-stats/metrics?${params}`);
+  return getAnalytics<PlayerMetrics>(
+    `${BASE}/v1/analytics/player-stats/metrics?${params}`,
+  );
 }
 
 export function getPatches(): Promise<Patch[]> {
   if (patchesPromise) return patchesPromise;
   patchesPromise = (async () => {
-    const cacheKey = 'dl.patches.v2';
+    const cacheKey = "dl.patches.v2";
     const hit = cached<Patch[]>(cacheKey);
     if (hit) return hit;
 
-    const raw = await getJson<RawPatch[]>(`${BASE}/v2/patches`);
+    let raw: RawPatch[];
+    try {
+      raw = await getJson<RawPatch[]>(`${BASE}/v2/patches`);
+    } catch {
+      // The patch feed is the spine of every data window, so a (post-retry) failure must degrade,
+      // not blank the app: serve the last good copy however stale; with nothing cached at all,
+      // run patch-less — an empty list makes every window query fall back to the API's default
+      // last-30-days and disables backfill until a reload succeeds.
+      return cachedStale<Patch[]>(cacheKey) ?? [];
+    }
     const byDay = new Map<string, Patch>();
     for (const p of raw) {
-      const title = p.title ?? '';
+      const title = p.title ?? "";
       const m = title.match(/(\d{2})-(\d{2})-(\d{4})/); // MM-DD-YYYY
       if (!m) continue;
       const [, mm, dd, yyyy] = m;
       const dayKey = `${yyyy}-${mm}-${dd}`;
       if (byDay.has(dayKey)) continue; // one entry per patch day
       byDay.set(dayKey, {
-        title: `${dayKey}${/minor/i.test(title) ? ' · Minor' : ''} Update`,
+        title: `${dayKey}${/minor/i.test(title) ? " · Minor" : ""} Update`,
         ts: Math.floor(Date.UTC(+yyyy, +mm - 1, +dd) / 1000),
       });
     }
@@ -719,7 +834,10 @@ interface RawBuildEnvelope {
         // Author flag marking a section as situational. Set on ~a third of sections; null
         // (the majority) means unmarked, which we treat as core. Only `true` demotes.
         optional?: boolean | null;
-        mods?: Array<{ ability_id?: number; imbue_target_ability_id?: number | null }>;
+        mods?: Array<{
+          ability_id?: number;
+          imbue_target_ability_id?: number | null;
+        }>;
       }>;
       // Ordered ability-point investments; we flatten it to the build's skill order.
       ability_order?: {
