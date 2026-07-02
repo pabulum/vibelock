@@ -27,6 +27,8 @@ import {
   getPlayerHeroStats,
   getPlayerMetrics,
   getPlayerRankTier,
+  searchSteamPlayers,
+  type SteamPlayerMatch,
   type TimeWindow,
 } from "./api/deadlock";
 import { assembleArchetypes, pickSignatures } from "./lib/archetypes";
@@ -55,8 +57,16 @@ import { fundamentalsRows, type FundamentalRow } from "./lib/fundamentals";
 import { buildSynergyLookup, singleRecordsFromFlow } from "./lib/synergy";
 import { bestImbueTargets } from "./lib/imbue";
 import { heroMatchups } from "./lib/matchups";
-import { RANK_TIERS, rankFloorLabel, tierToMinBadge } from "./lib/ranks";
+import {
+  bandForTier,
+  RANK_TIERS,
+  rankFloorLabel,
+  rankSelLabel,
+  rankSelToBadges,
+  type RankSel,
+} from "./lib/ranks";
 import { bestSkillBuild, maxOrder } from "./lib/skills";
+import { parseSteamInput } from "./lib/steamId";
 import type {
   Ability,
   ArchetypeKey,
@@ -227,7 +237,11 @@ export default function App() {
   const [items, setItems] = useState<Map<number, Item> | null>(null);
   const [patches, setPatches] = useState<Patch[]>([]);
   const [heroId, setHeroId] = useState<number | null>(null);
-  const [tier, setTier] = useState<number>(() => url0.tier ?? 11); // default Eternus
+  // Rank selection: a floor tier ("Emissary+") or a band ("around my rank" — profile-anchored, or
+  // whatever resolved band a shared link carried). Default Eternus floor until a profile pre-selects.
+  const [rankSel, setRankSel] = useState<RankSel>(
+    () => url0.band ?? url0.tier ?? 11,
+  );
   const [patchIdx, setPatchIdx] = useState<number>(0); // newest patch (backfilled from pre-patch data)
   // Pre-patch backfill toggle (lib/patchBlend). Default on — a young patch alone starves the
   // build's support/significance gates; off = the selected window raw, exactly the old behavior.
@@ -260,15 +274,17 @@ export default function App() {
   // already fetches (needs both, so only computed while backfill is on).
   const [movers, setMovers] = useState<PatchMover[] | null>(null);
 
-  // Steam account id (the number in Steam's userdata/<id> path) — the single source shared by the
-  // header profile control and the export panel (author stamp), persisted locally. Only public
-  // profile data is ever read with it.
+  // Steam identity — the single source shared by the header profile control and the export panel
+  // (author stamp), persisted locally. Accepts an account id, a steamID64, or a profile URL
+  // (lib/steamId converts on sight); a non-parsing value is treated as a name for the search
+  // popover. Only public profile data is ever read with it.
   const [steamId, setSteamId] = useState(
     () => localStorage.getItem("vibelock-steam-id") ?? "",
   );
-  const accountId = /^\d+$/.test(steamId.trim())
-    ? Number(steamId.trim())
-    : null;
+  const accountId = parseSteamInput(steamId);
+  const [steamMatches, setSteamMatches] = useState<SteamPlayerMatch[] | null>(
+    null,
+  );
   // The profile's most-played-hero pool (recency-gated in the fetch effect, where wall-clock time
   // is legal), joined with ladder meta in a memo below.
   const [heroPool, setHeroPool] = useState<Array<{
@@ -291,13 +307,18 @@ export default function App() {
     rows: FundamentalRow[];
     heroScoped: boolean;
   } | null>(null);
-  // The profile's rank pre-selects the floor only until the player picks one deliberately —
+  // The profile's rank pre-selects the band only until the player picks a rank deliberately —
   // a deep-linked rank or a manual select always wins and is never overridden afterwards.
-  const tierTouched = useRef(url0.tier !== undefined);
+  const tierTouched = useRef(
+    url0.tier !== undefined || url0.band !== undefined,
+  );
+  // The profile's current tier, kept so the dropdown can offer its "around my rank" band option.
+  const [profileTier, setProfileTier] = useState<number | null>(null);
 
   useEffect(() => {
     const v = steamId.trim();
-    if (/^\d+$/.test(v)) localStorage.setItem("vibelock-steam-id", v);
+    if (parseSteamInput(v) !== null)
+      localStorage.setItem("vibelock-steam-id", v);
     else if (v === "") localStorage.removeItem("vibelock-steam-id");
   }, [steamId]);
 
@@ -333,7 +354,20 @@ export default function App() {
     () => heroes.find((h) => h.id === heroId) ?? null,
     [heroes, heroId],
   );
-  const minBadge = tierToMinBadge(tier);
+  const { minBadge, maxBadge } = rankSelToBadges(rankSel);
+  const rankLabel = rankSelLabel(rankSel);
+  // Numeric anchor for rank-scaled heuristics (the new-hero learning tax): the floor tier, or a
+  // band's midpoint.
+  const tierAnchor =
+    typeof rankSel === "number" ? rankSel : (rankSel.lo + rankSel.hi) / 2;
+  // The band the Rank dropdown offers: the active one (a shared link's band survives even without
+  // a matching profile), else the profile's own. No profile and no band ⇒ the option is hidden.
+  const bandChoice =
+    typeof rankSel === "object"
+      ? rankSel
+      : profileTier !== null
+        ? bandForTier(profileTier)
+        : null;
 
   // Player profile: top heroes for the quick-pick row, and their current rank to pre-select the
   // floor. Both fetches fail soft (bad/empty account ⇒ no row, no rank) so a typo in the id never
@@ -375,7 +409,12 @@ export default function App() {
           stats.filter((s) => s.matches_played >= 10).map((s) => s.hero_id),
         ),
       );
-      if (!tierTouched.current && rankTier !== null) setTier(rankTier);
+      setProfileTier(rankTier);
+      // Pre-select the profile's band, not a floor: match volume piles up at high-mid ranks, so a
+      // below-the-mode floor is dominated by games well above the player — the capped band is
+      // their actual neighborhood, tilted one rank into the climb.
+      if (!tierTouched.current && rankTier !== null)
+        setRankSel(bandForTier(rankTier));
     },
     [accountId, heroes],
     setError,
@@ -394,10 +433,11 @@ export default function App() {
       const canBackfill = backfillOn && patches.length > 0;
       const window = windowFor(patches, patchIdx);
       const [f, q] = await Promise.all([
-        getHeroLadderStats({ minBadge, ...window }),
+        getHeroLadderStats({ minBadge, maxBadge, ...window }),
         canBackfill
           ? getHeroLadderStats({
               minBadge,
+              maxBadge,
               ...priorWindowFor(patches, patchIdx),
             })
           : Promise.resolve([]),
@@ -428,7 +468,7 @@ export default function App() {
         ),
       );
     },
-    [accountId, items, minBadge, patchIdx, patches, backfillOn],
+    [accountId, items, minBadge, maxBadge, patchIdx, patches, backfillOn],
     setError,
   );
 
@@ -462,7 +502,7 @@ export default function App() {
   // the better the lobby (a heuristic in the literature's direction, not fitted — our aggregate
   // data can't split games by per-hero experience), so picking someone up is cheapest exactly
   // where it feels cheapest, at the lower tiers.
-  const NEW_HERO_TAX = 0.015 + 0.0015 * tier; // 1.5pt at the bottom → ~3.2pt at Eternus
+  const NEW_HERO_TAX = 0.015 + 0.0015 * tierAnchor; // 1.5pt at the bottom → ~3.2pt at Eternus
   const tryHeroes = useMemo(() => {
     if (!heroMeta || !playedHeroIds || !heroPool) return null;
     const out: Array<{ hero: Hero; metaWinRate: number; taxed: number }> = [];
@@ -506,9 +546,12 @@ export default function App() {
         getPlayerMetrics({ accountIds: [accountId], heroId: hero.id }).catch(
           () => ({}),
         ),
-        getPlayerMetrics({ heroId: hero.id, minBadge, ...ladderWindow }).catch(
-          () => ({}),
-        ),
+        getPlayerMetrics({
+          heroId: hero.id,
+          minBadge,
+          maxBadge,
+          ...ladderWindow,
+        }).catch(() => ({})),
       ]);
       if (signal.aborted) return;
       let rows = fundamentalsRows(me, ladder);
@@ -524,7 +567,7 @@ export default function App() {
       }
       setFundamentals(rows.length ? { rows, heroScoped } : null);
     },
-    [accountId, hero, minBadge, patchIdx, patches, backfillOn],
+    [accountId, hero, minBadge, maxBadge, patchIdx, patches, backfillOn],
     setError,
   );
 
@@ -551,6 +594,7 @@ export default function App() {
               getItemFlowStats({
                 heroId: hero.id,
                 minBadge,
+                maxBadge,
                 ...window,
                 minMatches: 10,
                 includeItemIds,
@@ -558,6 +602,7 @@ export default function App() {
               getItemFlowStats({
                 heroId: hero.id,
                 minBadge,
+                maxBadge,
                 ...priorWindow,
                 includeItemIds,
               }),
@@ -565,6 +610,7 @@ export default function App() {
           : getItemFlowStats({
               heroId: hero.id,
               minBadge,
+              maxBadge,
               ...window,
               includeItemIds,
             }).then((f) => ({ flow: f, borrowedShare: 0, patchK: 0 }));
@@ -581,15 +627,22 @@ export default function App() {
         getItemStats({
           heroId: hero.id,
           minBadge,
+          maxBadge,
           ...window,
           ...(canBackfill ? { minMatches: 5 } : {}),
         }),
         canBackfill
-          ? getItemStats({ heroId: hero.id, minBadge, ...priorWindow })
+          ? getItemStats({
+              heroId: hero.id,
+              minBadge,
+              maxBadge,
+              ...priorWindow,
+            })
           : Promise.resolve([]),
         getItemPermutationStats({
           heroId: hero.id,
           minBadge,
+          maxBadge,
           ...(canBackfill
             ? {
                 minUnixTimestamp: priorWindow.minUnixTimestamp,
@@ -638,7 +691,7 @@ export default function App() {
 
       const set = assembleArchetypes(
         hero,
-        rankFloorLabel(tier),
+        rankLabel,
         items,
         buyTimes,
         sellTimes,
@@ -660,7 +713,17 @@ export default function App() {
       }
       urlArchApplied.current = true;
     },
-    [hero, items, minBadge, tier, patchIdx, patches, backfillOn, url0.build],
+    [
+      hero,
+      items,
+      minBadge,
+      maxBadge,
+      rankLabel,
+      patchIdx,
+      patches,
+      backfillOn,
+      url0.build,
+    ],
     setError,
   );
 
@@ -677,7 +740,7 @@ export default function App() {
     if (!hero) return;
     const state: UrlState = {
       hero: slugify(hero.name),
-      tier,
+      ...(typeof rankSel === "number" ? { tier: rankSel } : { band: rankSel }),
       patchTs: patches[patchIdx]?.ts,
       backfill: backfillOn,
       build: archKey,
@@ -688,7 +751,7 @@ export default function App() {
     };
     const url = `${window.location.pathname}${encodeUrlState(state)}${window.location.hash}`;
     window.history.replaceState(null, "", url);
-  }, [hero, tier, patchIdx, patches, backfillOn, archKey, enemies, heroes]);
+  }, [hero, rankSel, patchIdx, patches, backfillOn, archKey, enemies, heroes]);
 
   // Reflect the selected hero — and its in-game role flavor line — in the tab title. Nice for
   // bookmarks and shared deep links. Falls back to the brand title while assets load, and to just
@@ -710,7 +773,7 @@ export default function App() {
       const canBackfill = backfillOn && patches.length > 0;
       const window = windowFor(patches, patchIdx);
       const priorWindow = priorWindowFor(patches, patchIdx);
-      const base = { heroId: hero.id, minBadge };
+      const base = { heroId: hero.id, minBadge, maxBadge };
 
       // One query per enemy (not a combined `any-of` query) so each item keeps a per-enemy
       // delta — that's what lets a row carry the portrait of the specific hero it answers.
@@ -757,7 +820,7 @@ export default function App() {
       setCounters(cs);
       setCompEdges(edgeByItem);
     },
-    [hero, items, enemies, minBadge, patchIdx, patches, backfillOn],
+    [hero, items, enemies, minBadge, maxBadge, patchIdx, patches, backfillOn],
     setError,
   );
 
@@ -767,11 +830,12 @@ export default function App() {
       if (!items) return;
       const m = await getHeroCounters({
         minBadge,
+        maxBadge,
         ...windowFor(patches, patchIdx),
       });
       if (!signal.aborted) setCounterMatrix(m);
     },
-    [items, minBadge, patchIdx, patches],
+    [items, minBadge, maxBadge, patchIdx, patches],
     setError,
   );
 
@@ -806,6 +870,7 @@ export default function App() {
       const base = {
         heroId: hero.id,
         minBadge,
+        maxBadge,
         ...windowFor(patches, patchIdx),
       };
       // Prefer the order players ran *with* this archetype's signature item — but that
@@ -826,13 +891,22 @@ export default function App() {
           await getAbilityOrder({
             heroId: hero.id,
             minBadge,
+            maxBadge,
             ...priorWindowFor(patches, patchIdx),
           }),
         );
       }
       if (!signal.aborted) setSkillBuild(build);
     },
-    [hero, minBadge, patchIdx, patches, backfillOn, activeSignatureId],
+    [
+      hero,
+      minBadge,
+      maxBadge,
+      patchIdx,
+      patches,
+      backfillOn,
+      activeSignatureId,
+    ],
     setError,
   );
 
@@ -847,12 +921,13 @@ export default function App() {
         getHeroBuildStats({
           heroId: hero.id,
           minBadge,
+          maxBadge,
           ...windowFor(patches, patchIdx),
         }),
       ]);
       if (!signal.aborted) setCommunity({ builds, stats });
     },
-    [hero, minBadge, patchIdx, patches],
+    [hero, minBadge, maxBadge, patchIdx, patches],
     setError,
   );
 
@@ -998,7 +1073,7 @@ export default function App() {
     (!items && !error);
   // The brand mark's icon is a function of the current selection, so it flips to a new
   // item on each action (hero/rank/patch/build-style/enemy change) and is otherwise still.
-  const shuffleSeed = `${heroId}|${tier}|${patchIdx}|${archKey}|${enemies.join(",")}`;
+  const shuffleSeed = `${heroId}|${rankLabel}|${patchIdx}|${archKey}|${enemies.join(",")}`;
 
   // Per-piece "developing" veils — each tracks its own query so panels settle as their
   // data actually lands, independently of the single strip in the header. The build wears
@@ -1034,12 +1109,21 @@ export default function App() {
           <label>
             Rank
             <select
-              value={tier}
+              value={typeof rankSel === "number" ? String(rankSel) : "band"}
               onChange={(e) => {
                 tierTouched.current = true; // a deliberate choice — profile stops pre-selecting
-                setTier(Number(e.target.value));
+                setRankSel(
+                  e.target.value === "band" && bandChoice
+                    ? bandChoice
+                    : Number(e.target.value),
+                );
               }}
             >
+              {bandChoice && (
+                <option value="band">
+                  Around my rank ({rankSelLabel(bandChoice)})
+                </option>
+              )}
               {[...RANK_TIERS].reverse().map((t) => (
                 <option key={t.tier} value={t.tier}>
                   {rankFloorLabel(t.tier)}
@@ -1077,15 +1161,48 @@ export default function App() {
           </label>
           <label
             className="idctl"
-            title="Your Steam account id — the number in Steam's userdata/<id> folder. Unlocks the your-heroes quick-pick, pre-selects your rank floor, and signs exported builds. Stored only in this browser."
+            title="Paste your Steam profile URL, steamID64, or the userdata/<id> number — or type a display name and press Enter to search. Unlocks the your-heroes quick-pick, pre-selects your rank, and signs exported builds. Stored only in this browser."
           >
             Steam ID
             <input
-              inputMode="numeric"
-              placeholder="userdata/<id>"
+              placeholder="id, URL, or name…"
               value={steamId}
-              onChange={(e) => setSteamId(e.target.value)}
+              onChange={(e) => {
+                setSteamId(e.target.value);
+                setSteamMatches(null);
+              }}
+              onKeyDown={async (e) => {
+                // A value that doesn't parse as an id is a display name — search on Enter.
+                if (e.key !== "Enter") return;
+                const q = steamId.trim();
+                if (!q || parseSteamInput(q) !== null) return;
+                setSteamMatches(await searchSteamPlayers(q).catch(() => []));
+              }}
+              onBlur={() => setTimeout(() => setSteamMatches(null), 200)}
             />
+            {steamMatches && (
+              <div className="idresults">
+                {steamMatches.length === 0 && (
+                  <span className="idempty">no matches</span>
+                )}
+                {steamMatches.slice(0, 8).map((m) => (
+                  <button
+                    key={m.account_id}
+                    type="button"
+                    // mousedown, not click: the input's onBlur fires between mousedown and click
+                    // and would unmount the list before a click could land.
+                    onMouseDown={() => {
+                      setSteamId(String(m.account_id));
+                      setSteamMatches(null);
+                    }}
+                  >
+                    {m.avatar && <img src={m.avatar} alt="" loading="lazy" />}
+                    {m.personaname}
+                    <i>#{m.account_id}</i>
+                  </button>
+                ))}
+              </div>
+            )}
           </label>
           <button
             type="button"
@@ -1267,7 +1384,7 @@ export default function App() {
               Your fundamentals{" "}
               <span className="sub">
                 {fundamentals.heroScoped ? hero.name : "all heroes"} vs{" "}
-                {rankFloorLabel(tier)}
+                {rankLabel}
               </span>
             </h2>
             <div className="fundrows">
@@ -1655,9 +1772,7 @@ function ExportPanel({
     "idle",
   );
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-  const authorId = /^\d+$/.test(steamId.trim())
-    ? Number(steamId.trim())
-    : undefined;
+  const authorId = parseSteamInput(steamId) ?? undefined;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();

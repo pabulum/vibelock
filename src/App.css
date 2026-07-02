@@ -268,6 +268,9 @@ body {
   accent-color: var(--accent);
   cursor: pointer;
 }
+.controls .idctl {
+  position: relative;
+}
 .controls .idctl input {
   background: var(--panel2);
   color: var(--text);
@@ -276,6 +279,58 @@ body {
   padding: 7px 10px;
   font-size: 14px;
   width: 130px;
+}
+/* Name-search results under the Steam id input. */
+.idresults {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 6;
+  min-width: 220px;
+  margin-top: 4px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.idresults button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.idresults button:hover {
+  background: var(--panel2);
+}
+.idresults img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+.idresults i {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 11px;
+  margin-left: auto;
+}
+.idresults .idempty {
+  padding: 6px 8px;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 /* De-noise toggle inline in the matchups hint line. */

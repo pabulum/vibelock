@@ -9,8 +9,11 @@
 export interface UrlState {
   /** Hero slug, derived from the hero's name (e.g. "grey-talon"). Resolved to an id once heroes load. */
   hero?: string;
-  /** Rank-floor tier, 0–11 (11 = Eternus). */
+  /** Rank-floor tier, 0–11 (11 = Eternus). Mutually exclusive with `band`. */
   tier?: number;
+  /** Rank band (inclusive tier range, "around my rank"). Encoded as `rank=5-7` — the *resolved*
+   * tiers, not "my rank", so a shared link reproduces the sender's slice for any viewer. */
+  band?: { lo: number; hi: number };
   /**
    * Selected patch's Unix timestamp; absent ⇒ the newest patch. We key off the timestamp rather
    * than the patch-list index so a link survives newly-released patches shifting the list out from
@@ -30,22 +33,23 @@ export interface UrlState {
 export function slugify(name: string): string {
   return name
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 /** Serialize selection to a query string (with a leading "?", or "" when there's nothing to encode).
  *  Defaults are omitted: the blended "all" build and an empty enemy list leave no trace in the URL. */
 export function encodeUrlState(s: UrlState): string {
   const p = new URLSearchParams();
-  if (s.hero) p.set('hero', s.hero);
-  if (s.tier !== undefined) p.set('rank', String(s.tier));
-  if (s.patchTs !== undefined) p.set('patch', String(s.patchTs));
-  if (s.backfill === false) p.set('bf', '0');
-  if (s.build && s.build !== 'all') p.set('build', s.build);
-  if (s.enemies?.length) p.set('vs', s.enemies.join(','));
+  if (s.hero) p.set("hero", s.hero);
+  if (s.band) p.set("rank", `${s.band.lo}-${s.band.hi}`);
+  else if (s.tier !== undefined) p.set("rank", String(s.tier));
+  if (s.patchTs !== undefined) p.set("patch", String(s.patchTs));
+  if (s.backfill === false) p.set("bf", "0");
+  if (s.build && s.build !== "all") p.set("build", s.build);
+  if (s.enemies?.length) p.set("vs", s.enemies.join(","));
   const q = p.toString();
-  return q ? `?${q}` : '';
+  return q ? `?${q}` : "";
 }
 
 /** Parse a query string back into a UrlState, ignoring anything malformed (a bad link degrades to
@@ -54,24 +58,28 @@ export function decodeUrlState(search: string): UrlState {
   const p = new URLSearchParams(search);
   const out: UrlState = {};
 
-  const hero = p.get('hero');
+  const hero = p.get("hero");
   if (hero) out.hero = hero;
 
-  const rank = p.get('rank');
+  const rank = p.get("rank");
   if (rank !== null && /^\d+$/.test(rank)) out.tier = Number(rank);
+  else if (rank !== null && /^\d+-\d+$/.test(rank)) {
+    const [lo, hi] = rank.split("-").map(Number);
+    if (lo <= hi) out.band = { lo, hi };
+  }
 
-  const patch = p.get('patch');
+  const patch = p.get("patch");
   if (patch !== null && /^\d+$/.test(patch)) out.patchTs = Number(patch);
 
-  if (p.get('bf') === '0') out.backfill = false;
+  if (p.get("bf") === "0") out.backfill = false;
 
-  const build = p.get('build');
-  if (build === 'gun' || build === 'spirit') out.build = build;
+  const build = p.get("build");
+  if (build === "gun" || build === "spirit") out.build = build;
 
-  const vs = p.get('vs');
+  const vs = p.get("vs");
   if (vs) {
     const enemies = vs
-      .split(',')
+      .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
     if (enemies.length) out.enemies = enemies;

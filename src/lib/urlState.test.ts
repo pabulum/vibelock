@@ -68,6 +68,7 @@ describe('encode/decode round-trip', () => {
       { hero: 'vyper', tier: 6, build: 'gun', enemies: ['seven'] },
       { hero: 'mo-krill', tier: 0, patchTs: 1_699_999_999, build: 'spirit', enemies: ['haze', 'wraith'] },
       { hero: 'paradox', tier: 8, backfill: false },
+      { hero: 'paradox', band: { lo: 5, hi: 7 } },
     ];
     for (const s of states) {
       expect(decodeUrlState(encodeUrlState(s))).toEqual(s);

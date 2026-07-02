@@ -215,9 +215,8 @@ export function getAbilities(): Promise<Map<number, Ability>> {
   return abilitiesPromise;
 }
 
-export interface AbilityOrderQuery extends TimeWindow {
+export interface AbilityOrderQuery extends TimeWindow, RankWindow {
   heroId: number;
-  minBadge: number;
   minMatches?: number;
   /** Restrict to players who bought these items (used to match the build archetype). */
   includeItemIds?: number[];
@@ -228,9 +227,9 @@ export function getAbilityOrder(
 ): Promise<AbilityOrderRow[]> {
   const params = new URLSearchParams({
     hero_id: String(q.heroId),
-    min_average_badge: String(q.minBadge),
     min_matches: String(q.minMatches ?? 100),
   });
+  applyRank(params, q);
   if (q.includeItemIds?.length)
     params.set("include_item_ids", q.includeItemIds.join(","));
   applyWindow(params, q);
@@ -475,10 +474,22 @@ function applyWindow(params: URLSearchParams, w?: TimeWindow): void {
     params.set("max_unix_timestamp", String(w.maxUnixTimestamp));
 }
 
-export interface FlowQuery extends TimeWindow {
-  heroId: number;
-  /** Rank floor as an average_badge value (tier * 10). */
+/** A rank slice for the analytics endpoints, as average_badge values (tier·10 + subrank). Floor
+ * only = the classic "this tier and above"; floor + ceiling = a band ("around my rank"). */
+export interface RankWindow {
   minBadge: number;
+  /** Highest average_badge to include, e.g. tier·10+6 for a tier's top subrank. Omit for a floor. */
+  maxBadge?: number;
+}
+
+function applyRank(params: URLSearchParams, q: RankWindow): void {
+  params.set("min_average_badge", String(q.minBadge));
+  if (q.maxBadge !== undefined)
+    params.set("max_average_badge", String(q.maxBadge));
+}
+
+export interface FlowQuery extends TimeWindow, RankWindow {
+  heroId: number;
   /** Drop nodes/edges below this many matches (server-side noise floor). */
   minMatches?: number;
   /**
@@ -494,9 +505,9 @@ export interface FlowQuery extends TimeWindow {
 export function getItemFlowStats(q: FlowQuery): Promise<ItemFlowStats> {
   const params = new URLSearchParams({
     hero_ids: String(q.heroId),
-    min_average_badge: String(q.minBadge),
     min_matches: String(q.minMatches ?? 100),
   });
+  applyRank(params, q);
   if (q.lockedItemIds?.length && q.lockedColumns?.length) {
     params.set("locked_item_ids", q.lockedItemIds.join(","));
     params.set("locked_columns", q.lockedColumns.join(","));
@@ -509,17 +520,15 @@ export function getItemFlowStats(q: FlowQuery): Promise<ItemFlowStats> {
   );
 }
 
-export interface ItemStatsQuery extends TimeWindow {
+export interface ItemStatsQuery extends TimeWindow, RankWindow {
   heroId: number;
-  minBadge: number;
   /** Filter to matches where any of these heroes were on the enemy team. */
   enemyHeroIds?: number[];
   minMatches?: number;
 }
 
-export interface PermutationQuery extends TimeWindow {
+export interface PermutationQuery extends TimeWindow, RankWindow {
   heroId: number;
-  minBadge: number;
   /** Size of the item permutations to return (default 2 = pairs). `item_ids` mode is mutually exclusive
    * with this and unused — we want every pair for the hero, then aggregate orderings client-side. */
   combSize?: number;
@@ -536,8 +545,8 @@ export function getItemPermutationStats(
   const params = new URLSearchParams({
     hero_id: String(q.heroId),
     comb_size: String(q.combSize ?? 2),
-    min_average_badge: String(q.minBadge),
   });
+  applyRank(params, q);
   applyWindow(params, q);
   return getAnalytics<ItemPermutationStats[]>(
     `${BASE}/v1/analytics/item-permutation-stats?${params}`,
@@ -547,9 +556,9 @@ export function getItemPermutationStats(
 export function getItemStats(q: ItemStatsQuery): Promise<ItemStat[]> {
   const params = new URLSearchParams({
     hero_id: String(q.heroId),
-    min_average_badge: String(q.minBadge),
     min_matches: String(q.minMatches ?? 20),
   });
+  applyRank(params, q);
   if (q.enemyHeroIds?.length)
     params.set("enemy_hero_ids", q.enemyHeroIds.join(","));
   applyWindow(params, q);
@@ -563,9 +572,9 @@ export function getHeroBuildStats(
   q: ItemStatsQuery,
 ): Promise<HeroBuildStatRow[]> {
   const params = new URLSearchParams({
-    min_average_badge: String(q.minBadge),
     min_matches: String(q.minMatches ?? 20),
   });
+  applyRank(params, q);
   applyWindow(params, q);
   return getAnalytics<HeroBuildStatRow[]>(
     `${BASE}/v1/analytics/hero-build-stats/${q.heroId}?${params}`,
@@ -639,8 +648,7 @@ function parseCommunityBuild(
   };
 }
 
-export interface CounterMatrixQuery extends TimeWindow {
-  minBadge: number;
+export interface CounterMatrixQuery extends TimeWindow, RankWindow {
   minMatches?: number;
 }
 
@@ -650,9 +658,9 @@ export function getHeroCounters(
   q: CounterMatrixQuery,
 ): Promise<HeroCounterRow[]> {
   const params = new URLSearchParams({
-    min_average_badge: String(q.minBadge),
     min_matches: String(q.minMatches ?? 100),
   });
+  applyRank(params, q);
   applyWindow(params, q);
   return getAnalytics<HeroCounterRow[]>(
     `${BASE}/v1/analytics/hero-counter-stats?${params}`,
@@ -678,6 +686,23 @@ export function getPlayerHeroStats(
   );
 }
 
+/** One match from the Steam-profile name search. Names are freely changeable and collide, so the
+ * UI shows avatars and lets the player pick — the account id is what we keep. */
+export interface SteamPlayerMatch {
+  account_id: number;
+  personaname: string;
+  avatar?: string;
+}
+
+/** Search Steam profiles (with Deadlock presence) by display name — server-side, no Steam login.
+ * Names collide freely; treat results as candidates to disambiguate, not an answer. */
+export function searchSteamPlayers(query: string): Promise<SteamPlayerMatch[]> {
+  const params = new URLSearchParams({ search_query: query });
+  return getAnalytics<SteamPlayerMatch[]>(
+    `${BASE}/v1/players/steam-search?${params}`,
+  );
+}
+
 /** The player's current rank tier on the app's 0–11 rank-floor scale (11 = Eternus), from the batch
  * mmr endpoint's latest entry (`division` is already tier-scaled; `rank` is the full badge). Null
  * when the account has no ranked record yet (division 0 = Obscurus/unranked). */
@@ -696,9 +721,10 @@ export async function getPlayerRankTier(
 /** Every hero's ladder record at a rank floor + window — the "meta strength" side of the
  * what-to-queue ranking on the your-heroes row. */
 export function getHeroLadderStats(
-  q: { minBadge: number } & TimeWindow,
+  q: RankWindow & TimeWindow,
 ): Promise<HeroLadderStat[]> {
-  const params = new URLSearchParams({ min_average_badge: String(q.minBadge) });
+  const params = new URLSearchParams();
+  applyRank(params, q);
   applyWindow(params, q);
   return getAnalytics<HeroLadderStat[]>(
     `${BASE}/v1/analytics/hero-stats?${params}`,
@@ -708,8 +734,9 @@ export function getHeroLadderStats(
 export interface PlayerMetricsQuery extends TimeWindow {
   /** Filter to games on one hero. */
   heroId?: number;
-  /** Rank floor (average_badge) for a ladder slice. */
+  /** Rank slice for a ladder distribution (floor, or floor+ceiling for a band). */
   minBadge?: number;
+  maxBadge?: number;
   /** Restrict to specific players — this is how "my typical game" is fetched. */
   accountIds?: number[];
 }
@@ -724,6 +751,8 @@ export function getPlayerMetrics(
   if (q.heroId !== undefined) params.set("hero_ids", String(q.heroId));
   if (q.minBadge !== undefined)
     params.set("min_average_badge", String(q.minBadge));
+  if (q.maxBadge !== undefined)
+    params.set("max_average_badge", String(q.maxBadge));
   if (q.accountIds?.length) params.set("account_ids", q.accountIds.join(","));
   applyWindow(params, q);
   return getAnalytics<PlayerMetrics>(
