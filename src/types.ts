@@ -374,6 +374,25 @@ export interface PlayerHeroStat {
   last_played: number;
 }
 
+/** One metric's distribution from /v1/analytics/player-stats/metrics — average plus a fixed
+ * percentile grid. Fetched for a ladder slice (hero+rank) or a single account. */
+export interface MetricDistribution {
+  avg: number;
+  std: number;
+  percentile1: number;
+  percentile5: number;
+  percentile10: number;
+  percentile25: number;
+  percentile50: number;
+  percentile75: number;
+  percentile90: number;
+  percentile95: number;
+  percentile99: number;
+}
+
+/** The metrics endpoint's response: metric name (e.g. "net_worth_per_min") → its distribution. */
+export type PlayerMetrics = Record<string, MetricDistribution | undefined>;
+
 /** One row from /v1/analytics/item-stats (raw, un-adjusted win rate). */
 export interface ItemStat {
   item_id: number;

@@ -24,6 +24,7 @@ import {
   getItemStats,
   getPatches,
   getPlayerHeroStats,
+  getPlayerMetrics,
   getPlayerRankTier,
   type TimeWindow,
 } from "./api/deadlock";
@@ -49,6 +50,7 @@ import {
 } from "./lib/urlState";
 import { blendFlow, blendItemStats, PRIOR_WINDOW_S } from "./lib/patchBlend";
 import { findPatchMovers, type PatchMover } from "./lib/patchMovers";
+import { fundamentalsRows, type FundamentalRow } from "./lib/fundamentals";
 import { buildSynergyLookup, singleRecordsFromFlow } from "./lib/synergy";
 import { bestImbueTargets } from "./lib/imbue";
 import { heroMatchups } from "./lib/matchups";
@@ -268,6 +270,13 @@ export default function App() {
     matches: number;
     winRate: number;
   }> | null>(null);
+  // "Your fundamentals" benchmark rows (lib/fundamentals) — your typical game on this hero placed
+  // on the selected ladder's percentile distributions. heroScoped=false ⇒ the account had no games
+  // on this hero, so the all-heroes history stands in (still your fundamentals, less specific).
+  const [fundamentals, setFundamentals] = useState<{
+    rows: FundamentalRow[];
+    heroScoped: boolean;
+  } | null>(null);
   // The profile's rank pre-selects the floor only until the player picks one deliberately —
   // a deep-linked rank or a manual select always wins and is never overridden afterwards.
   const tierTouched = useRef(url0.tier !== undefined);
@@ -349,6 +358,50 @@ export default function App() {
       if (!tierTouched.current && rankTier !== null) setTier(rankTier);
     },
     [accountId, heroes],
+    setError,
+  );
+
+  // Fundamentals benchmark: my typical game vs the ladder at this rank floor. The metrics that
+  // actually separate ranks are farm and deaths (see lib/fundamentals), so this is the "what do I
+  // fix to climb" card. The ladder slice spans the pre-patch month too when backfill is on — the
+  // distributions drift slowly and a day-one window alone is too thin to grid percentiles from.
+  const fundamentalsLoading = useAsyncTask(
+    async (signal) => {
+      if (!accountId || !hero || patches.length === 0) {
+        setFundamentals(null);
+        return;
+      }
+      const window = windowFor(patches, patchIdx);
+      const ladderWindow = backfillOn
+        ? {
+            minUnixTimestamp: priorWindowFor(patches, patchIdx)
+              .minUnixTimestamp,
+            maxUnixTimestamp: window.maxUnixTimestamp,
+          }
+        : window;
+      const [me, ladder] = await Promise.all([
+        getPlayerMetrics({ accountIds: [accountId], heroId: hero.id }).catch(
+          () => ({}),
+        ),
+        getPlayerMetrics({ heroId: hero.id, minBadge, ...ladderWindow }).catch(
+          () => ({}),
+        ),
+      ]);
+      if (signal.aborted) return;
+      let rows = fundamentalsRows(me, ladder);
+      let heroScoped = true;
+      if (rows.length === 0) {
+        // No games on this hero — benchmark the account's overall fundamentals instead.
+        const meAll = await getPlayerMetrics({
+          accountIds: [accountId],
+        }).catch(() => ({}));
+        if (signal.aborted) return;
+        rows = fundamentalsRows(meAll, ladder);
+        heroScoped = false;
+      }
+      setFundamentals(rows.length ? { rows, heroScoped } : null);
+    },
+    [accountId, hero, minBadge, patchIdx, patches, backfillOn],
     setError,
   );
 
@@ -802,6 +855,7 @@ export default function App() {
     communityLoading ||
     matrixLoading ||
     profileLoading ||
+    fundamentalsLoading ||
     (!items && !error);
   // The brand mark's icon is a function of the current selection, so it flips to a new
   // item on each action (hero/rank/patch/build-style/enemy change) and is otherwise still.
@@ -1024,6 +1078,46 @@ export default function App() {
         )}
 
         {archetypeSet && <div className="identity">{archetypeSet.note}</div>}
+
+        {fundamentals && hero && (
+          <section
+            className="fundamentals"
+            title="Your average per game, placed on the distribution of games at this rank floor (percentile, higher = better; deaths inverted). Souls/min and deaths are the two stats that most separate rank tiers — the climb levers."
+          >
+            <h2>
+              Your fundamentals{" "}
+              <span className="sub">
+                {fundamentals.heroScoped ? hero.name : "all heroes"} vs{" "}
+                {rankFloorLabel(tier)}
+              </span>
+            </h2>
+            <div className="fundrows">
+              {fundamentals.rows.map((r) => (
+                <div
+                  className="fundrow"
+                  key={r.key}
+                  title={`ladder median: ${r.ladderMedian}`}
+                >
+                  <span className="flabel">{r.label}</span>
+                  <span className="fval">{r.value}</span>
+                  <span className="fbar">
+                    <span
+                      className={
+                        r.percentile >= 75
+                          ? "hi"
+                          : r.percentile < 25
+                            ? "lo"
+                            : ""
+                      }
+                      style={{ width: `${r.percentile}%` }}
+                    />
+                  </span>
+                  <span className="fpct">p{r.percentile}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {communityMatch && (communityMatch.best || communityMatch.aligned) && (
           <section className="community" ref={communityRef}>

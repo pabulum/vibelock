@@ -18,6 +18,7 @@ import type {
   NeedKind,
   Patch,
   PlayerHeroStat,
+  PlayerMetrics,
   SlotType,
   TextSegment,
 } from '../types';
@@ -590,6 +591,27 @@ export async function getPlayerRankTier(accountId: number): Promise<number | nul
   );
   const division = rows[0]?.division;
   return typeof division === 'number' && division > 0 ? Math.min(division, 11) : null;
+}
+
+export interface PlayerMetricsQuery extends TimeWindow {
+  /** Filter to games on one hero. */
+  heroId?: number;
+  /** Rank floor (average_badge) for a ladder slice. */
+  minBadge?: number;
+  /** Restrict to specific players — this is how "my typical game" is fetched. */
+  accountIds?: number[];
+}
+
+/** Per-metric distributions (avg + percentile grid) of ~29 per-match player metrics, over whatever
+ * slice the query describes: hero+rank ⇒ the ladder to benchmark against; account_ids ⇒ the
+ * player's own history. One call either way — see lib/fundamentals. */
+export function getPlayerMetrics(q: PlayerMetricsQuery): Promise<PlayerMetrics> {
+  const params = new URLSearchParams();
+  if (q.heroId !== undefined) params.set('hero_ids', String(q.heroId));
+  if (q.minBadge !== undefined) params.set('min_average_badge', String(q.minBadge));
+  if (q.accountIds?.length) params.set('account_ids', q.accountIds.join(','));
+  applyWindow(params, q);
+  return getAnalytics<PlayerMetrics>(`${BASE}/v1/analytics/player-stats/metrics?${params}`);
 }
 
 export function getPatches(): Promise<Patch[]> {

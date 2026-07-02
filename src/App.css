@@ -314,6 +314,63 @@ body {
   color: var(--accent);
 }
 
+/* "Your fundamentals" card — per-metric percentile bars vs the selected ladder. Same header
+   grammar as the community card; bars are the whole message so the rows stay dense. */
+.fundamentals {
+  padding: 10px 22px 2px;
+  max-width: 520px;
+  cursor: help;
+}
+.fundamentals h2 {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+.fundamentals h2 .sub {
+  font-weight: 400;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.fundrow {
+  display: grid;
+  grid-template-columns: 92px 56px 1fr 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 12.5px;
+}
+.fundrow .flabel {
+  color: var(--muted);
+}
+.fundrow .fval {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.fundrow .fbar {
+  height: 6px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.fundrow .fbar > span {
+  display: block;
+  height: 100%;
+  background: var(--muted);
+  border-radius: 999px;
+}
+.fundrow .fbar > span.hi {
+  background: #7ecf9e;
+}
+.fundrow .fbar > span.lo {
+  background: #e08989;
+}
+.fundrow .fpct {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* "Your heroes" quick-pick strip — the player's most-played heroes as portrait chips,
    shown once a Steam id resolves to a profile. Mirrors the enemies row's layout. */
 .myheroes {
