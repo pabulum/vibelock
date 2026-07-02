@@ -23,6 +23,8 @@ import {
   getItems,
   getItemStats,
   getPatches,
+  getPlayerHeroStats,
+  getPlayerRankTier,
   type TimeWindow,
 } from "./api/deadlock";
 import { assembleArchetypes, pickSignatures } from "./lib/archetypes";
@@ -45,7 +47,7 @@ import {
   slugify,
   type UrlState,
 } from "./lib/urlState";
-import { blendFlow, PRIOR_WINDOW_S } from "./lib/patchBlend";
+import { blendFlow, blendItemStats, PRIOR_WINDOW_S } from "./lib/patchBlend";
 import { buildSynergyLookup, singleRecordsFromFlow } from "./lib/synergy";
 import { bestImbueTargets } from "./lib/imbue";
 import { heroMatchups } from "./lib/matchups";
@@ -248,6 +250,30 @@ export default function App() {
   // "is this build trustworthy yet?" is a number, not a vibe.
   const [backfill, setBackfill] = useState<number | null>(null);
 
+  // Steam account id (the number in Steam's userdata/<id> path) — the single source shared by the
+  // header profile control and the export panel (author stamp), persisted locally. Only public
+  // profile data is ever read with it.
+  const [steamId, setSteamId] = useState(
+    () => localStorage.getItem("vibelock-steam-id") ?? "",
+  );
+  const accountId = /^\d+$/.test(steamId.trim())
+    ? Number(steamId.trim())
+    : null;
+  const [topHeroes, setTopHeroes] = useState<Array<{
+    hero: Hero;
+    matches: number;
+    winRate: number;
+  }> | null>(null);
+  // The profile's rank pre-selects the floor only until the player picks one deliberately —
+  // a deep-linked rank or a manual select always wins and is never overridden afterwards.
+  const tierTouched = useRef(url0.tier !== undefined);
+
+  useEffect(() => {
+    const v = steamId.trim();
+    if (/^\d+$/.test(v)) localStorage.setItem("vibelock-steam-id", v);
+    else if (v === "") localStorage.removeItem("vibelock-steam-id");
+  }, [steamId]);
+
   // Load assets once, then apply any deep-link selection now that we can resolve slugs/timestamps.
   useEffect(() => {
     Promise.all([getHeroes(), getItems(), getPatches(), getAbilities()])
@@ -281,6 +307,46 @@ export default function App() {
     [heroes, heroId],
   );
   const minBadge = tierToMinBadge(tier);
+
+  // Player profile: top heroes for the quick-pick row, and their current rank to pre-select the
+  // floor. Both fetches fail soft (bad/empty account ⇒ no row, no rank) so a typo in the id never
+  // trips the main error banner.
+  const profileLoading = useAsyncTask(
+    async (signal) => {
+      if (!accountId || heroes.length === 0) {
+        setTopHeroes(null);
+        return;
+      }
+      const [stats, rankTier] = await Promise.all([
+        getPlayerHeroStats(accountId).catch(() => []),
+        getPlayerRankTier(accountId).catch(() => null),
+      ]);
+      if (signal.aborted) return;
+      // Top heroes, recency-gated: heroes actually played in the last 90 days rank first (meta and
+      // rust make all-time mains a worse default); fall back to all-time when the account's been
+      // away. matches_played is all-time either way — the endpoint has no windowed count.
+      const RECENT_S = 90 * 86400;
+      const nowS = Date.now() / 1000;
+      const withHero = stats
+        .map((s) => ({ s, hero: heroes.find((h) => h.id === s.hero_id) }))
+        .filter((x): x is { s: (typeof stats)[number]; hero: Hero } => !!x.hero);
+      const recent = withHero.filter((x) => nowS - x.s.last_played < RECENT_S);
+      const pool = (recent.length >= 3 ? recent : withHero)
+        .sort((a, b) => b.s.matches_played - a.s.matches_played)
+        .slice(0, 6);
+      setTopHeroes(
+        pool.map((x) => ({
+          hero: x.hero,
+          matches: x.s.matches_played,
+          winRate:
+            x.s.matches_played > 0 ? x.s.wins / x.s.matches_played : 0,
+        })),
+      );
+      if (!tierTouched.current && rankTier !== null) setTier(rankTier);
+    },
+    [accountId, heroes],
+    setError,
+  );
 
   // Generate builds, split by archetype for flex heroes.
   const loading = useAsyncTask(
@@ -454,23 +520,48 @@ export default function App() {
         setCompEdges(null);
         return;
       }
+      if (patches.length === 0) return;
       const window = windowFor(patches, patchIdx);
-      const base = { heroId: hero.id, minBadge, ...window };
+      const priorWindow = priorWindowFor(patches, patchIdx);
+      const base = { heroId: hero.id, minBadge };
 
       // One query per enemy (not a combined `any-of` query) so each item keeps a per-enemy
       // delta — that's what lets a row carry the portrait of the specific hero it answers.
-      const [baseStats, perEnemy] = await Promise.all([
-        getItemStats(base),
-        Promise.all(
-          enemies.map((id) =>
-            getItemStats({ ...base, enemyHeroIds: [id] }).then((stats) => ({
-              enemyHeroId: id,
-              stats,
-            })),
-          ),
-        ),
+      // With backfill on, each slice is fetched for both windows (all in parallel) and blended.
+      // Counters need one rule beyond the build blend: a counter is a *difference* (item-vs-enemy
+      // minus base), and if the two sides borrowed differently — a patch-changed item's big base
+      // sample pulls fresh while its thin enemy slice stays anchored to pre-patch — the mismatch
+      // reads as a fake counter. So the per-item discounts are learned on the base pair and shared
+      // into every per-enemy blend (see blendItemStats).
+      const slice = (enemyHeroIds?: number[]) =>
+        backfillOn
+          ? Promise.all([
+              getItemStats({ ...base, ...window, minMatches: 5, enemyHeroIds }),
+              getItemStats({ ...base, ...priorWindow, enemyHeroIds }),
+            ])
+          : Promise.all([
+              getItemStats({ ...base, ...window, enemyHeroIds }),
+              Promise.resolve([]),
+            ]);
+      const [basePair, ...enemyPairs] = await Promise.all([
+        slice(),
+        ...enemies.map((id) => slice([id])),
       ]);
       if (signal.aborted) return;
+
+      let baseStats = basePair[0];
+      let perEnemy = enemyPairs.map((pair, i) => ({
+        enemyHeroId: enemies[i],
+        stats: pair[0],
+      }));
+      if (backfillOn) {
+        const baseBlend = blendItemStats(basePair[0], basePair[1]);
+        baseStats = baseBlend.stats;
+        perEnemy = enemyPairs.map((pair, i) => ({
+          enemyHeroId: enemies[i],
+          stats: blendItemStats(pair[0], pair[1], baseBlend).stats,
+        }));
+      }
       const { counters: cs, edgeByItem } = computeItemCounters(
         baseStats,
         perEnemy,
@@ -479,7 +570,7 @@ export default function App() {
       setCounters(cs);
       setCompEdges(edgeByItem);
     },
-    [hero, items, enemies, minBadge, patchIdx, patches],
+    [hero, items, enemies, minBadge, patchIdx, patches, backfillOn],
     setError,
   );
 
@@ -704,6 +795,7 @@ export default function App() {
     skillLoading ||
     communityLoading ||
     matrixLoading ||
+    profileLoading ||
     (!items && !error);
   // The brand mark's icon is a function of the current selection, so it flips to a new
   // item on each action (hero/rank/patch/build-style/enemy change) and is otherwise still.
@@ -744,7 +836,10 @@ export default function App() {
             Rank floor
             <select
               value={tier}
-              onChange={(e) => setTier(Number(e.target.value))}
+              onChange={(e) => {
+                tierTouched.current = true; // a deliberate choice — profile stops pre-selecting
+                setTier(Number(e.target.value));
+              }}
             >
               {[...RANK_TIERS].reverse().map((t) => (
                 <option key={t.tier} value={t.tier}>
@@ -778,6 +873,18 @@ export default function App() {
               onChange={(e) => setBackfillOn(e.target.checked)}
             />
           </label>
+          <label
+            className="idctl"
+            title="Your Steam account id — the number in Steam's userdata/<id> folder. Unlocks the your-heroes quick-pick, pre-selects your rank floor, and signs exported builds. Stored only in this browser."
+          >
+            Steam ID
+            <input
+              inputMode="numeric"
+              placeholder="userdata/<id>"
+              value={steamId}
+              onChange={(e) => setSteamId(e.target.value)}
+            />
+          </label>
           <button
             type="button"
             className="guidebtn"
@@ -791,6 +898,23 @@ export default function App() {
       </header>
 
       {error && <div className="banner error">⚠ {error}</div>}
+
+      {topHeroes && topHeroes.length > 0 && (
+        <div className="myheroes">
+          <span className="lbl">Your heroes</span>
+          {topHeroes.map(({ hero: h, matches, winRate }) => (
+            <button
+              key={h.id}
+              className={`chip${h.id === heroId ? " active" : ""}`}
+              onClick={() => setHeroId(h.id)}
+              title={`${matches} matches · ${Math.round(winRate * 100)}% win rate`}
+            >
+              <img src={h.image} alt="" loading="lazy" />
+              {h.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="topflow">
         {abilities && skillBuild ? (
@@ -1130,6 +1254,8 @@ export default function App() {
               : ""
           } (${build.rankLabel})`}
           description={`Top-to-bottom build from Vibelock · ${build.rankLabel} · ${patchLabel} · ${build.population.matches.toLocaleString()} matches. Core phases + a Situational (optional) row; each item's note says why it's picked. Made with vibelock.`}
+          steamId={steamId}
+          onSteamIdChange={setSteamId}
           onClose={() => setShowExport(false)}
         />
       )}
@@ -1177,6 +1303,8 @@ function ExportPanel({
   imbues,
   name,
   description,
+  steamId,
+  onSteamIdChange,
   onClose,
 }: {
   build: GeneratedBuild;
@@ -1186,6 +1314,10 @@ function ExportPanel({
   imbues?: Map<number, ImbueTarget>;
   name: string;
   description: string;
+  /** Steam account id — owned by App (shared with the header profile control, persisted there).
+   * Stamped as the build's author so the logged-in owner can edit/delete it in-game. */
+  steamId: string;
+  onSteamIdChange: (v: string) => void;
   onClose: () => void;
 }) {
   const [status, setStatus] = useState("");
@@ -1193,11 +1325,6 @@ function ExportPanel({
     "idle",
   );
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-  // Steam account id (the number in the userdata/<id> path), remembered locally. Stamped as the
-  // build's author so the logged-in owner can edit/delete it in-game. Optional but recommended.
-  const [steamId, setSteamId] = useState(
-    () => localStorage.getItem("vibelock-steam-id") ?? "",
-  );
   const authorId = /^\d+$/.test(steamId.trim())
     ? Number(steamId.trim())
     : undefined;
@@ -1222,7 +1349,6 @@ function ExportPanel({
     setStage("working");
     setDownloadUrl(null);
     try {
-      if (authorId) localStorage.setItem("vibelock-steam-id", String(authorId));
       const blob = encodeHeroBuild(build, {
         name,
         description,
@@ -1267,7 +1393,6 @@ function ExportPanel({
     setStage("working");
     setDownloadUrl(null);
     try {
-      if (authorId) localStorage.setItem("vibelock-steam-id", String(authorId));
       const blob = encodeHeroBuild(build, {
         name,
         description,
@@ -1352,7 +1477,7 @@ function ExportPanel({
               inputMode="numeric"
               placeholder="e.g. 22202 (Gaben's)"
               value={steamId}
-              onChange={(e) => setSteamId(e.target.value)}
+              onChange={(e) => onSteamIdChange(e.target.value)}
             />
             <span className="hint">
               The number in your Steam <code>userdata/&lt;id&gt;</code> folder

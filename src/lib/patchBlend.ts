@@ -21,7 +21,13 @@
 // blended counts unchanged: a node's wins+losses is its *effective* decided sample, so the gates are
 // well-defined on day one instead of vacuously failing.
 
-import type { FlowEdge, FlowNode, FlowSummary, ItemFlowStats } from "../types";
+import type {
+  FlowEdge,
+  FlowNode,
+  FlowSummary,
+  ItemFlowStats,
+  ItemStat,
+} from "../types";
 
 /** How far before the patch the borrow window reaches. This is where the old "last 30 days" default
  * went: instead of mixing patches at full weight, the pre-patch month enters as a *capped* prior. */
@@ -72,7 +78,7 @@ export function estimatePatchK(
   baseline: number,
 ): number {
   const priorByKey = new Map(prior.nodes.map((n) => [nodeKey(n), n]));
-  const pairs: Array<{ d: number; nN: number; nP: number }> = [];
+  const pairs: RatePair[] = [];
   for (const n of fresh.nodes) {
     const q = priorByKey.get(nodeKey(n));
     if (!q) continue;
@@ -81,8 +87,19 @@ export function estimatePatchK(
     if (nN < DRIFT_MIN_N || nP < DRIFT_MIN_N) continue;
     pairs.push({ d: n.adjusted_win_rate - q.adjusted_win_rate, nN, nP });
   }
+  return kFromPairs(pairs, baseline * (1 - baseline));
+}
+
+interface RatePair {
+  d: number; // fresh rate − prior rate for one item
+  nN: number; // decided games behind the fresh rate
+  nP: number; // ...and the prior rate
+}
+
+/** The shared drift-fit core behind {@link estimatePatchK} and {@link blendItemStats}: K in
+ * equivalent games from the fresh−prior rate gaps of well-sampled items. `v` = p(1−p). */
+function kFromPairs(pairs: RatePair[], v: number): number {
   if (pairs.length < DRIFT_MIN_PAIRS) return PATCH_K_DEFAULT;
-  const v = baseline * (1 - baseline);
   const observedVar = pairs.reduce((s, x) => s + x.d * x.d, 0) / pairs.length;
   const samplingVar =
     pairs.reduce((s, x) => s + v * (1 / x.nN + 1 / x.nP), 0) / pairs.length;
@@ -253,5 +270,111 @@ export function blendFlow(fresh: ItemFlowStats, prior: ItemFlowStats): BlendResu
     },
     borrowedShare: total > 0 ? borrowed / total : 0,
     patchK: K,
+  };
+}
+
+/** A blended item-stats slice plus what the *base* (unconditioned) blend learned, so the
+ * enemy-conditioned slices of a counters query can borrow consistently with it. */
+export interface ItemStatsBlend {
+  stats: ItemStat[];
+  /** Prior strength used (learned here, or inherited from the base blend). */
+  k: number;
+  /** Per-item contradiction discounts. On the base blend these are *learned* (the base slice has
+   * the sample to detect a patch change); per-enemy blends *apply* them. */
+  discounts: Map<number, number>;
+  borrowedShare: number;
+}
+
+/**
+ * Power-prior blend for flat item-stats rows (the counters queries). Same machinery as
+ * {@link blendFlow}, with one extra rule for the *conditioned* slices: a counter is a difference
+ * (item-vs-enemy WR minus the base), and if the two sides borrow differently the difference is an
+ * artifact. A patch-changed item's fresh base data pulls away from its prior (big sample, real
+ * contradiction) while its thin per-enemy slice can't contradict anything and stays anchored to
+ * pre-patch — the mismatch would read as a fake counter signal. So the per-item discount is
+ * learned ONCE on the base pair — where the evidence about "did the patch change this item" lives —
+ * and passed via `shared` to every per-enemy blend, keeping both sides of each delta leaning on the
+ * past by the same amount. Items missing from `shared` (seen vs an enemy but not the base slice)
+ * fall back to their locally-computed discount.
+ */
+export function blendItemStats(
+  fresh: ItemStat[],
+  prior: ItemStat[],
+  shared?: Pick<ItemStatsBlend, "k" | "discounts">,
+): ItemStatsBlend {
+  // Pooled rate for the variance scale, from everything in both windows.
+  let w = 0;
+  let d = 0;
+  for (const r of [...fresh, ...prior]) {
+    w += r.wins;
+    d += r.wins + r.losses;
+  }
+  const p = d > 0 ? w / d : 0.5;
+  const v = p * (1 - p);
+
+  const priorById = new Map(prior.map((r) => [r.item_id, r]));
+  const freshIds = new Set(fresh.map((r) => r.item_id));
+
+  let k = shared?.k;
+  if (k === undefined) {
+    const pairs: RatePair[] = [];
+    for (const f of fresh) {
+      const q = priorById.get(f.item_id);
+      if (!q) continue;
+      const nN = f.wins + f.losses;
+      const nP = q.wins + q.losses;
+      if (nN < DRIFT_MIN_N || nP < DRIFT_MIN_N) continue;
+      pairs.push({ d: f.wins / nN - q.wins / nP, nN, nP });
+    }
+    k = kFromPairs(pairs, v);
+  }
+
+  const discounts = new Map<number, number>();
+  let borrowed = 0;
+  let total = 0;
+  const blendRow = (
+    f: ItemStat | undefined,
+    q: ItemStat | undefined,
+  ): ItemStat => {
+    const src = (f ?? q)!;
+    const nN = f ? f.wins + f.losses : 0;
+    const nP = q ? q.wins + q.losses : 0;
+    const rateN = nN > 0 && f ? f.wins / nN : 0;
+    const rateP = nP > 0 && q ? q.wins / nP : 0;
+    const disc =
+      shared?.discounts.get(src.item_id) ??
+      (f && q ? contradictionDiscount(rateN, nN, rateP, nP, p) : 1);
+    discounts.set(src.item_id, disc);
+    const m = q ? Math.min(nP, k! * disc) : 0;
+    const scale = nP > 0 ? m / nP : 0;
+    borrowed += m;
+    total += nN + m;
+    // A 0 sell time means "rarely sold", not zero seconds — averaging it in would fabricate an
+    // early sale, so a zero side just yields to the other.
+    const timeBlend = (a: number, b: number) =>
+      a > 0 && b > 0 ? wavg(a, nN, b, m) : a > 0 ? a : b;
+    return {
+      item_id: src.item_id,
+      wins: (f?.wins ?? 0) + scale * (q?.wins ?? 0),
+      losses: (f?.losses ?? 0) + scale * (q?.losses ?? 0),
+      matches: Math.round((f?.matches ?? 0) + scale * (q?.matches ?? 0)),
+      players: Math.round((f?.players ?? 0) + scale * (q?.players ?? 0)),
+      avg_buy_time_s: timeBlend(f?.avg_buy_time_s ?? 0, q?.avg_buy_time_s ?? 0),
+      avg_sell_time_s: timeBlend(
+        f?.avg_sell_time_s ?? 0,
+        q?.avg_sell_time_s ?? 0,
+      ),
+    };
+  };
+
+  const stats = fresh.map((f) => blendRow(f, priorById.get(f.item_id)));
+  for (const q of prior)
+    if (!freshIds.has(q.item_id)) stats.push(blendRow(undefined, q));
+
+  return {
+    stats,
+    k,
+    discounts,
+    borrowedShare: total > 0 ? borrowed / total : 0,
   };
 }

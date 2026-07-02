@@ -17,6 +17,7 @@ import type {
   ItemStat,
   NeedKind,
   Patch,
+  PlayerHeroStat,
   SlotType,
   TextSegment,
 } from '../types';
@@ -572,6 +573,25 @@ let patchesPromise: Promise<Patch[]> | null = null;
 // so we key off the MM-DD-YYYY date in the *title*, which is reliable on every entry.
 // We window by day boundaries (00:00 UTC of the title date) to match the site's "May 22
 // – May 25"-style windows, and dedupe by day so the two feeds' copies collapse into one.
+// ---- Player profile (public data; the id is the Steam userdata/<id> account number) ----
+
+/** The player's all-time record per hero — drives the "your heroes" quick-pick. Returns [] for an
+ * account with no Deadlock games (or an unknown id). */
+export function getPlayerHeroStats(accountId: number): Promise<PlayerHeroStat[]> {
+  return getAnalytics<PlayerHeroStat[]>(`${BASE}/v1/players/${accountId}/hero-stats`);
+}
+
+/** The player's current rank tier on the app's 0–11 rank-floor scale (11 = Eternus), from the batch
+ * mmr endpoint's latest entry (`division` is already tier-scaled; `rank` is the full badge). Null
+ * when the account has no ranked record yet (division 0 = Obscurus/unranked). */
+export async function getPlayerRankTier(accountId: number): Promise<number | null> {
+  const rows = await getAnalytics<Array<{ division?: number }>>(
+    `${BASE}/v1/players/mmr?account_ids=${accountId}`,
+  );
+  const division = rows[0]?.division;
+  return typeof division === 'number' && division > 0 ? Math.min(division, 11) : null;
+}
+
 export function getPatches(): Promise<Patch[]> {
   if (patchesPromise) return patchesPromise;
   patchesPromise = (async () => {

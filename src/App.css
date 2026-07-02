@@ -263,6 +263,51 @@ body {
   accent-color: var(--accent);
   cursor: pointer;
 }
+.controls .idctl input {
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 7px 10px;
+  font-size: 14px;
+  width: 130px;
+}
+
+/* "Your heroes" quick-pick strip — the player's most-played heroes as portrait chips,
+   shown once a Steam id resolves to a profile. Mirrors the enemies row's layout. */
+.myheroes {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 22px 0;
+}
+.myheroes .lbl {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.myheroes .chip {
+  background: var(--panel2);
+  color: var(--text);
+  border-color: var(--line);
+  padding: 3px 10px 3px 4px;
+}
+.myheroes .chip:hover {
+  background: var(--panel);
+}
+.myheroes .chip.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.myheroes .chip img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--panel);
+}
 
 /* Top region: the skill-order card floats into the top-right corner and the build
    summary, style tabs, and community check flow up around it — so the card reads as a

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { FlowNode, FlowSummary, ItemFlowStats } from '../types';
+import type { FlowNode, FlowSummary, ItemFlowStats, ItemStat } from '../types';
 import {
   PATCH_K_DEFAULT,
   PATCH_K_MAX,
   blendFlow,
+  blendItemStats,
   estimatePatchK,
 } from './patchBlend';
 
@@ -164,6 +165,58 @@ describe('blendFlow', () => {
     const decided = f.baseline.wins + f.baseline.losses;
     expect(decided).toBeGreaterThan(500); // borrowed something
     expect(decided).toBeLessThanOrEqual(500 + PATCH_K_DEFAULT);
+  });
+});
+
+describe('blendItemStats', () => {
+  const stat = (item_id: number, wins: number, losses: number, buyT = 300): ItemStat => ({
+    item_id,
+    wins,
+    losses,
+    matches: wins + losses,
+    players: wins + losses,
+    avg_buy_time_s: buyT,
+    avg_sell_time_s: 0,
+  });
+
+  it('borrows for a thin fresh slice, capped at K', () => {
+    const { stats } = blendItemStats([stat(7, 4, 6)], [stat(7, 2750, 2250)]);
+    const r = stats.find((s) => s.item_id === 7)!;
+    const n = r.wins + r.losses;
+    expect(n).toBeGreaterThan(500);
+    expect(n).toBeLessThanOrEqual(10 + PATCH_K_DEFAULT);
+    expect(r.wins / n).toBeGreaterThan(0.5); // pulled toward the prior's 0.55
+  });
+
+  it('shares the base discount so both sides of a counter delta borrow alike', () => {
+    // Base slice: big fresh sample contradicts the prior (patch changed the item) ⇒ tiny discount.
+    const base = blendItemStats([stat(7, 800, 1200)], [stat(7, 2750, 2250)]);
+    expect(base.discounts.get(7)!).toBeLessThan(0.1);
+    // Enemy slice: fresh is too thin to contradict anything on its own (locally disc ≈ 1)…
+    const solo = blendItemStats([stat(7, 5, 5)], [stat(7, 550, 450)]);
+    expect(solo.discounts.get(7)!).toBeGreaterThan(0.8);
+    // …but with the base's discounts it borrows almost nothing, like the base did.
+    const sharedBlend = blendItemStats([stat(7, 5, 5)], [stat(7, 550, 450)], base);
+    const r = sharedBlend.stats.find((s) => s.item_id === 7)!;
+    expect(r.wins + r.losses).toBeLessThan(10 + PATCH_K_DEFAULT * 0.1);
+  });
+
+  it('keeps prior-only items and passes fresh-only ones through', () => {
+    const { stats } = blendItemStats(
+      [stat(1, 30, 20)],
+      [stat(1, 500, 500), stat(2, 600, 400)],
+    );
+    const ghost = stats.find((s) => s.item_id === 2)!;
+    expect(ghost.wins + ghost.losses).toBeGreaterThan(100);
+    const { stats: fresh } = blendItemStats([stat(3, 30, 20)], []);
+    expect(fresh.find((s) => s.item_id === 3)!.wins).toBe(30);
+  });
+
+  it('a zero sell time (rarely sold) yields to the informative side instead of averaging', () => {
+    const f = { ...stat(7, 4, 6), avg_sell_time_s: 0 };
+    const q = { ...stat(7, 500, 500), avg_sell_time_s: 900 };
+    const { stats } = blendItemStats([f], [q]);
+    expect(stats[0].avg_sell_time_s).toBe(900);
   });
 });
 

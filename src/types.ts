@@ -365,6 +365,15 @@ export interface Patch {
   ts: number;
 }
 
+/** One row from /v1/players/{account_id}/hero-stats — the player's own record on one hero. */
+export interface PlayerHeroStat {
+  hero_id: number;
+  matches_played: number;
+  wins: number;
+  /** Unix seconds of the player's last game on this hero. */
+  last_played: number;
+}
+
 /** One row from /v1/analytics/item-stats (raw, un-adjusted win rate). */
 export interface ItemStat {
   item_id: number;

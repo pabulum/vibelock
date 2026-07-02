@@ -96,7 +96,16 @@ numbers already on the row.
   reordered. Note: `item-stats` has no adjusted rate, so counter deltas are raw; the with/without
   delta cancels much of the shared confound but lean on the bigger samples. A naive "what wins vs
   hero X" is dominated by generic strong items, so treat single-hero, large-sample movers as the
-  trustworthy signal.
+  trustworthy signal. Counters are backfilled on a young patch like the build (`blendItemStats`),
+  with one extra rule: a counter is a *difference*, so the per-item borrowing discounts are learned
+  once on the base slice and shared into every enemy-conditioned slice — otherwise a patch-changed
+  item whose base pulls fresh while its thin enemy slice stays anchored to pre-patch would read as a
+  fake counter signal.
+- **Player profile** — an optional Steam account id (the `userdata/<id>` number, stored only in the
+  browser and shared with the export panel's author stamp) unlocks a "your heroes" quick-pick row
+  (`/v1/players/{id}/hero-stats`, recency-gated to the last 90 days) and pre-selects the rank floor
+  from the player's current badge (`/v1/players/mmr`) — until a rank is chosen deliberately, which
+  always wins.
 
 ### Why it's a build, not a ranking
 
