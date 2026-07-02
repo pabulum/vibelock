@@ -374,6 +374,14 @@ export interface PlayerHeroStat {
   last_played: number;
 }
 
+/** One row from /v1/analytics/hero-stats — a hero's ladder record in the queried window/rank. */
+export interface HeroLadderStat {
+  hero_id: number;
+  wins: number;
+  losses: number;
+  matches: number;
+}
+
 /** One metric's distribution from /v1/analytics/player-stats/metrics — average plus a fixed
  * percentile grid. Fetched for a ladder slice (hero+rank) or a single account. */
 export interface MetricDistribution {

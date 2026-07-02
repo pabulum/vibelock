@@ -10,6 +10,7 @@ import type {
   Hero,
   HeroBuildStatRow,
   HeroCounterRow,
+  HeroLadderStat,
   Item,
   ItemCard,
   ItemFlowStats,
@@ -591,6 +592,16 @@ export async function getPlayerRankTier(accountId: number): Promise<number | nul
   );
   const division = rows[0]?.division;
   return typeof division === 'number' && division > 0 ? Math.min(division, 11) : null;
+}
+
+/** Every hero's ladder record at a rank floor + window — the "meta strength" side of the
+ * what-to-queue ranking on the your-heroes row. */
+export function getHeroLadderStats(
+  q: { minBadge: number } & TimeWindow,
+): Promise<HeroLadderStat[]> {
+  const params = new URLSearchParams({ min_average_badge: String(q.minBadge) });
+  applyWindow(params, q);
+  return getAnalytics<HeroLadderStat[]>(`${BASE}/v1/analytics/hero-stats?${params}`);
 }
 
 export interface PlayerMetricsQuery extends TimeWindow {

@@ -406,6 +406,16 @@ body {
   object-fit: cover;
   background: var(--panel);
 }
+.myheroes .lbl {
+  cursor: help;
+}
+/* Expected-tonight win rate on the chip (what-to-queue ordering). */
+.myheroes .chip i {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
 
 /* Top region: the skill-order card floats into the top-right corner and the build
    summary, style tabs, and community check flow up around it — so the card reads as a

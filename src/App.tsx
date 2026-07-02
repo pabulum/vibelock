@@ -21,6 +21,7 @@ import {
   getItemFlowStats,
   getItemPermutationStats,
   getItems,
+  getHeroLadderStats,
   getItemStats,
   getPatches,
   getPlayerHeroStats,
@@ -70,9 +71,12 @@ import type {
   Hero,
   HeroBuildStatRow,
   HeroCounterRow,
+  HeroLadderStat,
   ImbueTarget,
+  ItemStat,
   Matchup,
   Patch,
+  PlayerHeroStat,
   Item,
   RankedCommunityBuild,
   SkillBuild,
@@ -265,11 +269,19 @@ export default function App() {
   const accountId = /^\d+$/.test(steamId.trim())
     ? Number(steamId.trim())
     : null;
-  const [topHeroes, setTopHeroes] = useState<Array<{
+  // The profile's most-played-hero pool (recency-gated in the fetch effect, where wall-clock time
+  // is legal), joined with ladder meta in a memo below.
+  const [heroPool, setHeroPool] = useState<Array<{
     hero: Hero;
     matches: number;
-    winRate: number;
+    wins: number;
   }> | null>(null);
+  // Every hero's blended ladder win rate at the selected rank/patch — the "meta strength" half of
+  // the what-to-queue ordering on the your-heroes row. Only fetched when a profile is set.
+  const [heroMeta, setHeroMeta] = useState<Map<
+    number,
+    { winRate: number; decided: number }
+  > | null>(null);
   // "Your fundamentals" benchmark rows (lib/fundamentals) — your typical game on this hero placed
   // on the selected ladder's percentile distributions. heroScoped=false ⇒ the account had no games
   // on this hero, so the all-heroes history stands in (still your fundamentals, less specific).
@@ -327,7 +339,7 @@ export default function App() {
   const profileLoading = useAsyncTask(
     async (signal) => {
       if (!accountId || heroes.length === 0) {
-        setTopHeroes(null);
+        setHeroPool(null);
         return;
       }
       const [stats, rankTier] = await Promise.all([
@@ -335,31 +347,101 @@ export default function App() {
         getPlayerRankTier(accountId).catch(() => null),
       ]);
       if (signal.aborted) return;
-      // Top heroes, recency-gated: heroes actually played in the last 90 days rank first (meta and
-      // rust make all-time mains a worse default); fall back to all-time when the account's been
-      // away. matches_played is all-time either way — the endpoint has no windowed count.
+      // Most-played pool, gated to the last 90 days when possible — meta and rust make all-time
+      // mains a worse default; fall back to all-time when the account's been away.
       const RECENT_S = 90 * 86400;
       const nowS = Date.now() / 1000;
       const withHero = stats
         .map((s) => ({ s, hero: heroes.find((h) => h.id === s.hero_id) }))
-        .filter((x): x is { s: (typeof stats)[number]; hero: Hero } => !!x.hero);
+        .filter(
+          (x): x is { s: PlayerHeroStat; hero: Hero } => x.hero !== undefined,
+        );
       const recent = withHero.filter((x) => nowS - x.s.last_played < RECENT_S);
-      const pool = (recent.length >= 3 ? recent : withHero)
-        .sort((a, b) => b.s.matches_played - a.s.matches_played)
-        .slice(0, 6);
-      setTopHeroes(
-        pool.map((x) => ({
-          hero: x.hero,
-          matches: x.s.matches_played,
-          winRate:
-            x.s.matches_played > 0 ? x.s.wins / x.s.matches_played : 0,
-        })),
+      setHeroPool(
+        (recent.length >= 3 ? recent : withHero)
+          .sort((a, b) => b.s.matches_played - a.s.matches_played)
+          .slice(0, 6)
+          .map((x) => ({
+            hero: x.hero,
+            matches: x.s.matches_played,
+            wins: x.s.wins,
+          })),
       );
       if (!tierTouched.current && rankTier !== null) setTier(rankTier);
     },
     [accountId, heroes],
     setError,
   );
+
+  // Ladder-wide hero win rates for the selected rank/patch, backfilled on a young patch exactly
+  // like items are — hero rows quack enough like ItemStat that the same power-prior blend applies.
+  const heroMetaLoading = useAsyncTask(
+    async (signal) => {
+      if (!accountId || patches.length === 0) {
+        setHeroMeta(null);
+        return;
+      }
+      const window = windowFor(patches, patchIdx);
+      const [f, q] = await Promise.all([
+        getHeroLadderStats({ minBadge, ...window }),
+        backfillOn
+          ? getHeroLadderStats({
+              minBadge,
+              ...priorWindowFor(patches, patchIdx),
+            })
+          : Promise.resolve([]),
+      ]);
+      if (signal.aborted) return;
+      const toItemStat = (r: HeroLadderStat): ItemStat => ({
+        item_id: r.hero_id,
+        wins: r.wins,
+        losses: r.losses,
+        matches: r.matches,
+        players: r.matches,
+        avg_buy_time_s: 0,
+        avg_sell_time_s: 0,
+      });
+      const rows = backfillOn
+        ? blendItemStats(f.map(toItemStat), q.map(toItemStat)).stats
+        : f.map(toItemStat);
+      setHeroMeta(
+        new Map(
+          rows.map((r) => {
+            const n = r.wins + r.losses;
+            return [
+              r.item_id,
+              { winRate: n > 0 ? r.wins / n : 0.5, decided: n },
+            ];
+          }),
+        ),
+      );
+    },
+    [accountId, minBadge, patchIdx, patches, backfillOn],
+    setError,
+  );
+
+  // The your-heroes row, what-to-queue ordered. Pool = your most-played heroes, gated to the last
+  // 90 days when possible (meta and rust make all-time mains a worse default). Each gets an
+  // *expected win rate tonight*: your record on the hero shrunk toward the hero's current ladder
+  // rate at this rank/patch, with the ladder prior worth PROFILE_PRIOR_GAMES of evidence — a
+  // 20-game one-trick still mostly reads as the ladder, a 300-game main mostly as you. Chips order
+  // by that number, so the row answers "what should I queue" rather than "what have I played".
+  const topHeroes = useMemo(() => {
+    if (!heroPool) return null;
+    const PROFILE_PRIOR_GAMES = 20;
+    const rows = heroPool.map((x) => {
+      const winRate = x.matches > 0 ? x.wins / x.matches : 0;
+      const meta = heroMeta?.get(x.hero.id);
+      const expected = meta
+        ? (x.wins + PROFILE_PRIOR_GAMES * meta.winRate) /
+          (x.matches + PROFILE_PRIOR_GAMES)
+        : undefined;
+      return { hero: x.hero, matches: x.matches, winRate, meta, expected };
+    });
+    if (rows.some((r) => r.expected !== undefined))
+      rows.sort((a, b) => (b.expected ?? 0) - (a.expected ?? 0));
+    return rows;
+  }, [heroPool, heroMeta]);
 
   // Fundamentals benchmark: my typical game vs the ladder at this rank floor. The metrics that
   // actually separate ranks are farm and deaths (see lib/fundamentals), so this is the "what do I
@@ -855,6 +937,7 @@ export default function App() {
     communityLoading ||
     matrixLoading ||
     profileLoading ||
+    heroMetaLoading ||
     fundamentalsLoading ||
     (!items && !error);
   // The brand mark's icon is a function of the current selection, so it flips to a new
@@ -990,16 +1073,29 @@ export default function App() {
 
       {topHeroes && topHeroes.length > 0 && (
         <div className="myheroes">
-          <span className="lbl">Your heroes</span>
-          {topHeroes.map(({ hero: h, matches, winRate }) => (
+          <span
+            className="lbl"
+            title="Your most-played heroes (last 90 days when possible), ordered by expected win rate tonight: your own record on the hero, shrunk toward the hero's current ladder win rate at this rank and patch. Best queue first."
+          >
+            Your heroes
+          </span>
+          {topHeroes.map(({ hero: h, matches, winRate, meta, expected }) => (
             <button
               key={h.id}
               className={`chip${h.id === heroId ? " active" : ""}`}
               onClick={() => setHeroId(h.id)}
-              title={`${matches} matches · ${Math.round(winRate * 100)}% win rate`}
+              title={
+                `you: ${Math.round(winRate * 100)}% over ${matches} matches` +
+                (meta
+                  ? ` · hero now: ${(meta.winRate * 100).toFixed(1)}% at this rank/patch · expected tonight ≈ ${Math.round((expected ?? 0) * 100)}%`
+                  : "")
+              }
             >
               <img src={h.image} alt="" loading="lazy" />
               {h.name}
+              {expected !== undefined && (
+                <i>{Math.round(expected * 100)}%</i>
+              )}
             </button>
           ))}
         </div>
