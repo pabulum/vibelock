@@ -440,8 +440,11 @@ export interface HeroCounterRow {
 export interface Matchup {
   enemyHeroId: number;
   winRate: number;
-  /** Win rate − the hero's overall win rate (negative = they counter you). */
+  /** Raw mode: win rate − the hero's overall win rate. De-noised mode: the sample-shrunk residual
+   * vs the Bradley-Terry expectation (negative = they counter you beyond mere hero strength). */
   delta: number;
+  /** De-noised mode only: the win rate hero strengths alone predict for this pairing. */
+  expectedWinRate?: number;
   sample: number;
   /** Avg last-hit lead vs this hero (negative = you get out-farmed in lane). */
   laneCsDelta: number;

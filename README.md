@@ -89,7 +89,11 @@ numbers already on the row.
   the hero's overall win rate; **Tough** (they counter you) and **Favored** matchups show as clickable
   portrait chips that toggle into the enemy list below, so you see what to build against them in one
   click. Win rate is whole-game presence, not lane-only (`same_lane_filter` is a no-op on this
-  endpoint); the lane CS differential is surfaced as a tooltip hint instead.
+  endpoint); the lane CS differential is surfaced as a tooltip hint instead. The **De-noise**
+  toggle fits Bradley-Terry strengths on the whole matrix (`fitBradleyTerry`) and re-reads each
+  matchup as its sample-shrunk *residual* vs what strengths alone predict — so a meta hero stops
+  showing up as everyone's counter, and "Tough" means genuine rock-paper-scissors. Strengths
+  explain the live matrix to ~1pt RMSE, so residuals surface at a 1pt floor (vs 2pt raw).
 - **Counters** — enter an enemy lineup and `item-stats` is queried with `enemy_hero_ids`, then
   compared to the same hero+rank's baseline. Items are sorted by **raw win-rate delta** (what "top
   movers" means), with a hard sample floor and a ⚠ flag on thin samples — nothing is silently

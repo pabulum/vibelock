@@ -729,9 +729,16 @@ export default function App() {
     setError,
   );
 
+  // Bradley-Terry de-noising for the matchup chips (see lib/matchups): off = raw deltas vs the
+  // hero's own baseline (today's behavior), on = strength-adjusted residuals, so "Tough" means
+  // "counters you" rather than "is currently meta".
+  const [denoiseMatchups, setDenoiseMatchups] = useState(false);
   const matchups = useMemo(
-    () => (counterMatrix && hero ? heroMatchups(counterMatrix, hero.id) : null),
-    [counterMatrix, hero],
+    () =>
+      counterMatrix && hero
+        ? heroMatchups(counterMatrix, hero.id, denoiseMatchups)
+        : null,
+    [counterMatrix, hero, denoiseMatchups],
   );
 
   // The hero's abilities in in-game slot order (signature1→4), as ability ids.
@@ -1280,7 +1287,9 @@ export default function App() {
       </div>
 
       {matchups &&
-        (matchups.tough.length > 0 || matchups.favorable.length > 0) && (
+        (matchups.tough.length > 0 ||
+          matchups.favorable.length > 0 ||
+          denoiseMatchups) && (
           <div className="matchups" ref={matrixRef}>
             {matchups.tough.length > 0 && (
               <div className="mrow">
@@ -1311,8 +1320,28 @@ export default function App() {
                 ))}
               </div>
             )}
+            {denoiseMatchups &&
+              matchups.tough.length === 0 &&
+              matchups.favorable.length === 0 && (
+                <p className="hint">
+                  No matchup moves this hero's win rate beyond what hero
+                  strengths already explain — the raw list was meta, not
+                  counters.
+                </p>
+              )}
             <p className="hint">
               Click a hero to add it below and see what to build against it.{" "}
+              <label
+                className="denoise"
+                title="Separate 'counters you' from 'is simply strong right now': fit one strength number per hero from the whole matrix (Bradley-Terry, the Elo family), predict every pairing from strengths alone, and flag only what's left over. A meta hero stops showing as everyone's counter; genuine rock-paper-scissors stays."
+              >
+                <input
+                  type="checkbox"
+                  checked={denoiseMatchups}
+                  onChange={(e) => setDenoiseMatchups(e.target.checked)}
+                />
+                De-noise (strength-adjusted)
+              </label>{" "}
               <button
                 type="button"
                 className="guidelink"
@@ -2432,7 +2461,7 @@ function MatchupChip({
     <button
       className={`mchip ${tough ? "tough" : "fav"} ${active ? "active" : ""}`}
       onClick={onClick}
-      title={`${hero?.name ?? "?"}: ${(m.winRate * 100).toFixed(0)}% win rate (${m.delta >= 0 ? "+" : ""}${(m.delta * 100).toFixed(0)} vs avg), n=${m.sample.toLocaleString()}${m.laneCsDelta < -10 ? ` · you average ${Math.round(m.laneCsDelta)} CS in lane` : ""}`}
+      title={`${hero?.name ?? "?"}: ${(m.winRate * 100).toFixed(0)}% win rate (${m.delta >= 0 ? "+" : ""}${(m.delta * 100).toFixed(1)}${m.expectedWinRate !== undefined ? ` vs the ${(m.expectedWinRate * 100).toFixed(0)}% hero strengths predict` : " vs avg"}), n=${m.sample.toLocaleString()}${m.laneCsDelta < -10 ? ` · you average ${Math.round(m.laneCsDelta)} CS in lane` : ""}`}
     >
       {hero?.image && <img src={hero.image} alt="" loading="lazy" />}
       <span className="mname">{hero?.name ?? m.enemyHeroId}</span>

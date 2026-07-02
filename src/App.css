@@ -273,6 +273,19 @@ body {
   width: 130px;
 }
 
+/* De-noise toggle inline in the matchups hint line. */
+.matchups .denoise {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  color: var(--muted);
+}
+.matchups .denoise input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 /* "Patch movers" strip — items whose win rate verifiably moved across the patch boundary.
    Same slim row grammar as the enemies/your-heroes strips. */
 .movers {
