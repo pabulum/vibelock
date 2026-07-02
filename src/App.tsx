@@ -48,6 +48,7 @@ import {
   type UrlState,
 } from "./lib/urlState";
 import { blendFlow, blendItemStats, PRIOR_WINDOW_S } from "./lib/patchBlend";
+import { findPatchMovers, type PatchMover } from "./lib/patchMovers";
 import { buildSynergyLookup, singleRecordsFromFlow } from "./lib/synergy";
 import { bestImbueTargets } from "./lib/imbue";
 import { heroMatchups } from "./lib/matchups";
@@ -249,6 +250,9 @@ export default function App() {
   // ~0.85 the day after a patch, fading to ~0 as the patch matures. Surfaced in the meta line so
   // "is this build trustworthy yet?" is a number, not a vibe.
   const [backfill, setBackfill] = useState<number | null>(null);
+  // "What changed this patch" — FDR-gated movers from the two item-stats windows the backfill
+  // already fetches (needs both, so only computed while backfill is on).
+  const [movers, setMovers] = useState<PatchMover[] | null>(null);
 
   // Steam account id (the number in Steam's userdata/<id> path) — the single source shared by the
   // header profile control and the export panel (author stamp), persisted locally. Only public
@@ -416,6 +420,8 @@ export default function App() {
         }).catch(() => null),
       ]);
       const base = baseBlend.flow;
+      // Movers compare the RAW windows (blending them first would test the prior against itself).
+      setMovers(backfillOn ? findPatchMovers(statsFresh, statsPrior, items) : null);
       const BUY_TIME_MIN_MATCHES = 40;
       const timeStats = new Map(statsPrior.map((s) => [s.item_id, s]));
       for (const s of statsFresh)
@@ -898,6 +904,35 @@ export default function App() {
       </header>
 
       {error && <div className="banner error">⚠ {error}</div>}
+
+      {movers && movers.length > 0 && (
+        <div className="movers">
+          <span
+            className="lbl"
+            title="Items whose win rate for this hero verifiably moved across the patch — every sufficiently-sampled item is tested between the pre- and post-patch windows, false discoveries are rate-controlled, and only ≥2pt moves make the list. New items appear once they have a real sample."
+          >
+            Patch movers
+          </span>
+          {movers.map((m) => (
+            <span
+              key={m.item.id}
+              className={`mover${m.isNew ? " newitem" : m.delta > 0 ? " up" : " down"}`}
+              title={
+                m.isNew
+                  ? `New this patch — ${(m.newWinRate * 100).toFixed(1)}% over ${Math.round(m.nNew)} decided games`
+                  : `${(m.prevWinRate * 100).toFixed(1)}% → ${(m.newWinRate * 100).toFixed(1)}% (${Math.round(m.nPrev).toLocaleString()} → ${Math.round(m.nNew).toLocaleString()} decided games)`
+              }
+            >
+              {m.item.name}{" "}
+              <b>
+                {m.isNew
+                  ? "new"
+                  : `${m.delta > 0 ? "▲" : "▼"}${(Math.abs(m.delta) * 100).toFixed(1)}`}
+              </b>
+            </span>
+          ))}
+        </div>
+      )}
 
       {topHeroes && topHeroes.length > 0 && (
         <div className="myheroes">

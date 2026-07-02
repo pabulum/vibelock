@@ -273,6 +273,47 @@ body {
   width: 130px;
 }
 
+/* "Patch movers" strip — items whose win rate verifiably moved across the patch boundary.
+   Same slim row grammar as the enemies/your-heroes strips. */
+.movers {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 22px 0;
+}
+.movers .lbl {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  cursor: help;
+}
+.movers .mover {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: help;
+}
+.movers .mover b {
+  font-weight: 600;
+}
+.movers .up b {
+  color: #7ecf9e;
+}
+.movers .down b {
+  color: #e08989;
+}
+.movers .newitem b {
+  color: var(--accent);
+}
+
 /* "Your heroes" quick-pick strip — the player's most-played heroes as portrait chips,
    shown once a Steam id resolves to a profile. Mirrors the enemies row's layout. */
 .myheroes {
