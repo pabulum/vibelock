@@ -2169,6 +2169,20 @@ function GuideModal({ onClose }: { onClose: () => void }) {
             <ul>
               <li>
                 <strong>
+                  A <span className="role role-universal">CORE</span> seat can
+                  be earned by popularity alone.
+                </strong>{" "}
+                An item ~30%+ of players build every game is seated without a
+                win-rate check — at that popularity its own win rate is
+                mathematically squeezed toward the average and can’t say much
+                either way. It only loses the seat when buyers are demonstrably{" "}
+                <em>and</em> meaningfully behind everyone who skipped it — so a
+                small red number on a{" "}
+                <span className="role role-universal">CORE</span> pick isn’t
+                proof it’s bad, just proof the gap isn’t big enough to call.
+              </li>
+              <li>
+                <strong>
                   Small samples are pulled toward the hero’s average.
                 </strong>{" "}
                 Each win rate is dragged toward the hero average by how little
@@ -2299,12 +2313,26 @@ function GuideModal({ onClose }: { onClose: () => void }) {
                 tightly focused builds rank above kitchen-sink ones.
               </dd>
 
+              <dt>
+                <span className="role role-universal">CORE</span> tag
+              </dt>
+              <dd>
+                Seated by pick rate (~30%+ of players build it every game), not
+                by win rate — at that popularity the win rate can’t move far
+                either way, so it isn’t judged on that number unless buyers are
+                shown to be significantly and meaningfully behind everyone who
+                skipped it. A small red delta here usually isn’t a red flag.
+              </dd>
+
               <dt>core / flex</dt>
               <dd>
-                Core = the committed picks; flex = situational ones. “core N/M”
-                counts our core picks a community build also runs; “flex N/M”
-                counts our situational picks it also flags situational
-                (secondary, not ranked).
+                Core = the committed picks (any role, including{" "}
+                <span className="role role-universal">CORE</span>,{" "}
+                <span className="role role-value">VALUE</span>, and{" "}
+                <span className="role role-filler">FILLER</span>); flex =
+                situational ones. “core N/M” counts our core picks a community
+                build also runs; “flex N/M” counts our situational picks it also
+                flags situational (secondary, not ranked).
               </dd>
 
               <dt>archetype / signature</dt>
