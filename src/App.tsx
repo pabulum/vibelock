@@ -66,7 +66,7 @@ import {
   type RankSel,
 } from "./lib/ranks";
 import { bestSkillBuild, maxOrder } from "./lib/skills";
-import { parseSteamInput } from "./lib/steamId";
+import { parseSteamInput, parseVanityName } from "./lib/steamId";
 import type {
   Ability,
   ArchetypeKey,
@@ -237,6 +237,14 @@ export default function App() {
   const [items, setItems] = useState<Map<number, Item> | null>(null);
   const [patches, setPatches] = useState<Patch[]>([]);
   const [heroId, setHeroId] = useState<number | null>(null);
+  // Whether the player chose a hero deliberately (deep link or any click). Until then the
+  // profile's most-played hero makes a better default than the alphabetical first (Abrams) —
+  // "why am I looking at Abrams" mid-match confusion is real.
+  const heroTouched = useRef(false);
+  const pickHero = (id: number) => {
+    heroTouched.current = true;
+    setHeroId(id);
+  };
   // Rank selection: a floor tier ("Emissary+") or a band ("around my rank" — profile-anchored, or
   // whatever resolved band a shared link carried). Default Eternus floor until a profile pre-selects.
   const [rankSel, setRankSel] = useState<RankSel>(
@@ -322,6 +330,17 @@ export default function App() {
     else if (v === "") localStorage.removeItem("vibelock-steam-id");
   }, [steamId]);
 
+  // A pasted vanity URL (steamcommunity.com/id/<name>) can't be converted arithmetically — resolve
+  // it through the name search automatically (debounced past the paste) and offer the matches.
+  useEffect(() => {
+    const vanity = parseVanityName(steamId);
+    if (!vanity) return;
+    const t = setTimeout(async () => {
+      setSteamMatches(await searchSteamPlayers(vanity).catch(() => []));
+    }, 350);
+    return () => clearTimeout(t);
+  }, [steamId]);
+
   // Load assets once, then apply any deep-link selection now that we can resolve slugs/timestamps.
   useEffect(() => {
     Promise.all([getHeroes(), getItems(), getPatches(), getAbilities()])
@@ -332,7 +351,9 @@ export default function App() {
         setAbilities(a);
         if (h.length) {
           const idBySlug = new Map(h.map((x) => [slugify(x.name), x.id]));
-          setHeroId((url0.hero && idBySlug.get(url0.hero)) || h[0].id);
+          const linked = url0.hero ? idBySlug.get(url0.hero) : undefined;
+          if (linked) heroTouched.current = true; // a deep-linked hero is a deliberate choice
+          setHeroId(linked || h[0].id);
           if (url0.enemies?.length) {
             const ids = url0.enemies
               .map((s) => idBySlug.get(s))
@@ -394,16 +415,18 @@ export default function App() {
           (x): x is { s: PlayerHeroStat; hero: Hero } => x.hero !== undefined,
         );
       const recent = withHero.filter((x) => nowS - x.s.last_played < RECENT_S);
-      setHeroPool(
-        (recent.length >= 3 ? recent : withHero)
-          .sort((a, b) => b.s.matches_played - a.s.matches_played)
-          .slice(0, 6)
-          .map((x) => ({
-            hero: x.hero,
-            matches: x.s.matches_played,
-            wins: x.s.wins,
-          })),
-      );
+      const pool = (recent.length >= 3 ? recent : withHero)
+        .sort((a, b) => b.s.matches_played - a.s.matches_played)
+        .slice(0, 6)
+        .map((x) => ({
+          hero: x.hero,
+          matches: x.s.matches_played,
+          wins: x.s.wins,
+        }));
+      setHeroPool(pool);
+      // Until the player picks a hero deliberately, their most-played hero is the honest default —
+      // nobody wants to realize mid-match they've been reading Abrams numbers on another hero.
+      if (!heroTouched.current && pool[0]) setHeroId(pool[0].hero.id);
       setPlayedHeroIds(
         new Set(
           stats.filter((s) => s.matches_played >= 10).map((s) => s.hero_id),
@@ -1097,7 +1120,7 @@ export default function App() {
             Hero
             <select
               value={heroId ?? ""}
-              onChange={(e) => setHeroId(Number(e.target.value))}
+              onChange={(e) => pickHero(Number(e.target.value))}
             >
               {heroes.map((h) => (
                 <option key={h.id} value={h.id}>
@@ -1172,11 +1195,14 @@ export default function App() {
                 setSteamMatches(null);
               }}
               onKeyDown={async (e) => {
-                // A value that doesn't parse as an id is a display name — search on Enter.
+                // A value that doesn't parse as an id is a name or vanity URL — search on Enter.
                 if (e.key !== "Enter") return;
                 const q = steamId.trim();
                 if (!q || parseSteamInput(q) !== null) return;
-                setSteamMatches(await searchSteamPlayers(q).catch(() => []));
+                const query = parseVanityName(q) ?? q;
+                setSteamMatches(
+                  await searchSteamPlayers(query).catch(() => []),
+                );
               }}
               onBlur={() => setTimeout(() => setSteamMatches(null), 200)}
             />
@@ -1264,7 +1290,7 @@ export default function App() {
             <button
               key={h.id}
               className={`chip${h.id === heroId ? " active" : ""}`}
-              onClick={() => setHeroId(h.id)}
+              onClick={() => pickHero(h.id)}
               title={
                 `you: ${Math.round(winRate * 100)}% over ${matches} matches` +
                 (meta
@@ -1289,7 +1315,7 @@ export default function App() {
                 <button
                   key={h.id}
                   className={`chip try${h.id === heroId ? " active" : ""}`}
-                  onClick={() => setHeroId(h.id)}
+                  onClick={() => pickHero(h.id)}
                   title={`${(metaWinRate * 100).toFixed(1)}% at this rank/patch − ~${(NEW_HERO_TAX * 100).toFixed(1)}pt learning tax ≈ ${(taxed * 100).toFixed(1)}% while you pick them up`}
                 >
                   <img src={h.image} alt="" loading="lazy" />
@@ -1316,36 +1342,45 @@ export default function App() {
 
         {build && (
           <div className="meta">
-            <strong>{build.hero.name}</strong>
-            {archetypeSet?.flex && activeArchetype
-              ? ` · ${activeArchetype.label}`
-              : ""}{" "}
-            · {build.rankLabel} · {patchLabel}
-            {backfillLabel} · {build.population.matches.toLocaleString()}{" "}
-            matches · avg game {Math.round(build.population.avgDurationS / 60)}{" "}
-            min · {(build.population.baselineWinRate * 100).toFixed(0)}% avg WR
-            (rows show ± vs this) ·{" "}
-            <span
-              className={
-                (displayBuild ?? build).standingSlots > SLOT_CAP
-                  ? "warn"
-                  : undefined
-              }
-            >
-              {(displayBuild ?? build).standingSlots}/{SLOT_CAP} standing slots
-            </span>
-            {lowPopulation && (
-              <span className="warn"> · ⚠ low sample, treat as noisy</span>
-            )}{" "}
-            ·{" "}
-            <button
-              type="button"
-              className="guidelink"
-              onClick={() => setShowExport(true)}
-              title="Add this build to your in-game build list so the shop guides you through it"
-            >
-              ⬇ Export to in-game build
-            </button>
+            {build.hero.image && (
+              // The unmissable "you are looking at THIS hero" anchor — a friend read Abrams
+              // numbers mid-match while playing someone else; a name alone is too quiet.
+              <img className="metaface" src={build.hero.image} alt="" />
+            )}
+            <div className="metabody">
+              <strong>{build.hero.name}</strong>
+              {archetypeSet?.flex && activeArchetype
+                ? ` · ${activeArchetype.label}`
+                : ""}{" "}
+              · {build.rankLabel} · {patchLabel}
+              {backfillLabel} · {build.population.matches.toLocaleString()}{" "}
+              matches · avg game{" "}
+              {Math.round(build.population.avgDurationS / 60)} min ·{" "}
+              {(build.population.baselineWinRate * 100).toFixed(0)}% avg WR
+              (rows show ± vs this) ·{" "}
+              <span
+                className={
+                  (displayBuild ?? build).standingSlots > SLOT_CAP
+                    ? "warn"
+                    : undefined
+                }
+              >
+                {(displayBuild ?? build).standingSlots}/{SLOT_CAP} standing
+                slots
+              </span>
+              {lowPopulation && (
+                <span className="warn"> · ⚠ low sample, treat as noisy</span>
+              )}{" "}
+              ·{" "}
+              <button
+                type="button"
+                className="guidelink"
+                onClick={() => setShowExport(true)}
+                title="Add this build to your in-game build list so the shop guides you through it"
+              >
+                ⬇ Export to in-game build
+              </button>
+            </div>
           </div>
         )}
 

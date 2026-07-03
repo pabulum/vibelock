@@ -509,11 +509,29 @@ body {
 }
 
 .meta {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
   padding: 14px 22px 4px;
   color: var(--muted);
 }
 .meta strong {
   color: var(--text);
+  font-size: 15px;
+}
+/* The selected hero's face — the unmissable "you are looking at THIS hero" anchor. */
+.metaface {
+  flex: 0 0 auto;
+  width: 54px;
+  height: 54px;
+  border-radius: 10px;
+  object-fit: cover;
+  object-position: top;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+}
+.metabody {
+  min-width: 0;
 }
 .warn {
   color: #e0b341;

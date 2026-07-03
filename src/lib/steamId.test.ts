@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { parseSteamInput } from "./steamId";
+import { parseSteamInput, parseVanityName } from "./steamId";
+
+describe("parseVanityName", () => {
+  it("extracts the slug from a vanity URL", () => {
+    expect(parseVanityName("https://steamcommunity.com/id/larrylizard/")).toBe(
+      "larrylizard",
+    );
+    expect(parseVanityName("steamcommunity.com/id/some_name?tab=x")).toBe(
+      "some_name",
+    );
+  });
+
+  it("returns null for non-vanity input", () => {
+    expect(
+      parseVanityName("https://steamcommunity.com/profiles/76561199015904602"),
+    ).toBeNull();
+    expect(parseVanityName("larrylizard")).toBeNull();
+  });
+});
 
 describe("parseSteamInput", () => {
   it("passes a plain account id through", () => {

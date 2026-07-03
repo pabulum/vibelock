@@ -7,6 +7,14 @@
 
 const STEAM64_BASE = 76561197960265728n;
 
+/** The vanity slug from a steamcommunity.com/id/<name> URL — the one form that CAN'T be converted
+ * arithmetically. It resolves through the name-search endpoint instead (the slug is usually the
+ * display name or close to it), so the caller should feed it to search rather than reject it. */
+export function parseVanityName(raw: string): string | null {
+  const m = raw.trim().match(/steamcommunity\.com\/id\/([^/?#\s]+)/i);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 /** Extract an account id from whatever the player pasted: a plain account id, a steamID64
  * (17 digits), or a steamcommunity.com/profiles/<steam64> URL. Null when it's none of those. */
 export function parseSteamInput(raw: string): number | null {
