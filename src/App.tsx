@@ -1348,11 +1348,13 @@ export default function App() {
               <img className="metaface" src={build.hero.image} alt="" />
             )}
             <div className="metabody">
-              <strong>{build.hero.name}</strong>
-              {archetypeSet?.flex && activeArchetype
-                ? ` · ${activeArchetype.label}`
-                : ""}{" "}
-              · {build.rankLabel} · {patchLabel}
+              <div className="metatitle">
+                {build.hero.name}
+                {archetypeSet?.flex && activeArchetype && (
+                  <span className="metaarch">{activeArchetype.label}</span>
+                )}
+              </div>
+              {build.rankLabel} · {patchLabel}
               {backfillLabel} · {build.population.matches.toLocaleString()}{" "}
               matches · avg game{" "}
               {Math.round(build.population.avgDurationS / 60)} min ·{" "}

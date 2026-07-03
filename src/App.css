@@ -508,30 +508,51 @@ body {
   display: flow-root;
 }
 
+/* The build header: hero portrait + name as a real title, the stat line tucked under it —
+   not a face floating beside a wall of muted prose. */
 .meta {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px 22px 4px;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 22px 4px;
   color: var(--muted);
 }
-.meta strong {
-  color: var(--text);
-  font-size: 15px;
-}
-/* The selected hero's face — the unmissable "you are looking at THIS hero" anchor. */
+/* The selected hero's card — the unmissable "you are looking at THIS hero" anchor. Native
+   280:380 card aspect, uncropped: any square/circle crop beheads some hero on the roster. */
 .metaface {
   flex: 0 0 auto;
-  width: 54px;
-  height: 54px;
-  border-radius: 10px;
+  width: 57px;
+  height: 76px;
+  border-radius: 8px;
   object-fit: cover;
-  object-position: top;
-  background: var(--panel2);
+  background: linear-gradient(165deg, var(--panel2) 0%, var(--panel) 80%);
   border: 1px solid var(--line);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
 }
 .metabody {
   min-width: 0;
+}
+.metatitle {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 3px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--text);
+  line-height: 1.15;
+}
+.metaarch {
+  font: 600 11px/1.6 var(--font-tagline);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--purple);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 8px;
+  align-self: center;
 }
 .warn {
   color: #e0b341;

@@ -1669,7 +1669,11 @@ function toCandidate(
   };
 }
 
-const COMP_DEMOTE = 0.03; // effect floor: a pick this far below the matchup lean is "weak vs comp"
+const COMP_DEMOTE = 0.015; // effect floor: a pick this far below the matchup lean is "weak vs comp".
+// Calibrated to the comp edge's *shrunk* scale (counters.ts EDGE_PRIOR_K): posterior-mean edges on a
+// full 6-enemy comp live within roughly ±2pt (true per-enemy spread τ_c ≈ 0.8pt ⇒ comp sd ≈ 2pt), so
+// the old 3pt floor — set when edges were noisy raw means — was unreachable. 1.5pt matches the counter
+// marks' MIN_EDGE: the same "practically meaningful" bar on both the promote and demote side.
 
 /** The ▼ demote gate: flag a pick weak-vs-comp only when its negative edge clears BOTH the effect
  * floor and {@link GATE_Z} standard errors — the mirror image of `significantlyHigher` and the same

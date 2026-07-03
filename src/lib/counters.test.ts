@@ -26,18 +26,19 @@ const items = new Map([1, 2].map((id) => [id, item(id)]));
 const baseline = [stat(1, 500, 500), stat(2, 50_000, 50_000)];
 
 describe("computeItemCounters edgeByItem", () => {
-  it("returns a shrunk signed edge with a sampling error that tightens with n", () => {
+  it("shrinks the edge hard on modest evidence, trusts it as evidence mounts", () => {
     const perEnemy = [
       { enemyHeroId: 7, stats: [stat(1, 400, 600), stat(2, 100_000, 100_000)] }, // item 1: 40% vs 50% base
     ];
     const { edgeByItem } = computeItemCounters(baseline, perEnemy, items);
     const e = edgeByItem.get(1)!;
     expect(e.edge).toBeLessThan(0); // it under-performs vs this enemy
-    expect(e.edge).toBeGreaterThan(-0.1); // …but shrunk toward 0 (K games of "no edge" prior)
-    // Delta-method SE of the shrunk weighted mean: √(n·p(1−p)) / (n + K), K = 60.
-    expect(e.se).toBeCloseTo(Math.sqrt(1000 * 0.4 * 0.6) / 1060, 5);
+    // 1000 games against the K = 4000 prior keeps only n/(n+K) = 1/5 of the −10 pt raw edge.
+    expect(e.edge).toBeCloseTo(-0.02, 2);
+    // Delta-method SE of the shrunk weighted mean: √(n·p(1−p)) / (n + K).
+    expect(e.se).toBeCloseTo(Math.sqrt(1000 * 0.4 * 0.6) / 5000, 5);
 
-    // 25× the sample, same rate → the SE tightens (≈1/√n); the edge stays strongly negative.
+    // 25× the sample, same rate → the prior loses: 25000/29000 ≈ 86% of the raw edge survives.
     // (Not exactly −10 pts: the item now also weighs more in the lean it's centered on.)
     const bigger = computeItemCounters(
       baseline,
@@ -50,19 +51,46 @@ describe("computeItemCounters edgeByItem", () => {
       items,
     );
     const eBig = bigger.edgeByItem.get(1)!;
-    expect(eBig.se).toBeLessThan(e.se / 4);
-    expect(eBig.edge).toBeLessThan(-0.08);
+    expect(eBig.edge).toBeLessThan(-0.07);
+    expect(Math.abs(eBig.edge)).toBeGreaterThan(Math.abs(e.edge) * 3);
   });
 
-  it("pools the edge and its error across enemies", () => {
-    const perEnemy = [
+  it("SUMS the edge across enemies — a full comp stacks, it doesn't average", () => {
+    const vsOne = [
       { enemyHeroId: 7, stats: [stat(1, 400, 600), stat(2, 100_000, 100_000)] },
+    ];
+    const vsTwo = [
+      ...vsOne,
       { enemyHeroId: 8, stats: [stat(1, 400, 600), stat(2, 100_000, 100_000)] },
     ];
-    const { edgeByItem } = computeItemCounters(baseline, perEnemy, items);
-    const e = edgeByItem.get(1)!;
-    // Two identical 1000-game cells: Σn·p(1−p) doubles, denominator grows → smaller SE than one cell.
-    expect(e.se).toBeCloseTo(Math.sqrt(2 * 1000 * 0.4 * 0.6) / 2060, 5);
+    const one = computeItemCounters(baseline, vsOne, items).edgeByItem.get(1)!;
+    const two = computeItemCounters(baseline, vsTwo, items).edgeByItem.get(1)!;
+    // Equally bad vs both enemies → the comp edge doubles (the old weighted mean stayed flat).
+    expect(two.edge).toBeCloseTo(2 * one.edge, 10);
+    // …and the noise adds too: SE grows by √2 rather than tightening as if it were more
+    // evidence about one number. √(2·n·p(1−p)/(n+K)²), n = 1000, K = 4000.
+    expect(two.se).toBeCloseTo(
+      Math.sqrt((2 * 1000 * 0.4 * 0.6) / 5000 ** 2),
+      5,
+    );
+    expect(two.se).toBeCloseTo(Math.SQRT2 * one.se, 10);
+  });
+
+  it("treats enemies below the sample floor as no evidence, not as dilution", () => {
+    const vsOne = [
+      { enemyHeroId: 7, stats: [stat(1, 400, 600), stat(2, 100_000, 100_000)] },
+    ];
+    const withThin = [
+      ...vsOne,
+      // 20 games vs enemy 8 — under MIN_SAMPLE, so it must not touch the comp edge.
+      { enemyHeroId: 8, stats: [stat(1, 5, 15), stat(2, 100_000, 100_000)] },
+    ];
+    const one = computeItemCounters(baseline, vsOne, items).edgeByItem.get(1)!;
+    const two = computeItemCounters(baseline, withThin, items).edgeByItem.get(
+      1,
+    )!;
+    expect(two.edge).toBeCloseTo(one.edge, 10);
+    expect(two.se).toBeCloseTo(one.se, 10);
   });
 });
 
@@ -77,7 +105,7 @@ describe("isWeakVsComp (the ▼ demote gate)", () => {
   });
 
   it("does NOT flag a trivially small edge no matter how certain", () => {
-    expect(isWeakVsComp({ edge: -0.02, se: 0.0001 })).toBe(false);
+    expect(isWeakVsComp({ edge: -0.01, se: 0.0001 })).toBe(false);
   });
 
   it("never flags a positive or zero edge", () => {

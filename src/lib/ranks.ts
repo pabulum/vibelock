@@ -53,12 +53,16 @@ export function rankBandLabel(lo: number, hi: number): string {
 /** A rank selection: a floor tier ("Emissary+") or an inclusive tier band ("around my rank"). */
 export type RankSel = number | { lo: number; hi: number };
 
-/** The profile-anchored default band for a player at `tier`: their own tier through two above
- * (clamped). Anchored where matchmaking actually puts them, tilted toward the ranks they're
- * climbing into — and capped, so the high-mid population pile-up can't dominate the slice. */
+/** The profile-anchored default band for a player at `tier`: one major rank either side,
+ * clamped. The anchor (the API's MMR estimate) tracks the average badge of the lobbies the
+ * player actually lands in — for a duo it sits *between* the partners' own badges — and
+ * ranked lobbies stay within about one major rank of their average. So a centered band IS
+ * "the games you end up in"; the old [tier, tier+2] floor-style band skewed the slice toward
+ * lobbies two ranks up, which is also the statistically expensive direction (measured item-WR
+ * drift: one band down ≈ 0.9pt, one band up ≈ 1.7pt). */
 export function bandForTier(tier: number): { lo: number; hi: number } {
-  const lo = Math.max(0, Math.min(tier, 11));
-  return { lo, hi: Math.min(lo + 2, 11) };
+  const t = Math.max(1, Math.min(tier, 11));
+  return { lo: Math.max(1, t - 1), hi: Math.min(t + 1, 11) };
 }
 
 /** The average_badge window a selection queries: floor ⇒ min only; band ⇒ min and max. */

@@ -39,11 +39,22 @@ const COUNTER_PRIOR_K = 60; // empirical-Bayes prior strength, in "equivalent ga
 // centered edge toward 0 (the null "no counter"). ~60 games of evidence before we trust an edge: thin
 // cells get pulled to ~no-edge, well-sampled ones keep theirs. Lower ⇒ more recall (trust small samples
 // sooner); higher ⇒ more caution. Modest on purpose — the lower-confidence bound is the main guard.
+const EDGE_PRIOR_K = 4000; // prior strength for the comp-edge RANKING pathway — much stiffer than the
+// marks' K, because no downstream confidence gate protects the re-rank: the posterior mean must be honest
+// on its own. Derived, not tuned: K = p(1−p)/τ_c², where τ_c is the TRUE cross-item spread of per-enemy
+// centered edges, measured as the cross-half covariance of edges over two disjoint time halves (noise is
+// independent across halves, so it cancels in the covariance — immune to the correlated-SE problem where
+// item cells share matches). Measured over Paradox and Seven vs 5 enemies each (Emissary+, ~5-week
+// halves): τ_c ≈ 0.6–1.2pt with a couple of enemies at ~0 (vs Abrams/Geist item choice barely moves WR);
+// median ≈ 0.8pt ⇒ K ≈ 0.25/0.008² ≈ 3,900. Raw sums without this shrink split-half replicate at only
+// r ≈ 0.14 — i.e. mostly noise — so the shrink is what makes ranking on the sum defensible.
 
 /** An item's signed comp edge with its sampling error, so downstream decisions (the build
  * re-rank's "weak vs comp" demote) can require *confidence*, not just a threshold on the
- * point estimate. `se` is the delta-method standard error of the shrunk weighted mean:
- * √(Σ nᵢ·pᵢ(1−pᵢ)) / (Σn + K) — each enemy cell contributes its binomial variance. */
+ * point estimate. The edge is the SUM of the per-enemy shrunk centered edges (see below for
+ * why sum, not mean), so `se` sums the variances too: √(Σ nᵢ·pᵢ(1−pᵢ)/(nᵢ+K)²) — more
+ * enemies means a bigger possible edge *and* more accumulated noise, and the demote gate
+ * pays for both. */
 export interface CompEdge {
   edge: number;
   se: number;
@@ -52,9 +63,18 @@ export interface CompEdge {
 /** Join per-enemy item stats to the baseline. Returns:
  *  - `counters`: one entry per item that genuinely over-performs vs ≥1 enemy (above that
  *    enemy's matchup lean), with per-enemy marks (strongest first) — for the build tags.
- *  - `edgeByItem`: every item's *signed* comp edge (shrunk sample-weighted mean of its per-enemy
- *    centered edges, so it can be negative) with its standard error — used to re-rank the build
- *    for the comp and to gate the "weak vs comp" demote on significance. */
+ *  - `edgeByItem`: every item's *signed* comp edge with its standard error — used to re-rank
+ *    the build for the comp and to gate the "weak vs comp" demote on significance.
+ *
+ * The comp edge is the SUM of the per-enemy shrunk centered edges, not their mean. Each
+ * per-enemy edge is a conditional measured in real games where that enemy was 1-of-6 (the
+ * exposure dilution is already priced into the conditional), and centering on the matchup
+ * lean removes the background contribution of typical co-occurring enemies — so under an
+ * additive model, summing the centered conditionals approximates conditioning on the whole
+ * selected comp. A mean would cap a full 6-enemy team at single-matchup scale: three enemies
+ * your item answers at +2 pts each should read +6, not +2. Enemies below the sample floor
+ * contribute 0 (the shrink null), so partial coverage degrades conservatively, and each
+ * cell is shrunk toward 0 by K games *before* summing so one thin cell can't swing the total. */
 export function computeItemCounters(
   baseline: ItemStat[],
   perEnemy: Array<{ enemyHeroId: number; stats: ItemStat[] }>,
@@ -67,9 +87,8 @@ export function computeItemCounters(
   }
 
   const byItem = new Map<number, ItemCounters>();
-  const edgeSum = new Map<number, number>(); // Σ edge·n, for the signed average
-  const edgeWeight = new Map<number, number>(); // Σ n
-  const edgeVarSum = new Map<number, number>(); // Σ n·p(1−p), for the weighted mean's variance
+  const edgeSum = new Map<number, number>(); // Σ over enemies of the shrunk centered edge
+  const edgeVarSum = new Map<number, number>(); // Σ of each shrunk edge's variance
   for (const { enemyHeroId, stats } of perEnemy) {
     // Pass 1: raw deltas for every item over the sample floor, plus the matchup lean
     // (sample-weighted mean shift) — what an "average" item does vs this enemy.
@@ -101,19 +120,25 @@ export function computeItemCounters(
     // (lower bound positive) *and* it's practically meaningful (shrunk edge ≥ MIN_EDGE).
     for (const x of raw) {
       const edge = x.rawDelta - lean;
-      edgeSum.set(x.item.id, (edgeSum.get(x.item.id) ?? 0) + edge * x.n);
-      edgeWeight.set(x.item.id, (edgeWeight.get(x.item.id) ?? 0) + x.n);
-      edgeVarSum.set(
-        x.item.id,
-        (edgeVarSum.get(x.item.id) ?? 0) + x.n * x.winRate * (1 - x.winRate),
-      );
-
       // Empirical-Bayes shrink toward 0 (prior = no counter, worth COUNTER_PRIOR_K games), then a
       // lower-confidence bound on the edge: shrunk mean − GATE_Z posterior SDs. The edge's noise is the
       // per-enemy mark's binomial SE (the reference — item's overall WR + the lean — is a large aggregate,
       // so its own noise is negligible), regularized by the prior to concentration n + K. Mirrors
       // buildGenerator's shrinkToBaseline / lowerConfidenceWinRate, but on the centered edge.
       const shrunkEdge = (x.n * edge) / (x.n + COUNTER_PRIOR_K);
+      // Comp edge: sum this enemy's shrunk edge into the item's total — with the stiff
+      // EDGE_PRIOR_K, not the marks' loose K (see the constants). Var of the shrunk mean
+      // by the delta method: (n/(n+K))²·p(1−p)/n = n·p(1−p)/(n+K)².
+      edgeSum.set(
+        x.item.id,
+        (edgeSum.get(x.item.id) ?? 0) + (x.n * edge) / (x.n + EDGE_PRIOR_K),
+      );
+      edgeVarSum.set(
+        x.item.id,
+        (edgeVarSum.get(x.item.id) ?? 0) +
+          (x.n * x.winRate * (1 - x.winRate)) / (x.n + EDGE_PRIOR_K) ** 2,
+      );
+
       const sd = Math.sqrt(
         (x.winRate * (1 - x.winRate)) / (x.n + COUNTER_PRIOR_K + 1),
       );
@@ -142,14 +167,13 @@ export function computeItemCounters(
     }
   }
 
-  // Shrink the per-item comp edge toward 0 too (prior = no edge, worth COUNTER_PRIOR_K games), so a thin
-  // item doesn't swing the build re-rank: Σedge·n / (Σn + K). The SE is the shrunk weighted mean's
-  // delta-method error — thin evidence ⇒ wide SE ⇒ downstream confidence gates won't act on it.
+  // Each per-enemy cell was already shrunk toward 0 before summing, so the total needs no
+  // second shrink; the summed SE keeps the demote gate honest as enemies stack up.
   const edgeByItem = new Map<number, CompEdge>();
-  for (const [id, w] of edgeWeight)
+  for (const [id, s] of edgeSum)
     edgeByItem.set(id, {
-      edge: (edgeSum.get(id) ?? 0) / (w + COUNTER_PRIOR_K),
-      se: Math.sqrt(edgeVarSum.get(id) ?? 0) / (w + COUNTER_PRIOR_K),
+      edge: s,
+      se: Math.sqrt(edgeVarSum.get(id) ?? 0),
     });
 
   const counters = [...byItem.values()];
