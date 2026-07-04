@@ -2230,11 +2230,13 @@ function GuideModal({ onClose }: { onClose: () => void }) {
               Staples and per-category soul balance are preserved.
             </p>
             <p>
-              A counter is only marked when its edge over the matchup is large
-              enough to be real at that sample, and — because every item is
-              tested against every threat at once — we cap how many false marks
-              slip through, so most of what you see is genuine. Counter numbers
-              are raw, so they read cleanest one threat at a time.
+              A counter is only marked when it beats the matchup&rsquo;s
+              expected shift <em>for its own buy timing</em> — some enemies
+              spike early and fall off (an item bought at 35 minutes
+              doesn&rsquo;t get credit for the enemy&rsquo;s late-game fade),
+              and the edge must be large enough to be real at that sample.
+              Counter numbers are raw, so they read cleanest one threat at a
+              time.
             </p>
           </section>
 

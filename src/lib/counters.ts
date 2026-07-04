@@ -8,6 +8,25 @@
 // tagging all of them is noise. The signal is the item that beats that lean — so we
 // subtract the sample-weighted mean shift and keep the item's *centered* edge.
 //
+// The lean is estimated PER GAME PHASE (the same buy-time buckets as the display labels),
+// shrunk toward the matchup's global lean. One number per matchup is confounded by phase for
+// spike/falloff enemies: vs Seven the 30m+ bucket runs +1.1–1.7 pts above his global lean
+// (he falls off late), so under a global lean every late-bought T4 stat item read as a
+// "counter" merely for being bought in the phase where Seven is weak — corr(avg buy minute,
+// centered edge) measured ≈ +0.72 vs Seven, and Lucky Shot/Frenzy outranked Knockdown.
+// Phase-centering removes exactly that: an item now has to beat the lean *for its own buy
+// phase*. See LEAN_PRIOR_K for the shrink calibration.
+//
+// The edge is left *diluted*, deliberately. The baseline slice includes the games that
+// contain the enemy (Seven is on the enemy team in ~25% of low-rank games), so the raw delta
+// understates the enemy-present-vs-absent contrast by ×(1−presence). Scaling it back up
+// ("de-diluting") sounds more truthful but is wrong for every decision this number feeds:
+// the item's *overall* WR already banks its counter games in proportion to presence, so
+// overall WR + the diluted delta IS the conditional "WR given this comp" — the re-rank adds
+// the edge onto an overall-WR ranking, and de-diluting would double-count the counter effect.
+// The marks stay coherent too: "vs Seven this item beats its expected showing by +X" is a
+// statement made entirely inside vs-Seven games.
+//
 // Ranking the centered edge — recall over precision. This is a build *recommender*: hiding a
 // plausibly-good counter (a false negative) costs the player more than surfacing a marginal one,
 // so we mirror the build generator's machinery (empirical-Bayes shrinkage + lower-confidence-bound,
@@ -32,13 +51,26 @@ const PHASE_LABELS = ["Lane", "Early mid", "Mid", "Late"];
 const MIN_SAMPLE = 50; // candidacy floor: below this a cell can't inform the lean or earn a mark. Kept low
 // because the shrink + lower-bound below does the real noise control — it's not a hard significance cutoff.
 const LOW_SAMPLE = 150; // below this, show but flag as shaky
-const MIN_EDGE = 0.015; // effect floor: the *shrunk* edge must still clear ~1.5 pts to be worth surfacing
-// (a confident-but-trivial edge isn't a counter). Half the old 3-pt floor — the lower bound, not a fat
-// fixed cutoff, now guards against noise.
+const MIN_EDGE = 0.01; // effect floor: the *shrunk* edge must still clear ~1 pt to be worth surfacing
+// (a confident-but-trivial edge isn't a counter). Calibrated to the real scale of single-item counter
+// effects: phase-centered, the best item vs a given enemy measures ≈ +2 pts and genuine answers like
+// Knockdown vs low-rank Seven sit at +1–2, so the old 1.5-pt floor cut away much of the true range.
+// 1 pt = one extra win per hundred games from a single slot. The confidence bar (GATE_Z · sd) is
+// separate and untouched — thin samples still self-reject.
 const COUNTER_PRIOR_K = 60; // empirical-Bayes prior strength, in "equivalent games", for shrinking each
 // centered edge toward 0 (the null "no counter"). ~60 games of evidence before we trust an edge: thin
 // cells get pulled to ~no-edge, well-sampled ones keep theirs. Lower ⇒ more recall (trust small samples
 // sooner); higher ⇒ more caution. Modest on purpose — the lower-confidence bound is the main guard.
+const LEAN_PRIOR_K = 40_000; // prior strength (in slot-samples) for shrinking each phase bucket's lean
+// toward the matchup's global lean. The phase gradient is real but ENEMY-SPECIFIC — measured 2026-07
+// (5 enemies × 2 rank bands, aggregate N so the offsets are noise-free): Seven's late bucket +1.1/+1.7 pt
+// (falls off), Haze at high ranks −1.4 pt late (scales), Abrams/Lash/Vindicta ≈ flat ±0.1 — so thin
+// buckets must not be allowed to invent a gradient that mostly doesn't exist. Derived like EDGE_PRIOR_K:
+// K = c·p(1−p)/τ² with τ ≈ 0.43 pt (RMS true bucket offset across those 40 bucket measurements) and
+// c ≈ 3 for within-game clustering — one game lands ~3 of the hero's item-cells in the same bucket, all
+// sharing that game's outcome, so a slot-sample carries ~1/3 of an independent game's information.
+// 3 × 0.25/0.0043² ≈ 40k. A bucket with no weight, or far under K, just uses the global lean — the
+// pre-phase behavior — so this strictly refines, never degrades, the centering.
 const EDGE_PRIOR_K = 4000; // prior strength for the comp-edge RANKING pathway — much stiffer than the
 // marks' K, because no downstream confidence gate protects the re-rank: the posterior mean must be honest
 // on its own. Derived, not tuned: K = p(1−p)/τ_c², where τ_c is the TRUE cross-item spread of per-enemy
@@ -47,7 +79,9 @@ const EDGE_PRIOR_K = 4000; // prior strength for the comp-edge RANKING pathway �
 // item cells share matches). Measured over Paradox and Seven vs 5 enemies each (Emissary+, ~5-week
 // halves): τ_c ≈ 0.6–1.2pt with a couple of enemies at ~0 (vs Abrams/Geist item choice barely moves WR);
 // median ≈ 0.8pt ⇒ K ≈ 0.25/0.008² ≈ 3,900. Raw sums without this shrink split-half replicate at only
-// r ≈ 0.14 — i.e. mostly noise — so the shrink is what makes ranking on the sum defensible.
+// r ≈ 0.14 — i.e. mostly noise — so the shrink is what makes ranking on the sum defensible. (τ_c was
+// measured under the old global-lean centering; phase-centering removes some spurious cross-item spread,
+// so if anything τ_c is now a touch smaller and this K errs slightly loose — acceptable, recall-first.)
 
 /** An item's signed comp edge with its sampling error, so downstream decisions (the build
  * re-rank's "weak vs comp" demote) can require *confidence*, not just a threshold on the
@@ -91,7 +125,8 @@ export function computeItemCounters(
   const edgeVarSum = new Map<number, number>(); // Σ of each shrunk edge's variance
   for (const { enemyHeroId, stats } of perEnemy) {
     // Pass 1: raw deltas for every item over the sample floor, plus the matchup lean
-    // (sample-weighted mean shift) — what an "average" item does vs this enemy.
+    // (sample-weighted mean shift) — what an "average" item does vs this enemy — both
+    // globally and per buy-time phase bucket.
     const raw: Array<{
       item: Item;
       winRate: number;
@@ -101,6 +136,8 @@ export function computeItemCounters(
     }> = [];
     let shiftSum = 0;
     let shiftWeight = 0;
+    const bucketShiftSum = new Array<number>(PHASE_LABELS.length).fill(0);
+    const bucketShiftWeight = new Array<number>(PHASE_LABELS.length).fill(0);
     for (const r of stats) {
       const n = r.wins + r.losses;
       if (n < MIN_SAMPLE) continue;
@@ -112,19 +149,33 @@ export function computeItemCounters(
       raw.push({ item, winRate, rawDelta, n, buyT: r.avg_buy_time_s });
       shiftSum += rawDelta * n;
       shiftWeight += n;
+      const b = bucketForTime(r.avg_buy_time_s);
+      bucketShiftSum[b] += rawDelta * n;
+      bucketShiftWeight[b] += n;
     }
-    const lean = shiftWeight > 0 ? shiftSum / shiftWeight : 0;
+    const globalLean = shiftWeight > 0 ? shiftSum / shiftWeight : 0;
+    // Each phase's lean, shrunk toward the global lean by LEAN_PRIOR_K: well-fed buckets keep
+    // their measured phase offset (Seven's late-game falloff), thin ones fall back to the
+    // matchup-wide lean rather than minting a gradient from noise.
+    const leanByBucket = bucketShiftSum.map((sum, b) => {
+      const w = bucketShiftWeight[b];
+      if (w <= 0) return globalLean;
+      return globalLean + (w / (w + LEAN_PRIOR_K)) * (sum / w - globalLean);
+    });
 
-    // Pass 2: the centered edge per item. Accumulate the signed average (all items, for the build
-    // re-rank), then shrink each edge toward the "no counter" null and keep it only if we're confident
-    // (lower bound positive) *and* it's practically meaningful (shrunk edge ≥ MIN_EDGE).
+    // Pass 2: the centered edge per item — each item against the lean *for its own buy phase*.
+    // Accumulate the signed average (all items, for the build re-rank), then shrink each edge toward
+    // the "no counter" null and keep it only if we're confident (lower bound positive) *and* it's
+    // practically meaningful (shrunk edge ≥ the effect floor).
     for (const x of raw) {
-      const edge = x.rawDelta - lean;
+      const edge = x.rawDelta - leanByBucket[bucketForTime(x.buyT)];
       // Empirical-Bayes shrink toward 0 (prior = no counter, worth COUNTER_PRIOR_K games), then a
       // lower-confidence bound on the edge: shrunk mean − GATE_Z posterior SDs. The edge's noise is the
-      // per-enemy mark's binomial SE (the reference — item's overall WR + the lean — is a large aggregate,
-      // so its own noise is negligible), regularized by the prior to concentration n + K. Mirrors
-      // buildGenerator's shrinkToBaseline / lowerConfidenceWinRate, but on the centered edge.
+      // per-enemy mark's binomial SE — the reference (item's overall WR + the bucket lean) is a large
+      // aggregate whose own noise is negligible: the LEAN_PRIOR_K shrink bounds a thin bucket's residual
+      // lean error near τ ≈ 0.4 pt, an order under the item SE at the sample floor (~5 pts at n = 50).
+      // Regularized by the prior to concentration n + K; mirrors buildGenerator's shrinkToBaseline /
+      // lowerConfidenceWinRate, but on the centered edge.
       const shrunkEdge = (x.n * edge) / (x.n + COUNTER_PRIOR_K);
       // Comp edge: sum this enemy's shrunk edge into the item's total — with the stiff
       // EDGE_PRIOR_K, not the marks' loose K (see the constants). Var of the shrunk mean
@@ -160,7 +211,8 @@ export function computeItemCounters(
         enemyHeroId,
         winRate: x.winRate,
         delta: shrunkEdge,
-        sample: x.n,
+        // Backfill-blended rows carry fractional effective samples; round for display.
+        sample: Math.round(x.n),
         lowSample: x.n < LOW_SAMPLE,
       });
       entry.topDelta = Math.max(entry.topDelta, shrunkEdge);
@@ -182,8 +234,12 @@ export function computeItemCounters(
   return { counters, edgeByItem };
 }
 
-function phaseForTime(s: number): string {
+function bucketForTime(s: number): number {
   let i = 0;
   while (i < PHASE_BOUNDS_S.length && s >= PHASE_BOUNDS_S[i]) i++;
-  return PHASE_LABELS[i];
+  return i;
+}
+
+function phaseForTime(s: number): string {
+  return PHASE_LABELS[bucketForTime(s)];
 }
