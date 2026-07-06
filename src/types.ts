@@ -12,7 +12,7 @@ export interface Hero {
   signatureClasses: string[];
 }
 
-export type SlotType = 'weapon' | 'vitality' | 'spirit' | 'unknown';
+export type SlotType = "weapon" | "vitality" | "spirit" | "unknown";
 
 /**
  * A cross-slot "need" an item primarily fills, derived from its *headline* (elevated/important)
@@ -24,7 +24,7 @@ export type SlotType = 'weapon' | 'vitality' | 'spirit' | 'unknown';
  * they're matchup/hero-dependent (anti-CC, armor vs a given enemy damage type), so they're left
  * out on purpose — surfacing them belongs with the counters lens, not the universal core.
  */
-export type NeedKind = 'sustain';
+export type NeedKind = "sustain";
 
 /** A hero ability (the items asset lists these as type "ability"). */
 export interface Ability {
@@ -91,7 +91,7 @@ export interface CardStat {
 
 /** A section of the shop card: the passive stat block, or a passive/active ability. */
 export interface CardSection {
-  kind: 'innate' | 'passive' | 'active';
+  kind: "innate" | "passive" | "active";
   /** Ability description, parsed into plain/highlighted runs (absent for the stat block). */
   text?: TextSegment[];
   stats: CardStat[];
@@ -157,7 +157,12 @@ export interface ItemRef {
  * quota, but it didn't clear the value gate — don't dress it up as a value pick. `need` =
  * guaranteed a slot because it's the plurality answer to a near-universal need (see
  * {@link NeedKind}), not because its own pick rate or win rate cleared a gate. */
-export type BuildRole = 'universal' | 'value' | 'situational' | 'filler' | 'need';
+export type BuildRole =
+  | "universal"
+  | "value"
+  | "situational"
+  | "filler"
+  | "need";
 
 export interface BuildItem {
   item: Item;
@@ -230,17 +235,32 @@ export interface BuildPhase {
   /** Souls the recommended core costs. */
   coreSouls: number;
   /** Souls the core spends per category — what the build invests in weapon/vitality/spirit. */
-  categorySouls: Record<'weapon' | 'vitality' | 'spirit', number>;
+  categorySouls: Record<"weapon" | "vitality" | "spirit", number>;
   /** The recommended build for this phase, in buy order. */
   core: BuildItem[];
   /** Optional swaps/flex, annotated. */
   situational: BuildItem[];
 }
 
+/**
+ * Measured co-purchase record for two items: decided games where *both* were bought, plus each
+ * item's whole-game decided total (`totalA` pairs with the first argument). Undefined when either
+ * side is too thin to read a ratio from. Built in generateBuild from the permutation pairs + flow;
+ * carried on the build so the comp re-rank can re-apply the same substitute/co-buy decisions.
+ */
+export type PairGames = (
+  a: number,
+  b: number,
+) => { joint: number; totalA: number; totalB: number } | undefined;
+
 export interface GeneratedBuild {
   hero: Hero;
   rankLabel: string;
-  population: { matches: number; avgDurationS: number; baselineWinRate: number };
+  population: {
+    matches: number;
+    avgDurationS: number;
+    baselineWinRate: number;
+  };
   phases: BuildPhase[];
   /** Count of items that hold a permanent slot (excludes transient/sold/component picks). */
   standingSlots: number;
@@ -248,9 +268,11 @@ export interface GeneratedBuild {
    * full: the T3+ upgrades to replace your lowest-tier slots with, ranked by how they perform in the
    * *late* window (the 30+ flow column) — not blended across the game. Highest priority first. */
   overtimeBuys: BuildItem[];
+  /** Measured co-purchase lookup (see {@link PairGames}); absent when no pair data was supplied. */
+  pairGames?: PairGames;
 }
 
-export type ArchetypeKey = 'all' | 'gun' | 'spirit';
+export type ArchetypeKey = "all" | "gun" | "spirit";
 
 /** A coherent build for one playstyle of a flex hero (or just "all" for mono heroes). */
 export interface Archetype {
@@ -273,7 +295,7 @@ export interface ArchetypeSet {
    * hybrid = both styles played, but the same players buy both, so one blended build.
    * mono   = the hero is single-archetype.
    */
-  kind: 'flex' | 'hybrid' | 'mono';
+  kind: "flex" | "hybrid" | "mono";
   /** One-line explanation of the hero's build identity. */
   note: string;
   /** Best-win-rate first; the last entry is always "all" when flex. */

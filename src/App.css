@@ -390,6 +390,26 @@ body {
   color: var(--muted);
   border-style: dashed;
 }
+/* Adoption ("Trending") movers: a second label + chips for rising-pick-rate items. A breakout is
+   rising and winning (accent ring); hype is rising but unproven (muted, dashed). */
+.movers .lbl.trending {
+  margin-left: 6px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+.movers .breakout {
+  border-color: #6d9bd1;
+}
+.movers .breakout b {
+  color: #8fc0ff;
+}
+.movers .hype {
+  border-style: dashed;
+  color: var(--muted);
+}
+.movers .hype b {
+  color: var(--muted);
+}
 
 /* "Your fundamentals" card — per-metric percentile bars vs the selected ladder. Same header
    grammar as the community card; bars are the whole message so the rows stay dense. */
@@ -927,6 +947,63 @@ body {
 }
 .chip:hover {
   background: #4a313c;
+}
+
+/* Rapid enemy entry: fuzzy type-and-Enter input + its autocomplete menu. */
+.quickadd {
+  position: relative;
+  display: inline-block;
+}
+.quickadd-in {
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 5px 8px;
+  font-size: 13px;
+  width: 220px;
+}
+.quickadd-in:focus {
+  outline: none;
+  border-color: #e39ab0;
+}
+.quickadd-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 40;
+  min-width: 200px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  padding: 4px;
+}
+.quickadd-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.quickadd-opt.on {
+  background: #3a2730;
+  color: #f0c2cf;
+}
+.quickadd-opt img {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  object-fit: cover;
 }
 
 /* One-line explainer shown above the build when enemies are selected; the counter

@@ -24,6 +24,7 @@ import type {
   Item,
   ItemFlowStats,
   NeedKind,
+  PairGames,
   SlotType,
 } from "../types";
 import { GATE_Z, significantlyHigher } from "./stats";
@@ -54,6 +55,22 @@ const FILL_WR_FLOOR = 0; // the category ratio is a *soft* bias, not a hard quot
 const CO_OCCUR_MIN = 1; // two comparable-cost every-game picks in a slot are assumed to co-occur
 // only when their pick rates sum past this (inclusion–exclusion: pA+pB−1 players must buy both);
 // below it they can be bought by disjoint players — substitutes — so only one holds a core slot.
+// This is the worst-case FALLBACK; when permutation pair data is available (jointGamesOf), the
+// substitute call is made from the MEASURED overlap instead — see SUBSTITUTE_OVERLAP_MAX.
+const SUBSTITUTE_OVERLAP_MAX = 0.4; // measured co-buy rate — joint games over the smaller item's
+// total — below which two same-slot staples are substitutes (one shared core slot), not co-buys.
+// Calibrated on Paradox @ Emissary+ (2026-07): true substitutes Monster ∧ High-Velocity Rounds
+// measure 24%, the ambiguous Headshot ∧ Monster Rounds 38%, while genuine co-buys run 60–87%
+// (Echo Shard ∧ Superior Duration 87%) — 0.4 sits in the empirical gap.
+const PAIR_MIN_N = 500; // both items need this many whole-game decided samples before a missing/
+// tiny pair row may be read as "genuinely not bought together" rather than "no data".
+const CONTINUATION_MIN = 0.5; // at least half of a component's buyers finish a specific upgrade ⇒
+// its honest transient label is "most build into X", not "often sold": item-stats' avg_sell_time_s
+// counts upgrade absorption as a sell, so upgrade lines masquerade as placeholder sales (Headshot
+// Booster's "sell" at ~12:35 IS Headhunter's ~11:12 buy; 83% of its buyers finish Headhunter, vs
+// 1% continuation for Extra Regen — a true placeholder). Same-population shares: Sprint Boots →
+// Trophy Collector 60%, Monster Rounds → Cultist Sacrifice 56%.
+const CONTINUATION_MAX_TIER = 2; // only cheap pickups read as line components; a T3 is a build in itself.
 const SUBSTITUTE_WR_EDGE = 0.01; // which of two substitutes holds the shared slot: the core fill
 // seats by pick rate, so the more *popular* one gets there first and holds it by default. But
 // popularity among comparable substitutes is mostly habit, not correctness — so the other takes the
@@ -319,6 +336,14 @@ export interface BuildOptions {
    * rate alone (the build is unchanged from before synergy existed).
    */
   synergyOf?: (a: number, b: number) => number;
+  /**
+   * Unordered joint decided-game count between two item ids, from {@link buildJointGamesLookup} in
+   * lib/pairs.ts (same permutation payload the synergy lookup reads). Unlocks *measured* co-occurrence:
+   * the substitute call reads the real overlap instead of the pick-rate worst-case bound, transient
+   * labels distinguish "most build into X" from "often sold", and the swap pairing skips items that
+   * demonstrably co-occur. Omit to keep the previous heuristics.
+   */
+  jointGamesOf?: (a: number, b: number) => number;
 }
 
 /**
@@ -349,6 +374,29 @@ export function generateBuild(
     baselineWinRate,
   );
 
+  // Measured co-purchase lookup: joint games from the permutation pairs, whole-game decided totals
+  // from the flow (summed across columns — a player buys an item once). Undefined when either item
+  // never appears in the flow; each *reader* applies its own sample gate (the overlap coefficient
+  // needs both sides past PAIR_MIN_N, the continuation share only the component's side). Threaded
+  // through the substitute call, the transient labels, and the swap pairing, and carried on the
+  // returned build so the comp re-rank applies the same decisions.
+  let pairGames: PairGames | undefined;
+  if (opts.jointGamesOf) {
+    const jointOf = opts.jointGamesOf;
+    const totalDecided = new Map<number, number>();
+    for (const n of flow.nodes)
+      totalDecided.set(
+        n.item_id,
+        (totalDecided.get(n.item_id) ?? 0) + n.wins + n.losses,
+      );
+    pairGames = (a, b) => {
+      const totalA = totalDecided.get(a) ?? 0;
+      const totalB = totalDecided.get(b) ?? 0;
+      if (totalA <= 0 || totalB <= 0) return undefined;
+      return { joint: jointOf(a, b), totalA, totalB };
+    };
+  }
+
   // Each item's primary phase = the column where the highest fraction of players buy it. The core
   // fill skips an item outside its primary phase, because dedupeAcrossPhases keeps it only there —
   // filling an earlier phase's slot with a mostly-bought-later item just leaves that slot empty.
@@ -374,6 +422,7 @@ export function generateBuild(
       owned,
       claimed,
       priorK,
+      pairGames,
     );
     phases.push(phase);
     for (const b of phase.core) owned.add(b.item.id);
@@ -383,10 +432,10 @@ export function generateBuild(
   dropSamePhaseComponents(phases); // a component+upgrade in one phase ⇒ keep only the upgrade
   countItemsBought(phases); // buy count per phase, crediting same-phase folded components
   recomputeCosts(phases, items); // finalize marginal costs against post-dedupe membership
-  markTransient(phases, sellTimes); // flag builds-into / often-sold placeholders
+  markTransient(phases, sellTimes, items, pairGames); // flag builds-into / most-build-into / often-sold placeholders
   const standingSlots = capStandingSlots(phases, SLOT_CAP); // sell weakest cheap picks to fit the slot cap
   annotateRelations(phases, flow, items);
-  annotateSlotRelations(phases);
+  annotateSlotRelations(phases, pairGames);
 
   return {
     hero,
@@ -399,6 +448,7 @@ export function generateBuild(
     phases,
     standingSlots,
     overtimeBuys: overtimeBuyList(flow, items, baselineWinRate, priorK),
+    pairGames,
   };
 }
 
@@ -618,13 +668,20 @@ function absorptionMap(core: BuildItem[]): Map<number, Item> {
 }
 
 /**
- * Flags core items that don't hold a permanent slot — either they build into another
- * recommended item (a shared slot) or they're a cheap item players typically sell —
- * and returns the count of items that *do* hold a slot. Mutates the phases' core items.
+ * Flags core items that don't hold a permanent slot — they build into another recommended item (a
+ * shared slot), the population predominantly builds them into an upgrade we *don't* recommend (a
+ * measured continuation — see {@link dominantContinuation}), or they're a cheap item players
+ * typically sell — and returns the count of items that *do* hold a slot. The continuation check
+ * runs before the often-sold heuristic because avg_sell_time_s can't tell a sale from an upgrade
+ * absorbing the component: without it, an upgrade line's first item reads as a placeholder sale
+ * ("often sold ~12:35" on Headshot Booster, whose buyers are 83% mid-Headhunter — the sew-together
+ * misread). Mutates the phases' core items.
  */
 function markTransient(
   phases: BuildPhase[],
   sellTimes: Map<number, number>,
+  items: Map<number, Item>,
+  pairGames?: PairGames,
 ): number {
   const core = phases.flatMap((p) => p.core);
   const buildsInto = absorptionMap(core); // component → the one upgrade that absorbs it
@@ -635,6 +692,12 @@ function markTransient(
     if (upgrade) {
       b.transient = true;
       b.transientReason = `builds into ${upgrade.name}`;
+      continue;
+    }
+    const cont = dominantContinuation(b.item, items, pairGames);
+    if (cont) {
+      b.transient = true;
+      b.transientReason = `most build into ${cont.name}`;
     } else if (
       b.item.tier <= 1 &&
       sellTime !== undefined &&
@@ -647,6 +710,31 @@ function markTransient(
   }
 
   return core.filter((b) => !b.transient).length;
+}
+
+/**
+ * The upgrade a cheap item's buyers predominantly finish it into — measured, not inferred: the
+ * share of the component's whole-game sample that also bought a specific upgrade built from it
+ * must clear {@link CONTINUATION_MIN}. Returns the strongest such upgrade, or undefined (no pair
+ * data, no upgrades, or no dominant line — e.g. Extra Regen's buyers finish Healing Booster ~1%
+ * of the time; that one really is sold).
+ */
+function dominantContinuation(
+  component: Item,
+  items: Map<number, Item>,
+  pairGames?: PairGames,
+): Item | undefined {
+  if (!pairGames || component.tier > CONTINUATION_MAX_TIER) return undefined;
+  let best: { item: Item; share: number } | undefined;
+  for (const candidate of items.values()) {
+    if (!candidate.componentIds.includes(component.id)) continue;
+    const pg = pairGames(component.id, candidate.id);
+    if (!pg || pg.totalA < PAIR_MIN_N) continue; // only the component's side feeds the ratio
+    const share = pg.joint / pg.totalA;
+    if (share >= CONTINUATION_MIN && (!best || share > best.share))
+      best = { item: candidate, share };
+  }
+  return best?.item;
 }
 
 /**
@@ -756,27 +844,35 @@ function recomputeCosts(phases: BuildPhase[], items: Map<number, Item>): void {
 
 /**
  * The same-slot, comparable-cost every-game pick already in `core` that `c` does *not* co-occur
- * with (its substitute), or undefined. Co-occurrence is read off the marginals: by inclusion–
- * exclusion two picks must overlap once their pick rates sum past {@link CO_OCCUR_MIN}; below that
- * they can be bought by disjoint players, so the build shouldn't assert both as every-game core
- * (e.g. Paradox lane: Monster Rounds 43% and High-Velocity Rounds 37% sum to 0.80 — players take
- * one or the other; only ~4% buy both). Scoped to comparable cost because the floor only
- * discriminates among same-role alternatives — across tiers any two moderately-popular picks
- * "could be disjoint", which would wrongly bench scaling items (Opening Rounds, Headhunter) that
- * are bought *alongside* the cheap stat-sticks, not instead of them.
+ * with (its substitute), or undefined. With pair data ({@link PairGames}) co-occurrence is
+ * *measured*: the overlap coefficient — joint games over the smaller item's total — must fall
+ * under {@link SUBSTITUTE_OVERLAP_MAX} (Paradox lane: Monster ∧ High-Velocity Rounds share 24% of
+ * the smaller camp — one slot; Echo Shard ∧ Superior Duration share 87% — both are core). Without
+ * pair data (or on thin samples) it falls back to the inclusion–exclusion worst-case bound: two
+ * picks must overlap once their pick rates sum past {@link CO_OCCUR_MIN}; below that they *can*
+ * be disjoint camps, so the build shouldn't assert both as every-game core. Scoped to comparable
+ * cost because the test only discriminates among same-role alternatives — across tiers any two
+ * moderately-popular picks "could be disjoint", which would wrongly bench scaling items (Opening
+ * Rounds, Headhunter) that are bought *alongside* the cheap stat-sticks, not instead of them.
  */
 function substituteRival(
   c: BuildItem,
   core: BuildItem[],
+  pairGames?: PairGames,
 ): BuildItem | undefined {
   if (c.pickRate < UNIVERSAL_PICK) return undefined;
-  return core.find(
-    (b) =>
-      b.item.slot === c.item.slot &&
-      b.pickRate >= UNIVERSAL_PICK &&
-      withinCostBand(b.item.cost, c.item.cost) &&
-      b.pickRate + c.pickRate < CO_OCCUR_MIN,
-  );
+  return core.find((b) => {
+    if (
+      b.item.slot !== c.item.slot ||
+      b.pickRate < UNIVERSAL_PICK ||
+      !withinCostBand(b.item.cost, c.item.cost)
+    )
+      return false;
+    const pg = pairGames?.(b.item.id, c.item.id);
+    if (pg && Math.min(pg.totalA, pg.totalB) >= PAIR_MIN_N)
+      return pg.joint / Math.min(pg.totalA, pg.totalB) < SUBSTITUTE_OVERLAP_MAX;
+    return b.pickRate + c.pickRate < CO_OCCUR_MIN;
+  });
 }
 
 /**
@@ -857,10 +953,25 @@ function annotateRelations(
 
 /**
  * Slot-relative clues — `coreLater` ("core by Mid, rush if ahead") and `swapFor` (the same-slot
- * comparable-cost core pick this is an alternative to). Pure over phases and *resets first*, so
- * it can be re-run after a comp re-rank shuffles core membership without leaving stale pairings.
+ * comparable-cost core pick this is an alternative to). With pair data, a situational pick is
+ * never paired as a "swap for" a core pick it measurably co-occurs with — buying both isn't a
+ * swap (Paradox lane: 76% of High-Velocity Rounds buyers also buy Headshot Booster, so HVR is a
+ * co-buy that missed core, not HB's alternative). Pure over phases and *resets first*, so it can
+ * be re-run after a comp re-rank shuffles core membership without leaving stale pairings.
  */
-export function annotateSlotRelations(phases: BuildPhase[]): void {
+export function annotateSlotRelations(
+  phases: BuildPhase[],
+  pairGames?: PairGames,
+): void {
+  // Measured co-buys make a nonsensical "swap for" pairing; unmeasurable pairs stay eligible.
+  const coBuys = (a: BuildItem, b: BuildItem): boolean => {
+    const pg = pairGames?.(a.item.id, b.item.id);
+    return (
+      pg !== undefined &&
+      Math.min(pg.totalA, pg.totalB) >= PAIR_MIN_N &&
+      pg.joint / Math.min(pg.totalA, pg.totalB) >= SUBSTITUTE_OVERLAP_MAX
+    );
+  };
   // Each item's later core appearances, keyed by column, so a situational pick can find both the phase
   // it becomes core in *and* that phase's win rate (to decide whether rushing it early is supported).
   const coreCols = new Map<
@@ -917,11 +1028,12 @@ export function annotateSlotRelations(phases: BuildPhase[]): void {
         continue;
       }
       // Else pair with a same-slot core pick of *comparable cost* — a real alternative, not a
-      // 6.4k item dressed up as a swap for a 1.6k one.
+      // 6.4k item dressed up as a swap for a 1.6k one, and not a pick it demonstrably co-occurs with.
       const peers = p.core.filter(
         (c) =>
           c.item.slot === s.item.slot &&
-          withinCostBand(c.item.cost, s.item.cost),
+          withinCostBand(c.item.cost, s.item.cost) &&
+          !coBuys(c, s),
       );
       if (peers.length) {
         const closest = peers.reduce((best, c) =>
@@ -1015,6 +1127,7 @@ function buildPhase(
   owned: Set<number>,
   claimed: Set<number>,
   k: number,
+  pairGames?: PairGames,
 ): BuildPhase {
   // reached_per_column is the correct denominator for an unlocked query: players
   // who were still buying in this phase.
@@ -1172,7 +1285,7 @@ function buildPhase(
     // line stays out of core (benchedIds), and we return false: the slot was already counted when the
     // rival first took it, so this is a *replacement*, not a new item (the phase keeps its count, and
     // a different co-occurring item still fills the next slot).
-    const rival = substituteRival(c, core);
+    const rival = substituteRival(c, core, pairGames);
     if (rival) {
       // Only unseat the incumbent when this pick is *significantly* better, not just nominally — a 1pt
       // edge between two stat-sticks each over a few hundred games is a coin-flip, and shouldn't flip a
@@ -1769,7 +1882,7 @@ export function rerankBuildForComp(
           benched.push(u);
           continue;
         }
-        const rival = substituteRival(u, coreUniv);
+        const rival = substituteRival(u, coreUniv, build.pairGames);
         if (rival) benched.push({ ...u, swapForId: rival.item.id });
         else coreUniv.push(u);
       }
@@ -1830,6 +1943,6 @@ export function rerankBuildForComp(
   countItemsBought(phases); // re-count buys for the re-ranked core membership
   recomputeCosts(phases, items); // marginal costs + coreSouls/categorySouls for the re-ranked core
   const standingSlots = capStandingSlots(phases, SLOT_CAP); // re-fit the cap to the re-ranked membership
-  annotateSlotRelations(phases); // swap/rush pairings for the re-ranked membership
+  annotateSlotRelations(phases, build.pairGames); // swap/rush pairings for the re-ranked membership
   return { ...build, phases, standingSlots };
 }

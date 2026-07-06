@@ -60,10 +60,16 @@ export interface BlendResult {
   borrowedShare: number;
   /** The prior strength used, in equivalent decided games per item (learned or default). */
   patchK: number;
+  /** Total games in each *raw* window (before blending) — the honest per-window denominators for a
+   * pick-rate comparison across the patch (see findAdoptionMovers). The blended flow mixes windows,
+   * so its own baseline can't measure adoption. */
+  freshGames: number;
+  priorGames: number;
 }
 
 const nodeKey = (n: FlowNode) => `${n.column}:${n.item_id}`;
-const edgeKey = (e: FlowEdge) => `${e.from_column}:${e.from_item_id}:${e.to_item_id}`;
+const edgeKey = (e: FlowEdge) =>
+  `${e.from_column}:${e.from_item_id}:${e.to_item_id}`;
 
 /**
  * Prior strength K from the two windows themselves. For items well-sampled in both, the variance of
@@ -173,7 +179,10 @@ function blendSummary(f: FlowSummary, q: FlowSummary, K: number): FlowSummary {
  * prior node's players and to reached_per_column alike — one shared denominator keeps every item's
  * blended pick rate a genuine fraction of the same population (a per-item scale would break that).
  */
-export function blendFlow(fresh: ItemFlowStats, prior: ItemFlowStats): BlendResult {
+export function blendFlow(
+  fresh: ItemFlowStats,
+  prior: ItemFlowStats,
+): BlendResult {
   // Pooled baseline win rate, used only as the variance scale p(1−p) in the drift fit and z tests.
   const bw = fresh.baseline.wins + prior.baseline.wins;
   const bd = bw + fresh.baseline.losses + prior.baseline.losses;
@@ -199,13 +208,17 @@ export function blendFlow(fresh: ItemFlowStats, prior: ItemFlowStats): BlendResu
   let borrowed = 0;
   let total = 0;
 
-  const blendNode = (f: FlowNode | undefined, q: FlowNode | undefined): FlowNode => {
+  const blendNode = (
+    f: FlowNode | undefined,
+    q: FlowNode | undefined,
+  ): FlowNode => {
     const src = (f ?? q)!;
     const nN = f ? f.wins + f.losses : 0;
     const nP = q ? q.wins + q.losses : 0;
     const adjN = f?.adjusted_win_rate ?? 0;
     const adjP = q?.adjusted_win_rate ?? 0;
-    const disc = f && q ? contradictionDiscount(adjN, nN, adjP, nP, baseline) : 1;
+    const disc =
+      f && q ? contradictionDiscount(adjN, nN, adjP, nP, baseline) : 1;
     const m = q ? Math.min(nP, K * disc) : 0; // prior evidence admitted, in decided games
     const den = nN + m;
     const rawN = nN > 0 && f ? f.wins / nN : 0;
@@ -231,21 +244,33 @@ export function blendFlow(fresh: ItemFlowStats, prior: ItemFlowStats): BlendResu
         q?.avg_net_worth_at_buy ?? 0,
         wP,
       ),
-      total_kills: Math.round((f?.total_kills ?? 0) + b * (q?.total_kills ?? 0)),
-      total_deaths: Math.round((f?.total_deaths ?? 0) + b * (q?.total_deaths ?? 0)),
-      total_assists: Math.round((f?.total_assists ?? 0) + b * (q?.total_assists ?? 0)),
+      total_kills: Math.round(
+        (f?.total_kills ?? 0) + b * (q?.total_kills ?? 0),
+      ),
+      total_deaths: Math.round(
+        (f?.total_deaths ?? 0) + b * (q?.total_deaths ?? 0),
+      ),
+      total_assists: Math.round(
+        (f?.total_assists ?? 0) + b * (q?.total_assists ?? 0),
+      ),
     };
   };
 
-  const nodes: FlowNode[] = fresh.nodes.map((f) => blendNode(f, priorByKey.get(nodeKey(f))));
+  const nodes: FlowNode[] = fresh.nodes.map((f) =>
+    blendNode(f, priorByKey.get(nodeKey(f))),
+  );
   // Prior-only nodes: an item nobody in the thin fresh sample happened to buy yet still deserves its
   // (β-scaled) seat at the table — dropping these is exactly the day-one incompleteness bug.
-  for (const q of prior.nodes) if (!freshKeys.has(nodeKey(q))) nodes.push(blendNode(undefined, q));
+  for (const q of prior.nodes)
+    if (!freshKeys.has(nodeKey(q))) nodes.push(blendNode(undefined, q));
 
   // Edges only rank "builds toward" clues, so they take the simple column-β borrow.
   const priorEdges = new Map(prior.edges.map((e) => [edgeKey(e), e]));
   const freshEdgeKeys = new Set(fresh.edges.map(edgeKey));
-  const scaleEdge = (f: FlowEdge | undefined, q: FlowEdge | undefined): FlowEdge => {
+  const scaleEdge = (
+    f: FlowEdge | undefined,
+    q: FlowEdge | undefined,
+  ): FlowEdge => {
     const src = (f ?? q)!;
     const b = beta[src.from_column] ?? 0;
     return {
@@ -257,8 +282,11 @@ export function blendFlow(fresh: ItemFlowStats, prior: ItemFlowStats): BlendResu
       matches: Math.round((f?.matches ?? 0) + b * (q?.matches ?? 0)),
     };
   };
-  const edges: FlowEdge[] = fresh.edges.map((f) => scaleEdge(f, priorEdges.get(edgeKey(f))));
-  for (const q of prior.edges) if (!freshEdgeKeys.has(edgeKey(q))) edges.push(scaleEdge(undefined, q));
+  const edges: FlowEdge[] = fresh.edges.map((f) =>
+    scaleEdge(f, priorEdges.get(edgeKey(f))),
+  );
+  for (const q of prior.edges)
+    if (!freshEdgeKeys.has(edgeKey(q))) edges.push(scaleEdge(undefined, q));
 
   return {
     flow: {
@@ -270,6 +298,8 @@ export function blendFlow(fresh: ItemFlowStats, prior: ItemFlowStats): BlendResu
     },
     borrowedShare: total > 0 ? borrowed / total : 0,
     patchK: K,
+    freshGames: fresh.baseline.matches,
+    priorGames: prior.baseline.matches,
   };
 }
 

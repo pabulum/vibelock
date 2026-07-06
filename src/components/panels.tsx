@@ -15,6 +15,7 @@ import type {
   SkillBuild,
 } from "../types";
 import { ABILITY_COLORS, SLOT_COLORS } from "./colors";
+import { CounterQuickAdd } from "./CounterQuickAdd";
 import { ItemRow } from "./ItemRow";
 
 // The brand mark: a diamond gem that shows a real item icon (masked to the diamond
@@ -253,6 +254,9 @@ export function CounterPicker({
           </button>
         );
       })}
+      {/* Fast path: type-and-Enter with fuzzy autocomplete (lib/fuzzy). */}
+      <CounterQuickAdd heroes={heroes} enemies={enemies} onAdd={onAdd} />
+      {/* Classic path: the exhaustive dropdown, kept alongside for browsing. */}
       <select
         value=""
         onChange={(e) => {

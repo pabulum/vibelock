@@ -106,3 +106,81 @@ export function findPatchMovers(
 
   return [...movers, ...news];
 }
+
+// --- Adoption movers (the "emerging meta" surface) ---------------------------------------------
+// A patch mover asks "did this item's WIN RATE move". This asks the orthogonal question "is the
+// player base moving TOWARD this item" — the leading signal that a new build is materializing, which
+// is the whole point of the app (surface good-but-underplayed picks before they're consensus). We
+// measure it from the same two windows: each item's pick rate (games it was bought in ÷ total games)
+// post-patch vs pre-patch. A real adoption jump splits by whether it's paying off:
+//   - RISING + winning above baseline  ⇒ a breakout (get ahead of it).
+//   - RISING + at/below baseline       ⇒ hype: being tried, not (yet) working — the honest caution
+//     (measured live: Drifter's Melee-Lifesteal build rose +7pt adoption while losing 1.7pt).
+// Pick rate needs a per-window game total; the raw windows give it (BlendResult.fresh/priorGames).
+
+const ADOPT_MIN_RISE = 0.04; // pick rate must climb ≥4pt post-patch to count as "being adopted"
+const ADOPT_MIN_N = 200; // decided post-patch games needed to read its win rate at all
+const ADOPT_WIN_MARGIN = 0.005; // above baseline by this ⇒ "breakout"; within/below ⇒ "hype"
+const ADOPT_MAX = 6;
+
+export interface AdoptionMover {
+  item: Item;
+  pickPrev: number;
+  pickNew: number;
+  /** pickNew − pickPrev, in pick-rate points (always ≥ ADOPT_MIN_RISE here). */
+  pickDelta: number;
+  /** Post-patch win rate, and its gap vs the hero's baseline. */
+  winRate: number;
+  winEdge: number;
+  nNew: number;
+  /** Rising *and* winning above baseline — surface it. False ⇒ rising but not paying off (hype). */
+  breakout: boolean;
+}
+
+/**
+ * Items the player base is moving toward this patch, biggest pick-rate rise first. `fresh`/`prior`
+ * are the raw item-stats windows (a row's `matches` = games the item was bought in); `gFresh`/`gPrior`
+ * are the total games per window (from {@link BlendResult}); `baseline` is the hero's current win
+ * rate, to split breakouts from hype. Returns [] when there's no prior window (gPrior ≤ 0).
+ */
+export function findAdoptionMovers(
+  fresh: ItemStat[],
+  prior: ItemStat[],
+  gFresh: number,
+  gPrior: number,
+  baseline: number,
+  items: Map<number, Item>,
+): AdoptionMover[] {
+  if (gFresh <= 0 || gPrior <= 0) return [];
+  const priorById = new Map(prior.map((r) => [r.item_id, r]));
+  const out: AdoptionMover[] = [];
+  for (const f of fresh) {
+    const item = items.get(f.item_id);
+    if (!item) continue;
+    const nNew = f.wins + f.losses;
+    if (nNew < ADOPT_MIN_N) continue; // need a real post-patch WR to classify it
+    const q = priorById.get(f.item_id);
+    const pickNew = f.matches / gFresh;
+    const pickPrev = q ? q.matches / gPrior : 0; // no prior row ⇒ adoption from ~zero
+    const pickDelta = pickNew - pickPrev;
+    if (pickDelta < ADOPT_MIN_RISE) continue;
+    const winRate = f.wins / nNew;
+    out.push({
+      item,
+      pickPrev,
+      pickNew,
+      pickDelta,
+      winRate,
+      winEdge: winRate - baseline,
+      nNew,
+      breakout: winRate - baseline >= ADOPT_WIN_MARGIN,
+    });
+  }
+  // Breakouts first (they're the actionable signal), each group by how fast it's rising.
+  return out
+    .sort(
+      (a, b) =>
+        Number(b.breakout) - Number(a.breakout) || b.pickDelta - a.pickDelta,
+    )
+    .slice(0, ADOPT_MAX);
+}

@@ -1,0 +1,30 @@
+name: CI
+
+# Pre-merge checks. The deploy workflow already gates `main` on lint+test+build at deploy time;
+# this runs the same gate *earlier* — on every pull request and every push to a non-main branch —
+# so a regression is caught before it reaches main, with a green check on the PR. `main` itself is
+# intentionally excluded here (deploy.yml covers it) to avoid running the gate twice.
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+
+# A newer push to the same branch/PR supersedes an in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      # `npm run build` is `tsc -b && vite build`, so this also typechecks.
+      - run: npm run build

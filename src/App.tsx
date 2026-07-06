@@ -32,8 +32,14 @@ import {
   type UrlState,
 } from "./lib/urlState";
 import { blendFlow, blendItemStats, PRIOR_WINDOW_S } from "./lib/patchBlend";
-import { findPatchMovers, type PatchMover } from "./lib/patchMovers";
+import {
+  findAdoptionMovers,
+  findPatchMovers,
+  type AdoptionMover,
+  type PatchMover,
+} from "./lib/patchMovers";
 import { fundamentalsRows, type FundamentalRow } from "./lib/fundamentals";
+import { buildJointGamesLookup } from "./lib/pairs";
 import { buildSynergyLookup, singleRecordsFromFlow } from "./lib/synergy";
 import { bestImbueTargets } from "./lib/imbue";
 import { heroMatchups } from "./lib/matchups";
@@ -185,6 +191,10 @@ export default function App() {
   // "What changed this patch" — FDR-gated movers from the two item-stats windows the backfill
   // already fetches (needs both, so only computed while backfill is on).
   const [movers, setMovers] = useState<PatchMover[] | null>(null);
+  // "Emerging meta" — items the player base is moving toward this patch (rising pick rate), split
+  // into breakouts (rising *and* winning) and hype (rising but not paying off). Same two windows as
+  // the WR movers, so no extra queries.
+  const [adoption, setAdoption] = useState<AdoptionMover[] | null>(null);
 
   // Steam identity — the single source shared by the header profile control and the export panel
   // (author stamp), persisted locally. Accepts an account id, a steamID64, or a profile URL
@@ -540,7 +550,13 @@ export default function App() {
               maxBadge,
               ...window,
               includeItemIds,
-            }).then((f) => ({ flow: f, borrowedShare: 0, patchK: 0 }));
+            }).then((f) => ({
+              flow: f,
+              borrowedShare: 0,
+              patchK: 0,
+              freshGames: f.baseline.matches,
+              priorGames: 0,
+            }));
 
       // Base population + buy times (for buy-order) + item-pair permutation stats, in parallel. The
       // permutation payload is large but overlaps the flow fetches below; a failure is non-fatal (the
@@ -600,8 +616,26 @@ export default function App() {
       // items that reinforce the build; absent pairs ⇒ the build ranks on win rate alone (unchanged).
       const decided = base.baseline.wins + base.baseline.losses;
       const baseline = decided > 0 ? base.baseline.wins / decided : 0.5;
+      // Adoption movers reuse the same raw windows + the honest per-window game totals from the blend.
+      setAdoption(
+        canBackfill
+          ? findAdoptionMovers(
+              statsFresh,
+              statsPrior,
+              baseBlend.freshGames,
+              baseBlend.priorGames,
+              baseline,
+              items,
+            )
+          : null,
+      );
       const synergyOf = permRows
         ? buildSynergyLookup(permRows, singleRecordsFromFlow(base), baseline)
+        : undefined;
+      // Same payload, plainer lens: measured joint-purchase counts, for the generator's
+      // substitute / most-build-into / swap decisions (see lib/pairs.ts).
+      const jointGamesOf = permRows
+        ? buildJointGamesLookup(permRows)
         : undefined;
 
       // Condition on each archetype's signature item. The gun/spirit overlap (for the
@@ -624,7 +658,7 @@ export default function App() {
         sellTimes,
         { all: base, gun, spirit },
         sig,
-        { synergyOf },
+        { synergyOf, jointGamesOf },
       );
       setArchetypeSet(set);
       // Honor a deep-linked archetype on the first build only; otherwise default to best win rate.
@@ -1179,6 +1213,30 @@ export default function App() {
               </b>
             </span>
           ))}
+
+          {adoption && adoption.length > 0 && (
+            <>
+              <span
+                className="lbl trending"
+                title="Emerging meta: items the player base is moving toward this patch (pick rate rising vs the pre-patch window). A ↑ breakout is rising AND winning above this hero's average — get ahead of it; a hype pick is rising but not (yet) paying off, so it's a caution, not a recommendation."
+              >
+                Trending
+              </span>
+              {adoption.map((a) => (
+                <span
+                  key={a.item.id}
+                  className={`mover ${a.breakout ? "breakout" : "hype"}`}
+                  title={`Pick rate ${(a.pickPrev * 100).toFixed(0)}% → ${(a.pickNew * 100).toFixed(0)}% (+${(a.pickDelta * 100).toFixed(0)}pt). Win rate ${(a.winRate * 100).toFixed(1)}% (${a.winEdge >= 0 ? "+" : ""}${(a.winEdge * 100).toFixed(1)} vs hero avg) over ${a.nNew.toLocaleString()} games. ${a.breakout ? "Rising and winning — a breakout." : "Rising but not beating the hero's average — being tried, not proven."}`}
+                >
+                  {a.item.name}{" "}
+                  <b>
+                    {a.breakout ? "↑" : "•"}
+                    {(a.pickDelta * 100).toFixed(0)}pt
+                  </b>
+                </span>
+              ))}
+            </>
+          )}
         </div>
       )}
 

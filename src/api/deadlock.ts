@@ -504,6 +504,9 @@ export interface FlowQuery extends TimeWindow, RankWindow {
 
 export function getItemFlowStats(q: FlowQuery): Promise<ItemFlowStats> {
   const params = new URLSearchParams({
+    // GOTCHA: flow-stats filters on `hero_ids` (plural). item-stats and permutation-stats below
+    // take `hero_id` (singular). Passing `hero_id` here is silently ignored — the query returns the
+    // ALL-HEROES aggregate (≈6× inflated samples), which looks plausible until the baseline is wrong.
     hero_ids: String(q.heroId),
     min_matches: String(q.minMatches ?? 100),
   });

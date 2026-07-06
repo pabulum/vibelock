@@ -33,7 +33,7 @@ main thing Statlocker's WPA model exists to correct. So this tool doesn't model 
 
 ### Skill order
 
-`ability-order-stats` returns full ability-upgrade *orders* (≈16 point investments) with win/loss.
+`ability-order-stats` returns full ability-upgrade _orders_ (≈16 point investments) with win/loss.
 Abilities are resolved from the items asset (`type: "ability"`). We surface the **most common order**
 (robust against small-sample win-rate noise — it's the standard build good players run) as a grid: one
 row per ability (icon + **max 1st → 4th** label) with numbered pips showing the order points go in. For
@@ -49,28 +49,34 @@ purchases the phases sum to — early items get sold or built into bigger ones. 
 
 - **Builds into another pick** — items resolve `component_items` → ids at load, so if a recommended
   item is a component of another recommended item, it's a shared slot ("builds into Opening Rounds").
-- **Often sold** — a cheap (T1) item with an early `avg_sell_time_s` is a placeholder ("often sold
-  ~13:14"). item-stats has no sell *fraction*, so this is a heuristic on cheap items, not a true rate.
+- **Most build into** — a cheap item whose buyers _measurably_ finish a specific upgrade (≥50% of
+  its buyers also buy it, from the permutation-pair counts) is that line's first purchase, even when
+  the upgrade didn't make our list ("most build into Headhunter"). This matters because
+  `avg_sell_time_s` counts an upgrade absorbing the component as a "sell" — without the pair data,
+  upgrade lines masquerade as placeholder sales.
+- **Often sold** — a cheap (T1) item with an early `avg_sell_time_s` _and no dominant upgrade line_
+  is a placeholder ("often sold ~13:14"). item-stats has no sell _fraction_, so this is a heuristic
+  on cheap items, not a true rate.
 
 Items are also de-duplicated across phases (kept in their highest-pick phase). The header shows
 `N/12 standing slots`. Example: Paradox's 16 raw picks → 10 standing; Victor → 9.
 
 ### Archetype split (flex heroes)
 
-Flex heroes (Victor, Vyper, Abrams) have viable Gun *and* Spirit builds; aggregating every player
+Flex heroes (Victor, Vyper, Abrams) have viable Gun _and_ Spirit builds; aggregating every player
 blends them into a hybrid no one runs (gun lane, spirit late). So we pick the most-played **T3
-scaling item** of each damage type as a *signature* and condition the population on it via
+scaling item** of each damage type as a _signature_ and condition the population on it via
 `include_item_ids` — players who bought the big weapon item are the gun build; the big spirit item,
 the spirit build. Each conditioned response carries its own win rate and match count, so the toggle
 shows **which archetype wins and how common it is** (e.g. Spirit Abrams 55.8% vs Gun 50.8%). A hero
 counts as flex only when both archetypes sit in a contested 30–80% share band **and the two camps are
 distinct** — we also query the "bought both signatures" population, and if its overlap exceeds 40% of
-the smaller camp the hero is a *hybrid* (Paradox: ~half of "gun" players also buy the spirit item), so
+the smaller camp the hero is a _hybrid_ (Paradox: ~half of "gun" players also buy the spirit item), so
 we show one blended build instead of a misleading split. Mono heroes (Geist ~92% spirit) also show a
 single build. Finer labels (Tracklock's "Initiator-Spirit")
-would come from community-build *tags*, not match stats — a later effort.
+would come from community-build _tags_, not match stats — a later effort.
 
-Each hero shows a one-line **build-identity note** (`flex` / `hybrid` / `mono`) so it's clear *why*
+Each hero shows a one-line **build-identity note** (`flex` / `hybrid` / `mono`) so it's clear _why_
 there is or isn't a toggle. Per-item "why" text shows **what the item does** — a cleaned effect from
 the item asset's `description.desc`, or its headline stat — rather than re-stating the win-rate/pick
 numbers already on the row.
@@ -79,11 +85,11 @@ numbers already on the row.
 
 - **Patch filter** — `/v1/patches` maps each patch to a `min_unix_timestamp` window. Defaults to the
   **newest patch**, backfilled from the 30 days before it (`lib/patchBlend.ts`): the pre-patch window
-  enters as a *power prior* worth at most ~K decided games per item (K learned from measured
+  enters as a _power prior_ worth at most ~K decided games per item (K learned from measured
   patch-to-patch drift when the data can support the fit, default 1,000), discounted per item when
   the fresh data contradicts it (the items the patch actually changed). The borrow self-anneals as
   the patch accumulates games, and the header shows the borrowed share ("N% backfilled") so a
-  day-one build is complete *and* honest about its evidence.
+  day-one build is complete _and_ honest about its evidence.
 - **Matchups** — `hero-counter-stats` returns the full hero-vs-hero matrix (it ignores hero filters),
   fetched once per rank/patch and filtered to the selected hero. Each enemy's win rate is compared to
   the hero's overall win rate; **Tough** (they counter you) and **Favored** matchups show as clickable
@@ -91,7 +97,7 @@ numbers already on the row.
   click. Win rate is whole-game presence, not lane-only (`same_lane_filter` is a no-op on this
   endpoint); the lane CS differential is surfaced as a tooltip hint instead. The **De-noise**
   toggle fits Bradley-Terry strengths on the whole matrix (`fitBradleyTerry`) and re-reads each
-  matchup as its sample-shrunk *residual* vs what strengths alone predict — so a meta hero stops
+  matchup as its sample-shrunk _residual_ vs what strengths alone predict — so a meta hero stops
   showing up as everyone's counter, and "Tough" means genuine rock-paper-scissors. Strengths
   explain the live matrix to ~1pt RMSE, so residuals surface at a 1pt floor (vs 2pt raw).
 - **Counters** — enter an enemy lineup and `item-stats` is queried with `enemy_hero_ids`, then
@@ -101,7 +107,7 @@ numbers already on the row.
   delta cancels much of the shared confound but lean on the bigger samples. A naive "what wins vs
   hero X" is dominated by generic strong items, so treat single-hero, large-sample movers as the
   trustworthy signal. Counters are backfilled on a young patch like the build (`blendItemStats`),
-  with one extra rule: a counter is a *difference*, so the per-item borrowing discounts are learned
+  with one extra rule: a counter is a _difference_, so the per-item borrowing discounts are learned
   once on the base slice and shared into every enemy-conditioned slice — otherwise a patch-changed
   item whose base pulls fresh while its thin enemy slice stays anchored to pre-patch would read as a
   fake counter signal.
@@ -113,7 +119,7 @@ numbers already on the row.
 
 ### Why it's a build, not a ranking
 
-A build is a *correlated set under a budget*, so the top-N items judged independently don't compose
+A build is a _correlated set under a budget_, so the top-N items judged independently don't compose
 into one (the highest-WR items may never be bought together). The generator builds each phase from:
 
 1. **Budget** — each phase's target item count and soul spend are derived from what real players of
@@ -122,6 +128,11 @@ into one (the highest-WR items may never be bought together). The generator buil
    60–70% of builds necessarily co-occur, so co-occurrence is baked in for free. (An earlier version
    conditioned each phase on the prior build via `locked_item_ids`, but locking 3 exact items matched
    <2% of games and emptied later phases — over-engineering for what pick rate already gives.)
+   Same-slot staples that _look_ universal can still be two disjoint camps (two lane styles averaged
+   together), so co-occurrence is checked against the **measured joint-purchase counts** from
+   `item-permutation-stats`: two staples whose buyers overlap under ~40% share one core slot (the
+   more popular holds it, the other becomes its swap), instead of the build stitching both lines
+   together.
 3. **Category-balanced fill** — the phase's item count is split across weapon / vitality / spirit in
    the same proportion real players of this hero invest souls (each candidate's `cost × pick mass`),
    then each category is filled best-first: every-game staples by pick rate, then value picks (best
@@ -138,17 +149,17 @@ Each generate is 2 parallel API calls (flow + buy times), ~1s.
 
 ### The honest caveat
 
-Win-rate builds (this one and the popular sites) still partly measure *who* buys an item, not the
+Win-rate builds (this one and the popular sites) still partly measure _who_ buys an item, not the
 item itself — good players buy good items. `adjusted_win_rate` shrinks that effect but doesn't erase
 it. Treat it as a strong prior, not gospel.
 
-A second, measured residual is **buy-timing**: the adjustment conditions on *absolute* net worth at
+A second, measured residual is **buy-timing**: the adjustment conditions on _absolute_ net worth at
 buy, which is a lossy proxy for actually being ahead (an offline spike on 3,000 Eternus matches:
-net-worth-*difference*+time predicts winning at AUC 0.80, absolute net worth+time only 0.70). Win
+net-worth-_difference_+time predicts winning at AUC 0.80, absolute net worth+time only 0.70). Win
 probability at the moment of purchase climbs from ~50% for tier-1 buys to ~56% for tier-4 — players
 buy expensive items disproportionately when already winning — so late/expensive items' win rates
 stay slightly flattered even after adjustment. No aggregate-only correction can remove this (the
-same spike showed a poor-man's WPA from absolute net worth *scrambles* the ranking, ρ=0.15 vs the
+same spike showed a poor-man's WPA from absolute net worth _scrambles_ the ranking, ρ=0.15 vs the
 model's local WPA); a real fix needs match-level timelines, i.e. a backend. The per-item
 **comeback / win more** tags are the honest per-pick read on this bias.
 
