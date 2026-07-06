@@ -1833,10 +1833,3 @@ export function rerankBuildForComp(
   annotateSlotRelations(phases); // swap/rush pairings for the re-ranked membership
   return { ...build, phases, standingSlots };
 }
-
-export const SLOT_COLORS: Record<string, string> = {
-  weapon: "#d97b34",
-  vitality: "#5fa84a",
-  spirit: "#9b6dd1",
-  unknown: "#6b7280",
-};
