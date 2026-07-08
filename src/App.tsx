@@ -35,6 +35,7 @@ import { blendFlow, blendItemStats, PRIOR_WINDOW_S } from "./lib/patchBlend";
 import {
   findAdoptionMovers,
   findPatchMovers,
+  foldTrendingBreakouts,
   type AdoptionMover,
   type PatchMover,
 } from "./lib/patchMovers";
@@ -1007,17 +1008,34 @@ export default function App() {
         : build,
     [build, compEdges, items, enemies.length],
   );
+  // Current breakouts (rising + winning this patch), keyed by item id — the "emerging meta" set. Used
+  // to tag any pick already in the build with 🔥, and (below) to fold un-built ones into situational.
+  const breakouts = useMemo(
+    () => (adoption ?? []).filter((a) => a.breakout),
+    [adoption],
+  );
+  const trendingByItem = useMemo(
+    () => new Map(breakouts.map((a) => [a.item.id, a])),
+    [breakouts],
+  );
+  // The build as rendered: the (comp-re-ranked) build with un-built breakouts folded in as tagged
+  // situational options — the discovery half of the app, surfaced where you pick flex items. Purely
+  // additive (see foldTrendingBreakouts), so it can't disturb the core build.
+  const shownBuild = useMemo(
+    () => (displayBuild ? foldTrendingBreakouts(displayBuild, breakouts) : null),
+    [displayBuild, breakouts],
+  );
   // Every item the build already shows anywhere — a counter pick in this set gets a tag
   // in place rather than a duplicate "add" row (its buy-time phase can differ from where
   // the build files it).
   const buildItemIds = useMemo(
     () =>
       new Set(
-        (displayBuild?.phases ?? []).flatMap((p) =>
+        (shownBuild?.phases ?? []).flatMap((p) =>
           [...p.core, ...p.situational].map((b) => b.item.id),
         ),
       ),
-    [displayBuild],
+    [shownBuild],
   );
   const lowPopulation = build !== null && build.population.matches < 400;
   // Any data in flight — drives the single loading strip under the header. `!items`
@@ -1044,6 +1062,10 @@ export default function App() {
   const skillRef = useSettle<HTMLElement>(skillLoading);
   const communityRef = useSettle<HTMLElement>(communityLoading);
   const matrixRef = useSettle<HTMLDivElement>(matrixLoading);
+  // The movers/trending strip is populated by the build query; the fundamentals card by its own. Both
+  // wear the same settle scrim so a reload visibly develops rather than silently swapping numbers.
+  const moversRef = useSettle<HTMLDivElement>(loading);
+  const fundamentalsRef = useSettle<HTMLElement>(fundamentalsLoading);
 
   return (
     <div className="app">
@@ -1183,7 +1205,7 @@ export default function App() {
       {error && <div className="banner error">⚠ {error}</div>}
 
       {movers && (
-        <div className="movers">
+        <div className="movers" ref={moversRef}>
           <span
             className="lbl"
             title="Items whose win rate for this hero verifiably moved across the patch — every sufficiently-sampled item is tested between the pre- and post-patch windows, false discoveries are rate-controlled, and only ≥2pt moves make the list. New items appear once they have a real sample."
@@ -1377,6 +1399,7 @@ export default function App() {
         {fundamentals && hero && (
           <section
             className="fundamentals"
+            ref={fundamentalsRef}
             title="Your average per game, placed on the distribution of games at this rank floor (percentile, higher = better; deaths inverted). Souls/min and deaths are the two stats that most separate rank tiers — the climb levers."
           >
             <h2>
@@ -1579,9 +1602,9 @@ export default function App() {
         />
       )}
 
-      {displayBuild && (
+      {shownBuild && (
         <main className="phases" ref={buildRef}>
-          {displayBuild.phases.map((phase) => {
+          {shownBuild.phases.map((phase) => {
             // Strong counter picks that file under this phase but aren't already in the build
             // get mixed into the situational list (capped); ones already shown get a portrait
             // tag in place instead, so nothing is duplicated and the page doesn't sprout
@@ -1604,7 +1627,7 @@ export default function App() {
                 <PhaseTempoLines
                   tempo={phaseTempo(
                     phase,
-                    displayBuild.population.baselineWinRate,
+                    shownBuild.population.baselineWinRate,
                   )}
                 />
 
@@ -1615,10 +1638,11 @@ export default function App() {
                       key={b.item.id}
                       b={b}
                       items={items}
-                      baseline={displayBuild.population.baselineWinRate}
+                      baseline={shownBuild.population.baselineWinRate}
                       counter={counterByItem.get(b.item.id)}
                       enemiesById={enemiesById}
                       imbue={imbueByItem.get(b.item.id)}
+                      trending={trendingByItem.get(b.item.id)}
                     />
                   ))
                 ) : (
@@ -1631,10 +1655,11 @@ export default function App() {
                     key={b.item.id}
                     b={b}
                     items={items}
-                    baseline={displayBuild.population.baselineWinRate}
+                    baseline={shownBuild.population.baselineWinRate}
                     counter={counterByItem.get(b.item.id)}
                     enemiesById={enemiesById}
                     imbue={imbueByItem.get(b.item.id)}
+                    trending={trendingByItem.get(b.item.id)}
                     muted
                   />
                 ))}
@@ -1647,7 +1672,7 @@ export default function App() {
                     swapFor={swapTargetFor(
                       phase,
                       c,
-                      displayBuild.population.baselineWinRate,
+                      shownBuild.population.baselineWinRate,
                     )}
                   />
                 ))}
@@ -1658,7 +1683,7 @@ export default function App() {
             );
           })}
           <OvertimeColumn
-            build={displayBuild}
+            build={shownBuild}
             items={items}
             counterByItem={counterByItem}
             enemiesById={enemiesById}

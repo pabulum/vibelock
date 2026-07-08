@@ -10,7 +10,12 @@
 // they have a real sample (there's nothing to test them against).
 
 import { benjaminiHochberg, normalCdf } from "./stats";
-import type { Item, ItemStat } from "../types";
+import type {
+  BuildItem,
+  GeneratedBuild,
+  Item,
+  ItemStat,
+} from "../types";
 
 const MOVER_MIN_N = 40; // decided games needed in BOTH windows to test an item at all
 const MOVER_FDR = 0.1; // expected share of false movers among those we call
@@ -183,4 +188,67 @@ export function findAdoptionMovers(
         Number(b.breakout) - Number(a.breakout) || b.pickDelta - a.pickDelta,
     )
     .slice(0, ADOPT_MAX);
+}
+
+// --- Folding breakouts into the build ---
+const TREND_MAX_PER_PHASE = 1; // one emerging pick per phase keeps it a hint, not a second build
+const TREND_MAX_TOTAL = 3; // ...and a few across the whole build — a short list of new ideas
+
+/**
+ * Fold current breakouts (rising *and* winning adoption movers) into a build as tagged situational
+ * options — the "emerging meta" surfaced where you already look for flex picks. Breakouts already
+ * somewhere in the build are left untouched (the caller tags those in place from the same list, so
+ * they read "🔥 and I'm already building it"); a breakout NOT anywhere in the build (nor its overtime
+ * list) becomes a synthetic situational pick in the phase its tier suggests (T1→Lane … T4→Late),
+ * capped per-phase and overall so the section stays a short list, not a dumping ground. The synthetic
+ * pick carries the raw post-patch win rate (item-stats has no adjusted rate — same basis as a
+ * counter-add row). Pure; returns a new build (never mutates), or the input unchanged when nothing
+ * new qualifies. Low-risk by construction: it only ever *adds* optional rows.
+ */
+export function foldTrendingBreakouts(
+  build: GeneratedBuild,
+  breakouts: AdoptionMover[],
+): GeneratedBuild {
+  if (breakouts.length === 0) return build;
+  const present = new Set<number>();
+  for (const p of build.phases)
+    for (const b of [...p.core, ...p.situational]) present.add(b.item.id);
+  for (const b of build.overtimeBuys) present.add(b.item.id);
+
+  const additions = new Map<number, BuildItem[]>(); // phase column → synthetic picks
+  let added = 0;
+  for (const a of breakouts) {
+    if (added >= TREND_MAX_TOTAL) break;
+    if (present.has(a.item.id)) continue;
+    const col = Math.max(0, Math.min(3, a.item.tier - 1));
+    const arr = additions.get(col) ?? [];
+    if (arr.length >= TREND_MAX_PER_PHASE) continue;
+    arr.push({
+      item: a.item,
+      role: "situational",
+      pickRate: a.pickNew,
+      adjustedWinRate: a.winRate,
+      rawWinRate: a.winRate,
+      sample: a.nNew,
+      decided: a.nNew,
+      avgNetWorthAtBuy: 0,
+      effectiveCost: a.item.cost,
+      why: `📈 trending up this patch — ${Math.round(a.pickPrev * 100)}%→${Math.round(a.pickNew * 100)}% pick, ${(a.winRate * 100).toFixed(0)}% WR`,
+    });
+    additions.set(col, arr);
+    present.add(a.item.id);
+    added++;
+  }
+  if (added === 0) return build;
+  return {
+    ...build,
+    phases: build.phases.map((p) =>
+      additions.has(p.column)
+        ? {
+            ...p,
+            situational: [...p.situational, ...(additions.get(p.column) ?? [])],
+          }
+        : p,
+    ),
+  };
 }

@@ -2,6 +2,7 @@
 // sample, plus the tag line (counter bubbles, imbue target, swap/rush clues, win-state).
 
 import { classifyWinState } from "../lib/buildGenerator";
+import type { AdoptionMover } from "../lib/patchMovers";
 import type {
   BuildItem,
   CounterMark,
@@ -193,6 +194,7 @@ export function ItemRow({
   counter,
   enemiesById,
   imbue,
+  trending,
   muted = false,
 }: {
   b: BuildItem;
@@ -205,6 +207,8 @@ export function ItemRow({
   enemiesById?: Map<number, Hero>;
   /** For an imbue-type item: the ability most authors imbue it onto. */
   imbue?: ImbueTarget;
+  /** Set when this item is a current breakout (rising + winning this patch) — shows a 🔥 marker. */
+  trending?: AdoptionMover;
   muted?: boolean;
 }) {
   const color = SLOT_COLORS[b.item.slot] ?? SLOT_COLORS.unknown;
@@ -231,6 +235,14 @@ export function ItemRow({
               </span>
             )}
             {b.item.name}
+            {trending && (
+              <span
+                className="trendtag"
+                title={`Trending up this patch — pick rate ${Math.round(trending.pickPrev * 100)}% → ${Math.round(trending.pickNew * 100)}% (+${(trending.pickDelta * 100).toFixed(0)}pt), winning ${(trending.winRate * 100).toFixed(0)}% over ${trending.nNew.toLocaleString()} games. Emerging meta — get ahead of it.`}
+              >
+                🔥
+              </span>
+            )}
           </span>
           <CostTag b={b} />
         </div>

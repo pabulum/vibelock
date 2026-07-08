@@ -122,29 +122,39 @@ body {
   }
 }
 
-/* Indeterminate loading strip riding the bottom edge of the sticky header. */
+/* Indeterminate loading strip riding the bottom edge of the sticky header. A faint always-on track
+   (the strip's own background) reads as "active", and a brighter comet sweeps across it on a tight,
+   steady cadence — the old single 2.3s ease-in-out pass left long dead gaps that read as "stalled". */
 .loadstrip {
   position: absolute;
   left: 0;
   right: 0;
   bottom: -1px;
-  height: 2px;
+  height: 3px;
   overflow: hidden;
+  background: color-mix(in srgb, var(--purple) 22%, transparent);
 }
 .loadstrip::before {
   content: "";
   position: absolute;
   inset: 0;
-  width: 35%;
-  background: linear-gradient(90deg, transparent, var(--purple), transparent);
-  animation: loadslide 2.3s ease-in-out infinite;
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--purple),
+    color-mix(in srgb, var(--purple) 60%, white) 55%,
+    var(--purple),
+    transparent
+  );
+  animation: loadslide 1.15s linear infinite;
 }
 @keyframes loadslide {
   0% {
-    transform: translateX(-120%);
+    transform: translateX(-105%);
   }
   100% {
-    transform: translateX(385%);
+    transform: translateX(255%);
   }
 }
 
@@ -183,23 +193,30 @@ body {
 }
 
 /* ---- Per-piece "developing" load cue --------------------------------------
-   While a query is in flight, each content box wears a frosted veil — a heavy
-   backdrop blur (content illegible) with a soft-light-blended gaussian grain.
-   `--settle`/`--flash` (0 = crisp ↔ ~0.95 = fully veiled / glow strength) are set
-   in JS on the *section* and inherit down, so the veil lands on the individual
-   boxes (each .phase, .crow, .mchip — not one band over the whole section). When
-   the data arrives the blur resolves into focus and `--flash` pulses a purple
-   glow, so each box visibly snaps into being as it becomes up to date. */
+   While a query is in flight, each content box wears a frosted scrim: a
+   panel-colored cover textured with a soft-light-blended grain, faded in via
+   `--settle` (0 = crisp ↔ ~0.82 = covered), set in JS on the *section* and
+   inherited down to each box (.phase, .crow, .mchip, .movers, .fundamentals —
+   not one band over the whole section). The texture comes from
+   `background-blend-mode`, which blends the grain into the fill *within the
+   layer* — it never samples the backdrop, so unlike `backdrop-filter: blur()`
+   (the old approach) it can't smear the content reordering behind it into
+   digital artifacts. When the data lands the scrim eases off and `--flash`
+   pulses a purple glow once — the "just landed" punch. */
 .skills,
 .phase,
 .crow,
-.mchip {
+.mchip,
+.movers,
+.fundamentals {
   position: relative;
 }
 .skills::after,
 .phase::after,
 .crow::after,
-.mchip::after {
+.mchip::after,
+.movers::after,
+.fundamentals::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -207,20 +224,22 @@ body {
   pointer-events: none; /* clicks/hovers pass straight through to the content */
   border-radius: inherit;
   opacity: var(--settle, 0); /* 0 ⇒ invisible, nothing painted */
-  -webkit-backdrop-filter: blur(calc(var(--settle, 0) * 32px)) saturate(0.8);
-  backdrop-filter: blur(calc(var(--settle, 0) * 32px)) saturate(0.8);
-  /* Grayscale gaussian grain, soft-light-blended into the blur so it reads as part
-     of the image and only darkens it — never a bright gray film on top. */
-  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0.33 0.33 0.33 0 -0.1 0.33 0.33 0.33 0 -0.1 0.33 0.33 0.33 0 -0.1 0 0 0 0 0.5'/></filter><rect width='160' height='160' filter='url(%23g)'/></svg>");
+  /* Panel fill + grayscale grain, blended together (not against the backdrop) so it reads as a
+     frosted surface. Tune the fill's alpha / the last colormatrix value to make the glass
+     lighter or heavier without ever reintroducing a backdrop blur. */
+  background-color: color-mix(in srgb, var(--panel) 94%, transparent);
+  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0.33 0.33 0.33 0 -0.1 0.33 0.33 0.33 0 -0.1 0.33 0.33 0.33 0 -0.1 0 0 0 0 0.4'/></filter><rect width='160' height='160' filter='url(%23g)'/></svg>");
   background-size: 160px 160px;
   background-repeat: repeat;
-  mix-blend-mode: soft-light;
+  background-blend-mode: soft-light;
 }
-/* Purple "just landed" glow — a soft bloom (no hard frame), pulsed by --flash. */
+/* Purple "just landed" glow — a soft bloom (no hard frame), pulsed once by --flash on completion. */
 .skills::before,
 .phase::before,
 .crow::before,
-.mchip::before {
+.mchip::before,
+.movers::before,
+.fundamentals::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -229,8 +248,8 @@ body {
   border-radius: inherit;
   opacity: var(--flash, 0);
   box-shadow:
-    0 0 22px 1px rgba(155, 109, 209, 0.45),
-    inset 0 0 30px rgba(155, 109, 209, 0.3);
+    0 0 20px 1px rgba(155, 109, 209, 0.4),
+    inset 0 0 26px rgba(155, 109, 209, 0.26);
 }
 
 .controls {
@@ -1282,6 +1301,7 @@ body {
 .phase.overtime h2 .time {
   color: color-mix(in srgb, var(--accent, #9b6dd1) 80%, var(--muted));
 }
+
 .phase h2 {
   margin: 0 0 10px;
   font-size: 15px;
@@ -1625,6 +1645,13 @@ body {
 }
 .line1 .name {
   font-weight: 600;
+}
+/* "🔥 trending" marker on a build pick the player base is currently adopting + winning with. */
+.line1 .trendtag {
+  margin-left: 5px;
+  font-size: 11px;
+  cursor: help;
+  vertical-align: middle;
 }
 .line1 .cost {
   color: #e3c770;

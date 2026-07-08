@@ -55,7 +55,7 @@ export function CounterQuickAdd({
       <input
         ref={inputRef}
         className="quickadd-in"
-        placeholder="type enemies fast — name + Enter…"
+        placeholder="enemy + Enter"
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);

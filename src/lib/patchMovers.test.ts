@@ -58,3 +58,81 @@ describe('findPatchMovers', () => {
     expect(out).toEqual([]);
   });
 });
+
+// foldTrendingBreakouts adds current breakouts as tagged situational options where they're not
+// already in the build, placing each by tier (T1→Lane … T4→Late) and never duplicating an existing
+// pick. It's purely additive — the core build is untouched.
+import { foldTrendingBreakouts, type AdoptionMover } from './patchMovers';
+import type { BuildItem, BuildPhase, GeneratedBuild } from '../types';
+
+const bi = (id: number): BuildItem =>
+  ({
+    item: item(id),
+    role: 'universal',
+    pickRate: 0.5,
+    adjustedWinRate: 0.52,
+    rawWinRate: 0.52,
+    sample: 1000,
+    decided: 1000,
+    avgNetWorthAtBuy: 0,
+    why: '',
+  }) as BuildItem;
+
+const phase = (column: number, core: number[], situational: number[]): BuildPhase => ({
+  column,
+  label: ['Lane', 'Early mid', 'Mid', 'Late'][column],
+  timeLabel: '',
+  targetItems: core.length,
+  itemsBought: core.length,
+  soulBudget: 0,
+  coreSouls: 0,
+  categorySouls: { weapon: 0, vitality: 0, spirit: 0 },
+  core: core.map(bi),
+  situational: situational.map(bi),
+});
+
+const buildOf = (phases: BuildPhase[], overtime: number[] = []): GeneratedBuild => ({
+  hero: { id: 1, name: 'H', signatureClasses: [] },
+  rankLabel: 'R',
+  population: { matches: 1000, avgDurationS: 1800, baselineWinRate: 0.5 },
+  phases,
+  standingSlots: 0,
+  overtimeBuys: overtime.map(bi),
+});
+
+const mover = (id: number, tier: number, breakout: boolean): AdoptionMover => ({
+  item: { ...item(id), tier },
+  pickPrev: 0.05,
+  pickNew: 0.14,
+  pickDelta: 0.09,
+  winRate: breakout ? 0.55 : 0.49,
+  winEdge: breakout ? 0.05 : -0.01,
+  nNew: 800,
+  breakout,
+});
+
+describe('foldTrendingBreakouts', () => {
+  it('folds an un-built breakout into the situational list of its tier phase', () => {
+    const build = buildOf([phase(0, [1], []), phase(1, [2], []), phase(2, [3], []), phase(3, [4], [])]);
+    const out = foldTrendingBreakouts(build, [mover(20, 3, true)]); // T3 → Mid (column 2)
+    const mid = out.phases[2];
+    const added = mid.situational.find((b) => b.item.id === 20);
+    expect(added).toBeDefined();
+    expect(added!.why).toMatch(/trending up/);
+    // other phases untouched, core untouched
+    expect(out.phases[2].core.map((b) => b.item.id)).toEqual([3]);
+  });
+
+  it('never duplicates a breakout already in the build (core or overtime)', () => {
+    const build = buildOf([phase(0, [1], []), phase(1, [2], []), phase(2, [3], []), phase(3, [4], [])], [40]);
+    const out = foldTrendingBreakouts(build, [mover(3, 3, true), mover(40, 4, true)]);
+    const allIds = out.phases.flatMap((p) => [...p.core, ...p.situational].map((b) => b.item.id));
+    expect(allIds.filter((x) => x === 3).length).toBe(1); // still just the one core copy
+    expect(allIds).not.toContain(40); // already in overtime — not folded into a phase
+  });
+
+  it('returns the same build when there are no breakouts', () => {
+    const build = buildOf([phase(0, [1], [])]);
+    expect(foldTrendingBreakouts(build, [])).toBe(build);
+  });
+});

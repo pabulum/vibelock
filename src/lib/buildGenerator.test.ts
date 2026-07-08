@@ -188,11 +188,11 @@ const jointLookup =
     joints[a < b ? `${a}-${b}` : `${b}-${a}`] ?? 0;
 const testHero: Hero = { id: 1, name: "Test Hero", signatureClasses: [] };
 
-// avg_sell_time_s counts an upgrade absorbing a component as a "sell", so a cheap item can't be
-// called a placeholder from its sell time alone. With pair data, an item whose buyers mostly
-// finish a specific upgrade is labelled "most build into X"; one whose buyers genuinely dump it
-// keeps "often sold".
-describe("generateBuild — measured continuation vs often-sold", () => {
+// A cheap (≤T1) core pick sold before ~25 min is flagged as a transient placeholder with a plain
+// "often sold ~mm:ss" note — including one whose buyers mostly continue it into an upgrade we don't
+// recommend (we deliberately do NOT special-case that as "most build into X"; the buildsToward clue
+// carries the upgrade hint instead).
+describe("generateBuild — often-sold placeholder flag", () => {
   const comp: Item = {
     id: 1,
     name: "Comp Stick",
@@ -217,14 +217,6 @@ describe("generateBuild — measured continuation vs often-sold", () => {
     slot: "vitality",
     componentIds: [],
   };
-  const rareUpg: Item = {
-    id: 4,
-    name: "Rare Upgrade",
-    tier: 2,
-    cost: 1600,
-    slot: "vitality",
-    componentIds: [sold.id],
-  };
   const staple: Item = {
     id: 5,
     name: "Spirit Staple",
@@ -234,20 +226,19 @@ describe("generateBuild — measured continuation vs often-sold", () => {
     componentIds: [],
   };
   const items = new Map<number, Item>(
-    [comp, upg, sold, rareUpg, staple].map((i) => [i.id, i]),
+    [comp, upg, sold, staple].map((i) => [i.id, i]),
   );
 
   const flow = mkFlow([
-    mkNode(0, comp.id, 8000, 0.5), // universal; 80% of its buyers finish Big Upgrade
-    mkNode(0, sold.id, 7000, 0.5), // universal; ~1% continuation — a true placeholder sale
+    mkNode(0, comp.id, 8000, 0.5), // cheap lane stick, sold early — a placeholder
+    mkNode(0, sold.id, 7000, 0.5),
     mkNode(0, staple.id, 6000, 0.51),
-    mkNode(1, rareUpg.id, 800, 0.48), // in the flow (so the pair is readable) but never seatable
     mkNode(2, upg.id, 800, 0.48),
   ]);
   const sellTimes = new Map([
     [comp.id, 700],
     [sold.id, 700],
-  ]); // both "sell" early — indistinguishable without pair data
+  ]);
 
   const build = generateBuild(
     testHero,
@@ -256,20 +247,18 @@ describe("generateBuild — measured continuation vs often-sold", () => {
     flow,
     new Map(),
     sellTimes,
-    { jointGamesOf: jointLookup({ "1-2": 6400, "3-4": 70 }) },
   );
   const lane = build.phases[0];
 
-  it('labels a dominant upgrade line "most build into X", not "often sold"', () => {
+  it('flags a cheap early-sold pick with "often sold ~mm:ss"', () => {
     const row = lane.core.find((b) => b.item.id === comp.id);
     expect(row?.transient).toBe(true);
-    expect(row?.transientReason).toBe("most build into Big Upgrade");
+    expect(row?.transientReason).toMatch(/^often sold/);
   });
 
-  it('keeps "often sold" for a cheap pick with no dominant continuation', () => {
-    const row = lane.core.find((b) => b.item.id === sold.id);
-    expect(row?.transient).toBe(true);
-    expect(row?.transientReason).toMatch(/^often sold/);
+  it('never labels a pick "most build into X"', () => {
+    for (const b of build.phases.flatMap((p) => p.core))
+      expect(b.transientReason ?? "").not.toMatch(/most build into/);
   });
 });
 

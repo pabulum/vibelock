@@ -64,13 +64,6 @@ const SUBSTITUTE_OVERLAP_MAX = 0.4; // measured co-buy rate — joint games over
 // (Echo Shard ∧ Superior Duration 87%) — 0.4 sits in the empirical gap.
 const PAIR_MIN_N = 500; // both items need this many whole-game decided samples before a missing/
 // tiny pair row may be read as "genuinely not bought together" rather than "no data".
-const CONTINUATION_MIN = 0.5; // at least half of a component's buyers finish a specific upgrade ⇒
-// its honest transient label is "most build into X", not "often sold": item-stats' avg_sell_time_s
-// counts upgrade absorption as a sell, so upgrade lines masquerade as placeholder sales (Headshot
-// Booster's "sell" at ~12:35 IS Headhunter's ~11:12 buy; 83% of its buyers finish Headhunter, vs
-// 1% continuation for Extra Regen — a true placeholder). Same-population shares: Sprint Boots →
-// Trophy Collector 60%, Monster Rounds → Cultist Sacrifice 56%.
-const CONTINUATION_MAX_TIER = 2; // only cheap pickups read as line components; a T3 is a build in itself.
 const SUBSTITUTE_WR_EDGE = 0.01; // which of two substitutes holds the shared slot: the core fill
 // seats by pick rate, so the more *popular* one gets there first and holds it by default. But
 // popularity among comparable substitutes is mostly habit, not correctness — so the other takes the
@@ -432,7 +425,7 @@ export function generateBuild(
   dropSamePhaseComponents(phases); // a component+upgrade in one phase ⇒ keep only the upgrade
   countItemsBought(phases); // buy count per phase, crediting same-phase folded components
   recomputeCosts(phases, items); // finalize marginal costs against post-dedupe membership
-  markTransient(phases, sellTimes, items, pairGames); // flag builds-into / most-build-into / often-sold placeholders
+  markTransient(phases, sellTimes); // flag builds-into / often-sold placeholders
   const standingSlots = capStandingSlots(phases, SLOT_CAP); // sell weakest cheap picks to fit the slot cap
   annotateRelations(phases, flow, items);
   annotateSlotRelations(phases, pairGames);
@@ -669,19 +662,14 @@ function absorptionMap(core: BuildItem[]): Map<number, Item> {
 
 /**
  * Flags core items that don't hold a permanent slot — they build into another recommended item (a
- * shared slot), the population predominantly builds them into an upgrade we *don't* recommend (a
- * measured continuation — see {@link dominantContinuation}), or they're a cheap item players
- * typically sell — and returns the count of items that *do* hold a slot. The continuation check
- * runs before the often-sold heuristic because avg_sell_time_s can't tell a sale from an upgrade
- * absorbing the component: without it, an upgrade line's first item reads as a placeholder sale
- * ("often sold ~12:35" on Headshot Booster, whose buyers are 83% mid-Headhunter — the sew-together
- * misread). Mutates the phases' core items.
+ * shared slot) or they're a cheap item players typically sell early — and returns the count of items
+ * that *do* hold a slot. Mutates the phases' core items. (An upgrade this hero's buyers predominantly
+ * continue a cheap component into is *not* specially flagged: those read as the plain "often sold ~mm:ss"
+ * transient, which is the label we keep — see the `buildsToward` clue for the upgrade hint instead.)
  */
 function markTransient(
   phases: BuildPhase[],
   sellTimes: Map<number, number>,
-  items: Map<number, Item>,
-  pairGames?: PairGames,
 ): number {
   const core = phases.flatMap((p) => p.core);
   const buildsInto = absorptionMap(core); // component → the one upgrade that absorbs it
@@ -692,12 +680,6 @@ function markTransient(
     if (upgrade) {
       b.transient = true;
       b.transientReason = `builds into ${upgrade.name}`;
-      continue;
-    }
-    const cont = dominantContinuation(b.item, items, pairGames);
-    if (cont) {
-      b.transient = true;
-      b.transientReason = `most build into ${cont.name}`;
     } else if (
       b.item.tier <= 1 &&
       sellTime !== undefined &&
@@ -710,31 +692,6 @@ function markTransient(
   }
 
   return core.filter((b) => !b.transient).length;
-}
-
-/**
- * The upgrade a cheap item's buyers predominantly finish it into — measured, not inferred: the
- * share of the component's whole-game sample that also bought a specific upgrade built from it
- * must clear {@link CONTINUATION_MIN}. Returns the strongest such upgrade, or undefined (no pair
- * data, no upgrades, or no dominant line — e.g. Extra Regen's buyers finish Healing Booster ~1%
- * of the time; that one really is sold).
- */
-function dominantContinuation(
-  component: Item,
-  items: Map<number, Item>,
-  pairGames?: PairGames,
-): Item | undefined {
-  if (!pairGames || component.tier > CONTINUATION_MAX_TIER) return undefined;
-  let best: { item: Item; share: number } | undefined;
-  for (const candidate of items.values()) {
-    if (!candidate.componentIds.includes(component.id)) continue;
-    const pg = pairGames(component.id, candidate.id);
-    if (!pg || pg.totalA < PAIR_MIN_N) continue; // only the component's side feeds the ratio
-    const share = pg.joint / pg.totalA;
-    if (share >= CONTINUATION_MIN && (!best || share > best.share))
-      best = { item: candidate, share };
-  }
-  return best?.item;
 }
 
 /**
