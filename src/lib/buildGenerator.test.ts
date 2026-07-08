@@ -139,6 +139,101 @@ describe("generateBuild — component/upgrade cross-phase dedup", () => {
     expect(allItemIds).not.toContain(component.id);
     expect(allItemIds).toContain(upgrade.id);
   });
+
+  // Buying a core upgrade auto-queues its whole component tree, so a part of it shouldn't also be
+  // offered as a separate *situational* pickup in the same phase (Extra Health surfacing optional
+  // while Fortitude, which builds from it, is core). The cross-phase test above covers earlier-phase
+  // upgrades; this covers the same-phase core case (which dropSamePhaseComponents only handled for core).
+  it("never offers a component as situational when its upgrade is core in the same phase", () => {
+    const component: Item = {
+      id: 1,
+      name: "Extra Health",
+      tier: 1,
+      cost: 800,
+      slot: "vitality",
+      componentIds: [],
+    };
+    const upgrade: Item = {
+      id: 2,
+      name: "Fortitude",
+      tier: 3,
+      cost: 3000,
+      slot: "vitality",
+      componentIds: [component.id],
+    };
+    const items = new Map<number, Item>([
+      [component.id, component],
+      [upgrade.id, upgrade],
+    ]);
+
+    const flow: ItemFlowStats = {
+      nodes: [
+        // The upgrade is a near-universal, winning core pick this phase.
+        {
+          column: 0,
+          item_id: upgrade.id,
+          wins: 540,
+          losses: 360,
+          players: 900,
+          matches: 900,
+          adjusted_win_rate: 0.6,
+          avg_net_worth_at_buy: 3000,
+          total_kills: 0,
+          total_deaths: 0,
+          total_assists: 0,
+        },
+        // Its component is a strong sub-universal value pick — it'd otherwise land in situational.
+        {
+          column: 0,
+          item_id: component.id,
+          wins: 130,
+          losses: 70,
+          players: 200,
+          matches: 200,
+          adjusted_win_rate: 0.65,
+          avg_net_worth_at_buy: 800,
+          total_kills: 0,
+          total_deaths: 0,
+          total_assists: 0,
+        },
+      ],
+      edges: [],
+      summary: {
+        matches: 1000,
+        players: 1000,
+        wins: 500,
+        losses: 500,
+        avg_duration_s: 1800,
+        avg_net_worth: 8000,
+      },
+      baseline: {
+        matches: 1000,
+        players: 1000,
+        wins: 500,
+        losses: 500,
+        avg_duration_s: 1800,
+        avg_net_worth: 8000,
+      },
+      reached_per_column: [1000, 1000, 1000, 1000],
+    };
+
+    const hero: Hero = { id: 1, name: "Test Hero", signatureClasses: [] };
+    const build = generateBuild(
+      hero,
+      "Test Rank",
+      items,
+      flow,
+      new Map(),
+      new Map(),
+    );
+
+    const lane = build.phases[0];
+    expect(lane.core.map((b) => b.item.id)).toContain(upgrade.id);
+    const allItemIds = build.phases.flatMap((p) =>
+      [...p.core, ...p.situational].map((b) => b.item.id),
+    );
+    expect(allItemIds).not.toContain(component.id);
+  });
 });
 
 // Measured co-purchase data (BuildOptions.jointGamesOf) — the sew-together fixes. Fixtures share
@@ -188,11 +283,12 @@ const jointLookup =
     joints[a < b ? `${a}-${b}` : `${b}-${a}`] ?? 0;
 const testHero: Hero = { id: 1, name: "Test Hero", signatureClasses: [] };
 
-// A cheap (≤T1) core pick sold before ~25 min is flagged as a transient placeholder with a plain
-// "often sold ~mm:ss" note — including one whose buyers mostly continue it into an upgrade we don't
-// recommend (we deliberately do NOT special-case that as "most build into X"; the buildsToward clue
-// carries the upgrade hint instead).
-describe("generateBuild — often-sold placeholder flag", () => {
+// A cheap (≤T1) core pick that leaves inventory before ~25 min is flagged as a transient placeholder
+// (TEMP) — but with NO reason string. The time used to print as "often sold ~mm:ss", but item-stats'
+// avg_sell_time_s counts an upgrade absorbing the component as a "sell" (verified: a single-upgrade
+// component's sell time == its upgrade's buy time), so it was an upgrade time, not a sale. We keep the
+// TEMP flag (a cheap early stat-stick isn't a permanent slot) and drop the misleading label.
+describe("generateBuild — early-placeholder TEMP flag", () => {
   const comp: Item = {
     id: 1,
     name: "Comp Stick",
@@ -250,15 +346,15 @@ describe("generateBuild — often-sold placeholder flag", () => {
   );
   const lane = build.phases[0];
 
-  it('flags a cheap early-sold pick with "often sold ~mm:ss"', () => {
+  it("flags a cheap early-placeholder pick as TEMP with no reason text", () => {
     const row = lane.core.find((b) => b.item.id === comp.id);
     expect(row?.transient).toBe(true);
-    expect(row?.transientReason).toMatch(/^often sold/);
+    expect(row?.transientReason).toBeUndefined();
   });
 
-  it('never labels a pick "most build into X"', () => {
+  it("never prints a sell-time or build-into label on a cheap placeholder", () => {
     for (const b of build.phases.flatMap((p) => p.core))
-      expect(b.transientReason ?? "").not.toMatch(/most build into/);
+      expect(b.transientReason ?? "").not.toMatch(/sold|most build into/);
   });
 });
 

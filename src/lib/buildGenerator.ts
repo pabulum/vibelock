@@ -81,7 +81,8 @@ const COMEBACK_RESERVE = 2; // situational slots held for the best comeback pick
 // the old flat 1.5pt was doing double duty as margin *and* noise cushion, so it ignored sample size and
 // mis-tagged thin-sample wobble as "buy later" and real large-sample gaps as "rush".
 const RUSH_MARGIN = 0.005;
-const SELL_BEFORE_S = 1500; // a cheap item sold before ~25 min is a placeholder
+const SELL_BEFORE_S = 1500; // a cheap item that leaves inventory before ~25 min is a placeholder (the
+// "leave" is usually an upgrade-consumption, not a literal sale — avg_sell_time_s conflates the two; see markTransient)
 export const SLOT_CAP = 12; // 9 base + 3 flex slots (unlocked via Walker kills)
 const SELL_FOR_SLOTS_MAX_TIER = 2; // only cheap stat-sticks/components (≤T2) are sold to free a slot; T3+
 // are "build complete" and never sold for room unless you're giga-late (which we don't assume — see
@@ -422,7 +423,7 @@ export function generateBuild(
   }
 
   dedupeAcrossPhases(phases);
-  dropSamePhaseComponents(phases); // a component+upgrade in one phase ⇒ keep only the upgrade
+  dropSamePhaseComponents(phases, items); // a component+upgrade in one phase ⇒ keep only the upgrade
   countItemsBought(phases); // buy count per phase, crediting same-phase folded components
   recomputeCosts(phases, items); // finalize marginal costs against post-dedupe membership
   markTransient(phases, sellTimes); // flag builds-into / often-sold placeholders
@@ -609,12 +610,32 @@ function dedupeAcrossPhases(phases: BuildPhase[]): void {
  * really do buy the cheap item in an earlier phase and upgrade later, so it holds a genuine
  * (transient) slot and earns its row. Run after dedupe (final membership known) and before
  * recomputeCosts (so the kept upgrade prices at full sticker).
+ *
+ * The *situational* list gets the same treatment, for the same reason: buying a same-phase core
+ * upgrade auto-queues its whole component tree, so offering one of those parts as a separate
+ * optional pickup is redundant (Paradox early-mid: Extra Health surfacing situational while
+ * Fortitude, which builds from it, is already core). This arm is *transitive* — the upgrade pulls
+ * in the full tree, not just its direct parts — and it's scoped to same-phase core: a component
+ * that's core/optional in an *earlier* phase and upgraded here is the legitimate "buy cheap, upgrade
+ * later" path and keeps its row (that cross-phase case is handled by `consumedByOwned` in buildPhase).
  */
-function dropSamePhaseComponents(phases: BuildPhase[]): void {
+function dropSamePhaseComponents(
+  phases: BuildPhase[],
+  items: Map<number, Item>,
+): void {
   for (const p of phases) {
     const absorbedHere = absorptionMap(p.core); // component id → its same-phase absorbing upgrade
-    if (absorbedHere.size === 0) continue;
-    p.core = p.core.filter((b) => !absorbedHere.has(b.item.id));
+    if (absorbedHere.size > 0)
+      p.core = p.core.filter((b) => !absorbedHere.has(b.item.id));
+    // A situational pick that's a (transitive) component of something still core this phase folds
+    // into that upgrade's shop queue — don't offer it as its own optional buy.
+    if (p.core.length && p.situational.length)
+      p.situational = p.situational.filter(
+        (s) =>
+          !p.core.some((c) =>
+            buildsFromAny(c.item, new Set([s.item.id]), items),
+          ),
+      );
   }
 }
 
@@ -662,10 +683,18 @@ function absorptionMap(core: BuildItem[]): Map<number, Item> {
 
 /**
  * Flags core items that don't hold a permanent slot — they build into another recommended item (a
- * shared slot) or they're a cheap item players typically sell early — and returns the count of items
- * that *do* hold a slot. Mutates the phases' core items. (An upgrade this hero's buyers predominantly
- * continue a cheap component into is *not* specially flagged: those read as the plain "often sold ~mm:ss"
- * transient, which is the label we keep — see the `buildsToward` clue for the upgrade hint instead.)
+ * shared slot) or they're a cheap stat-stick that leaves your inventory before the game's back half —
+ * and returns the count of items that *do* hold a slot. Mutates the phases' core items.
+ *
+ * Only the first case gets a *reason* string ("builds into X"), and only when X is itself in the build
+ * so the note names a pick the player is actually holding. The cheap-early case is flagged TEMP with no
+ * text: we used to print "often sold ~mm:ss" from item-stats' `avg_sell_time_s`, but that field counts a
+ * component being absorbed into its upgrade as a "sell" — verified against Paradox @ Emissary+, where a
+ * single-upgrade component's `avg_sell_time_s` lands within a minute of its upgrade's buy time (HVR
+ * "sold" 6:55 = Opening Rounds bought 6:37; Extra Health "sold" 17:47 = Fortitude bought 17:06). So the
+ * time was an *upgrade* time, not a sell, and the label misread nearly every early stat-stick. The TEMP
+ * flag itself still stands — a T1 stick gone before {@link SELL_BEFORE_S} isn't a permanent slot whether
+ * it left via upgrade or sale, which is what the slot accounting needs — we just no longer assert a time.
  */
 function markTransient(
   phases: BuildPhase[],
@@ -676,18 +705,17 @@ function markTransient(
 
   for (const b of core) {
     const upgrade = buildsInto.get(b.item.id);
-    const sellTime = sellTimes.get(b.item.id);
+    const leaveTime = sellTimes.get(b.item.id); // time it leaves inventory (mostly upgrade-consumption)
     if (upgrade) {
       b.transient = true;
       b.transientReason = `builds into ${upgrade.name}`;
     } else if (
       b.item.tier <= 1 &&
-      sellTime !== undefined &&
-      sellTime > 0 &&
-      sellTime < SELL_BEFORE_S
+      leaveTime !== undefined &&
+      leaveTime > 0 &&
+      leaveTime < SELL_BEFORE_S
     ) {
-      b.transient = true;
-      b.transientReason = `often sold ~${mmss(sellTime)}`;
+      b.transient = true; // a cheap stat-stick that's gone early — TEMP, but no (unreliable) time label
     }
   }
 
@@ -738,10 +766,6 @@ function capStandingSlots(phases: BuildPhase[], cap: number): number {
     held--;
   }
   return held;
-}
-
-function mmss(s: number): string {
-  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 }
 
 const COST_BAND = 1.6; // a "swap" only makes sense between items of comparable cost
@@ -1896,7 +1920,7 @@ export function rerankBuildForComp(
     return { ...phase, core: newCore, situational: newSitu };
   });
 
-  dropSamePhaseComponents(phases); // re-rank can pull a swap into core beside its upgrade — keep one
+  dropSamePhaseComponents(phases, items); // re-rank can pull a swap into core beside its upgrade — keep one
   countItemsBought(phases); // re-count buys for the re-ranked core membership
   recomputeCosts(phases, items); // marginal costs + coreSouls/categorySouls for the re-ranked core
   const standingSlots = capStandingSlots(phases, SLOT_CAP); // re-fit the cap to the re-ranked membership

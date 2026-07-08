@@ -193,7 +193,8 @@ export interface BuildItem {
   why: string;
   /** True when this item doesn't hold a permanent slot (sold, or builds into another pick). */
   transient?: boolean;
-  /** Why it's transient, e.g. "builds into Burst Fire" or "often sold ~16:30". */
+  /** Why it's transient, e.g. "builds into Burst Fire". Undefined for a cheap early stat-stick — those
+   * show a bare TEMP badge (the old "often sold ~mm:ss" time was really upgrade timing; see markTransient). */
   transientReason?: string;
   /** Set when a comp is selected: the item's signed win-rate edge vs that comp (centered on
    * the matchup lean). Positive = answers the comp, negative = weak into it. */
