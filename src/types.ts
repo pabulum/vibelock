@@ -173,6 +173,11 @@ export interface BuildItem {
    */
   pickRate: number;
   adjustedWinRate: number;
+  /** Win rate used for *ranking/gating* only, never for display — the shown WR stays `adjustedWinRate`.
+   * When line-aware generation is on (see BuildOptions.lineAware), an upgrade's rank WR is shrunk toward
+   * its component's broader win rate to discount survivorship (few reach a deep upgrade ⇒ its raw WR is
+   * selection-inflated). Undefined ⇒ ranking falls back to `adjustedWinRate` (identical to before). */
+  rankWinRate?: number;
   rawWinRate: number;
   /** Number of players (sample size) behind the numbers. */
   sample: number;

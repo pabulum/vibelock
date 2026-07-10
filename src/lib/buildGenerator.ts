@@ -109,6 +109,16 @@ const SYNERGY_WEIGHT = 0.5; // how much a discretionary pick's *synergy with the
 // strong combo, against ~±2–5pt edges — a real tiebreak that tips close calls toward items that reinforce
 // the build, but can't override a clearly-better pick or seat one that fails the break-even gate. 0 = off.
 
+// --- Line-aware down-payment (opts.lineAware) ---
+// How much a component's *future upgrade upside* counts toward its early-phase core ranking, so a Lane
+// stat-stick that builds into a winning later pick outranks a dead-end one of equal WR (you keep 100% of the
+// souls upgrading vs 50% selling it later). Gated by the two-pass commitment check (see generateBuild): the
+// bonus only fires for a component whose upgrade the build actually seats in a later phase, which is what
+// stops the naive one-pass over-fire (verified on Paradox @ Emissary+: it had promoted Compress Cooldown
+// +0.3 over Enchanter's Emblem +2.2 for a Superior Cooldown that never seated). Mirrors SYNERGY_WEIGHT's
+// magnitude — a tiebreak, not an override. 0 = off (also skips pass 1).
+const DOWNPAYMENT_WEIGHT = 0.5;
+
 // --- Empirical-Bayes shrinkage (toward the hero's baseline win rate) ---
 // An item's win rate is shrunk toward baseline by a weighted average with the baseline standing in as a
 // prior worth `K` games of evidence: shrunk = (n·wr + K·baseline) / (n + K), where n is the item's decided
@@ -170,12 +180,19 @@ function lowerConfidenceWinRate(
  */
 function isValuePick(b: BuildItem, baseline: number): boolean {
   return significantlyHigher(
-    b.adjustedWinRate,
+    meritWr(b),
     b.decided,
     baseline,
     Number.POSITIVE_INFINITY,
     VALUE_EDGE,
   );
+}
+
+/** The win rate to rank/gate a pick by: its {@link BuildItem.rankWinRate} when line-aware generation has
+ * set one (survivorship-shrunk toward the component), else its plain adjusted win rate. Display always
+ * reads `adjustedWinRate` directly, so shrinking never changes the number the player sees. */
+function meritWr(b: BuildItem): number {
+  return b.rankWinRate ?? b.adjustedWinRate;
 }
 
 /**
@@ -215,7 +232,13 @@ function priorStrength(
 // how many slots the build has already committed before the phase. This adapts per hero: a build that fills its
 // slots early flips to per-slot power sooner, where the big carries win. (Set MAX to 0 to recover raw-WR core.)
 const CORE_COST_POWER_MAX = 0.6;
-const CORE_SLOT_TARGET = SLOT_CAP; // committed standing slots at which efficiency has fully faded to per-slot
+// Committed standing slots at which soul-efficiency has fully faded to per-slot power. Set to the 9 *base*
+// slots, not SLOT_CAP (12): the 3 flex slots are earned (Walker kills) and shouldn't be assumed, and in
+// practice players hit the per-slot regime around Mid as the base slots fill (observed: 12 held by the
+// Superior Cooldown / Greater Expansion window). Binding at 9 lets per-slot win rate (the big carries, and
+// high-edge-but-pricey picks like Echo Shard) start deciding mid-game instead of waiting for a 12th slot
+// that may never unlock. Raise toward SLOT_CAP to keep favoring cheap soul-efficient picks later.
+const CORE_SLOT_TARGET = 9;
 
 /** The efficiency weight to use for a phase, given how many standing slots are already committed. Linear fade
  * from CORE_COST_POWER_MAX (nothing committed — souls bind) to 0 (slots full — per-slot power decides). */
@@ -231,18 +254,23 @@ function costPowerForSlots(slotsCommitted: number): number {
  * a mild popularity tilt; and a cost penalty whose strength (`costPower`, from {@link costPowerForSlots})
  * fades as the standing build fills — so early picks favor soul-efficiency and, once slots are scarce,
  * per-slot win rate (the big carries) decides. `costK` floors at 1 (1000 souls) so sub-1k stat-sticks get
- * no efficiency boost. Higher = seat first. */
+ * no efficiency boost. `bonus` is the *already-weighted* additive edge bonus (synergy + line-aware
+ * down-payment, assembled by the caller) — added straight to the edge. Higher = seat first. */
 function coreWrScore(
   b: BuildItem,
   baselineWinRate: number,
   costPower: number,
   k: number,
-  synBonus = 0,
+  bonus = 0,
 ): number {
+  // Ordering uses the *raw* adjusted WR, not the line-shrunk meritWr: the shrink is an admission gate
+  // (seatable / isValuePick), not a fine ranking signal. Shrinking here demoted mainstream upgrades below
+  // their own universal components (Trophy Collector losing its slot to a terminal Sprint Boots), so let
+  // the gate decide *whether* an upgrade earns a slot and this decide the order among those that do.
   const edge =
     lowerConfidenceWinRate(b.adjustedWinRate, b.decided, baselineWinRate, k) -
     baselineWinRate +
-    SYNERGY_WEIGHT * synBonus;
+    bonus;
   const popTilt = 1 + CORE_POP_TILT * b.pickRate;
   const costK = Math.max(1, b.item.cost / 1000);
   return (edge * popTilt) / Math.pow(costK, costPower);
@@ -338,6 +366,20 @@ export interface BuildOptions {
    * demonstrably co-occur. Omit to keep the previous heuristics.
    */
   jointGamesOf?: (a: number, b: number) => number;
+  /**
+   * Line-aware generation (experimental toggle). When true, the **survivorship shrink** kicks in: an
+   * upgrade's *admission* win rate (used only for the seatable / value gates, never for display or for
+   * ordering) is pulled toward its component's broader win rate, weighted by how many of the component's
+   * buyers actually reach the upgrade (λ = pickUpgrade / pickComponent). A deep upgrade few players reach —
+   * its raw WR inflated by selection (Headhunter, Weighted Shots) — is discounted below the bar and kept out
+   * of core; a mainstream upgrade nearly everyone continues into (Fortitude, Opening Rounds) is trusted and
+   * keeps its slot. The shrink deliberately does *not* touch ranking order — doing so demoted good upgrades
+   * below their own universal components (see coreWrScore). The **down-payment** half then nudges a component
+   * up the early-phase ranking when it builds into an upgrade the build commits to later (gated by a
+   * two-pass commitment check; see {@link DOWNPAYMENT_WEIGHT}). Off by default — the build is byte-for-byte
+   * unchanged.
+   */
+  lineAware?: boolean;
 }
 
 /**
@@ -395,6 +437,44 @@ export function generateBuild(
   // fill skips an item outside its primary phase, because dedupeAcrossPhases keeps it only there —
   // filling an earlier phase's slot with a mostly-bought-later item just leaves that slot empty.
   const primaryCol = primaryColumnByItem(flow);
+  // Line-aware model (survivorship shrink + down-payment upside), computed once. Undefined unless the
+  // toggle is on, so the default path is untouched.
+  const lineModel = opts.lineAware ? buildLineModel(flow, items) : undefined;
+
+  // Down-payment needs to know which upgrades the build *commits to* in later phases before it can reward
+  // buying their components early. Pass 1 (dp off — committedCore undefined) builds the phases just to learn
+  // that: item id → earliest phase it's core. This runs only when line-aware + the weight is live, so it's
+  // 2× the phase sweeps inside this call *only then* (and this call already runs once per archetype — no
+  // deeper nesting). buildLineModel above is computed once and shared across both passes.
+  let committedCore: Map<number, number> | undefined;
+  if (lineModel && DOWNPAYMENT_WEIGHT > 0) {
+    const owned1 = new Set<number>();
+    const claimed1 = new Set<number>();
+    committedCore = new Map<number, number>();
+    for (let col = 0; col < PHASE_META.length; col++) {
+      const p = buildPhase(
+        col,
+        flow,
+        items,
+        baselineWinRate,
+        buyTimes,
+        sellTimes,
+        opts,
+        primaryCol,
+        owned1,
+        claimed1,
+        priorK,
+        pairGames,
+        lineModel,
+        // committedCore intentionally omitted ⇒ dp off in pass 1
+      );
+      for (const b of p.core) {
+        if (!committedCore.has(b.item.id)) committedCore.set(b.item.id, col);
+        owned1.add(b.item.id);
+      }
+    }
+  }
+
   // Phases are built in order so each can see what earlier phases committed to buy (`owned`): an
   // upgrade is discounted by a component you already hold, both when gating what fits the soul budget
   // and in the displayed spend. `claimed` tracks components already absorbed by an upgrade so a single
@@ -417,12 +497,15 @@ export function generateBuild(
       claimed,
       priorK,
       pairGames,
+      lineModel,
+      committedCore,
     );
     phases.push(phase);
     for (const b of phase.core) owned.add(b.item.id);
   }
 
   dedupeAcrossPhases(phases);
+  if (lineModel) collapseLines(phases); // promote a worthy upgrade over its terminal component (same phase)
   dropSamePhaseComponents(phases, items); // a component+upgrade in one phase ⇒ keep only the upgrade
   countItemsBought(phases); // buy count per phase, crediting same-phase folded components
   recomputeCosts(phases, items); // finalize marginal costs against post-dedupe membership
@@ -573,6 +656,134 @@ function primaryColumnByItem(flow: ItemFlowStats): Map<number, number> {
   const out = new Map<number, number>();
   for (const [id, v] of best) out.set(id, v.col);
   return out;
+}
+
+/** Per-item survivorship shrink + down-payment upside for line-aware generation (see BuildOptions.lineAware). */
+interface LineModel {
+  /** upgrade id → how to shrink its rank WR toward its main component: `compWr + λ·(itemWr − compWr)`. */
+  shrinkOf: Map<number, { compWr: number; lambda: number }>;
+  /** component id → each in-flow upgrade of it with positive shrunk upside, its id, and its home phase.
+   * Pass 2 picks the best upgrade the build *actually committed to* later (see committedCore). */
+  downpaymentOf: Map<
+    number,
+    Array<{ upgradeId: number; upside: number; upgradeCol: number }>
+  >;
+}
+
+/**
+ * Build the {@link LineModel} once per generation. Each item's *primary-phase profile* (the column where the
+ * most players buy it, with that column's pick rate and adjusted win rate) stands in for its "broad"
+ * behaviour. Then:
+ *  - shrinkOf: for every item with a direct component present in the flow, pick the component the most
+ *    players buy (the main line), and record λ = min(1, pickUpgrade / pickComponent) — the share of the
+ *    component's buyers who reach the upgrade — plus the component's win rate. buildPhase uses these to pull
+ *    a survivorship-inflated upgrade WR back toward its component (few reach it ⇒ small λ ⇒ big shrink).
+ *  - downpaymentOf: for every component, each in-flow upgrade with positive shrunk upside
+ *    `max(0, λ·(WR_up − WR_comp))`, its id, and its home column. The fill rewards buying the component early
+ *    when it builds into a winner the build *commits to* in a later phase — the commitment gate (pass 1's
+ *    committedCore) is what stops a naive one-pass from promoting a component for an upgrade that never seats.
+ */
+function buildLineModel(
+  flow: ItemFlowStats,
+  items: Map<number, Item>,
+): LineModel {
+  const profile = new Map<number, { col: number; pick: number; wr: number }>();
+  for (const n of flow.nodes) {
+    const reached =
+      flow.reached_per_column[n.column] || flow.baseline.matches || 1;
+    const pick = reached > 0 ? n.players / reached : 0;
+    const cur = profile.get(n.item_id);
+    if (!cur || pick > cur.pick)
+      profile.set(n.item_id, {
+        col: n.column,
+        pick,
+        wr: n.adjusted_win_rate,
+      });
+  }
+
+  const shrinkOf = new Map<number, { compWr: number; lambda: number }>();
+  for (const [id, up] of profile) {
+    const item = items.get(id);
+    if (!item) continue;
+    // Main component = the direct component with in-flow data the most players buy.
+    let main: { pick: number; wr: number } | undefined;
+    for (const cid of item.componentIds) {
+      const cp = profile.get(cid);
+      if (cp && (!main || cp.pick > main.pick)) main = cp;
+    }
+    if (!main || main.pick <= 0) continue;
+    const lambda = Math.min(1, up.pick / main.pick);
+    shrinkOf.set(id, { compWr: main.wr, lambda });
+  }
+
+  // Reverse tree: component id → the items built directly from it (that have flow data).
+  const builtFrom = new Map<number, number[]>();
+  for (const [id, item] of items)
+    if (profile.has(id))
+      for (const cid of item.componentIds)
+        if (profile.has(cid))
+          (builtFrom.get(cid) ?? builtFrom.set(cid, []).get(cid)!).push(id);
+
+  const downpaymentOf = new Map<
+    number,
+    Array<{ upgradeId: number; upside: number; upgradeCol: number }>
+  >();
+  for (const [cid, ups] of builtFrom) {
+    const comp = profile.get(cid)!;
+    const arr: Array<{
+      upgradeId: number;
+      upside: number;
+      upgradeCol: number;
+    }> = [];
+    for (const uid of ups) {
+      const up = profile.get(uid)!;
+      const lambda = comp.pick > 0 ? Math.min(1, up.pick / comp.pick) : 0;
+      const upside = Math.max(0, lambda * (up.wr - comp.wr));
+      if (upside > 0) arr.push({ upgradeId: uid, upside, upgradeCol: up.col });
+    }
+    if (arr.length) downpaymentOf.set(cid, arr);
+  }
+
+  return { shrinkOf, downpaymentOf };
+}
+
+/**
+ * Line-collapse (lineAware). When a phase already surfaces both a component (in core) and a direct upgrade
+ * of it (in situational), and the upgrade is at least as good on *merit* (shrunk win rate — so a
+ * survivorship trap like Headhunter does NOT qualify), promote the upgrade into core. The very next step,
+ * {@link dropSamePhaseComponents}, then folds the component into it — so the phase shows the finished item
+ * (Opening Rounds) in place of the terminal component (High-Velocity Rounds), same slot, cost credited by
+ * {@link recomputeCosts}. This is what makes the build recommend the *upgrade you actually play* instead of
+ * the stat-stick you'd otherwise be shown holding until you sell it.
+ *
+ * Scoped deliberately tight: same phase only (the component is core and the upgrade situational *here*),
+ * direct component→upgrade, and only upgrades not already core elsewhere. The merit gate `meritWr(up) ≥
+ * meritWr(comp)` is the keep-vs-upgrade call — when the upgrade is more niche/worse after the shrink
+ * (Slowing Bullets → Weighted Shots) the component keeps its slot and nothing collapses. Run after
+ * dedupeAcrossPhases (membership settled) and before dropSamePhaseComponents (which does the fold).
+ */
+function collapseLines(phases: BuildPhase[]): void {
+  const coreAnywhere = new Set<number>();
+  for (const p of phases) for (const b of p.core) coreAnywhere.add(b.item.id);
+  for (const p of phases) {
+    for (const comp of [...p.core]) {
+      // The best same-phase situational upgrade built directly from this component, worth upgrading into.
+      let best: BuildItem | undefined;
+      for (const s of p.situational) {
+        if (!s.item.componentIds.includes(comp.item.id)) continue;
+        if (coreAnywhere.has(s.item.id)) continue; // already core in some phase — don't duplicate
+        if (meritWr(s) + 1e-9 < meritWr(comp)) continue; // upgrade not worth it ⇒ keep the component
+        if (!best || meritWr(s) > meritWr(best)) best = s;
+      }
+      if (!best) continue;
+      p.situational = p.situational.filter((s) => s.item.id !== best!.item.id);
+      p.core.push({
+        ...best,
+        role: best.pickRate >= UNIVERSAL_PICK ? "universal" : "value",
+      });
+      coreAnywhere.add(best.item.id);
+    }
+  }
 }
 
 /** Keep each core item only in the phase where it's most commonly bought (you buy it once). */
@@ -732,7 +943,7 @@ function markTransient(
  * least-popular, then lowest win rate. "Build-complete" picks (tier > {@link SELL_FOR_SLOTS_MAX_TIER}) are
  * never sold for room — you'd only do that giga-late, which we don't assume — so if every standing pick left
  * is a keeper the build is honestly left over the cap (App.tsx warns). Idempotent: it clears *its own* prior
- * flags first (leaving builds-into / often-sold alone), so it's safe to re-run after a comp re-rank shuffles
+ * flags first (leaving builds-into / cheap-early alone), so it's safe to re-run after a comp re-rank shuffles
  * core membership. Returns the final standing-slot count. Run after {@link markTransient}.
  */
 function capStandingSlots(phases: BuildPhase[], cap: number): number {
@@ -1109,6 +1320,8 @@ function buildPhase(
   claimed: Set<number>,
   k: number,
   pairGames?: PairGames,
+  lineModel?: LineModel,
+  committedCore?: Map<number, number>,
 ): BuildPhase {
   // reached_per_column is the correct denominator for an unlocked query: players
   // who were still buying in this phase.
@@ -1119,6 +1332,15 @@ function buildPhase(
     .filter((n) => n.column === col)
     .map((n) => toCandidate(n, reached, items))
     .filter((c): c is BuildItem => c !== null && c.sample >= minSupport);
+
+  // Line-aware survivorship shrink: pull an upgrade's *ranking* WR toward its component's broader WR
+  // (display keeps adjustedWinRate). λ near 1 (everyone continues) ⇒ no shrink; small λ ⇒ big pull.
+  if (lineModel)
+    for (const c of candidates) {
+      const sh = lineModel.shrinkOf.get(c.item.id);
+      if (sh)
+        c.rankWinRate = sh.compWr + sh.lambda * (c.adjustedWinRate - sh.compWr);
+    }
 
   // An upgrade of a component bought in an earlier phase costs only its marginal here — credit that
   // both for our spend and for the population budget, so the bar compares like with like. A component
@@ -1321,20 +1543,43 @@ function buildPhase(
   let committedSlots = 0;
   for (const id of owned) if (!claimed.has(id)) committedSlots++;
   const costPower = costPowerForSlots(committedSlots);
-  // Synergy bonus per candidate = its net (centered, shrunk) pairwise synergy with the items committed in
-  // earlier phases (`owned`). Computed against `owned` rather than within-phase picks because the rankers
-  // sort upfront; this captures the dominant cross-phase synergy (a late pick reinforcing the lane/early
-  // core) and is zero in Lane (nothing owned yet) and when no synergy data was supplied. See SYNERGY_WEIGHT.
+  // Per-candidate *rank bonus* = the already-weighted additive edge added in coreWrScore. Two parts:
+  //  - Synergy: SYNERGY_WEIGHT × net (centered, shrunk) pairwise synergy with items committed in earlier
+  //    phases (`owned`). Against `owned` (not within-phase) because the rankers sort upfront; captures the
+  //    dominant cross-phase synergy, zero in Lane and when no synergy data was supplied. See SYNERGY_WEIGHT.
+  //  - Down-payment (line-aware): DOWNPAYMENT_WEIGHT × a component's best-upgrade upside, but only when that
+  //    upgrade lives in a *later* phase — so buying the component early (Lane/EM) is rewarded for building
+  //    into a later winner, over a dead-end stat-stick of equal WR. See DOWNPAYMENT_WEIGHT.
   const ownedIds = [...owned];
-  const synBonus = new Map<number, number>();
+  const rankBonus = new Map<number, number>();
   if (opts.synergyOf && ownedIds.length) {
     const syn = opts.synergyOf;
     for (const c of candidates)
-      synBonus.set(
+      rankBonus.set(
         c.item.id,
-        ownedIds.reduce((s, o) => s + syn(c.item.id, o), 0),
+        SYNERGY_WEIGHT * ownedIds.reduce((s, o) => s + syn(c.item.id, o), 0),
       );
   }
+  // Down-payment (pass 2 only — committedCore is set): reward a component for building into an upgrade the
+  // build *actually commits to* in a later phase (best such upside). The commitment gate is what stops the
+  // over-fire a naive one-pass showed (promoting a component for an upgrade that never seats). Off in pass 1
+  // (committedCore undefined) and when the toggle is off.
+  if (lineModel && committedCore)
+    for (const c of candidates) {
+      const ups = lineModel.downpaymentOf.get(c.item.id);
+      if (!ups) continue;
+      let best = 0;
+      for (const u of ups) {
+        const committedAt = committedCore.get(u.upgradeId);
+        if (committedAt !== undefined && committedAt > col && u.upside > best)
+          best = u.upside;
+      }
+      if (best > 0)
+        rankBonus.set(
+          c.item.id,
+          (rankBonus.get(c.item.id) ?? 0) + DOWNPAYMENT_WEIGHT * best,
+        );
+    }
   const pools: Record<"weapon" | "vitality" | "spirit", BuildItem[]> = {
     weapon: categoryPriority(
       candidates,
@@ -1343,7 +1588,7 @@ function buildPhase(
       chosen,
       costPower,
       k,
-      synBonus,
+      rankBonus,
     ),
     vitality: categoryPriority(
       candidates,
@@ -1352,7 +1597,7 @@ function buildPhase(
       chosen,
       costPower,
       k,
-      synBonus,
+      rankBonus,
     ),
     spirit: categoryPriority(
       candidates,
@@ -1361,7 +1606,7 @@ function buildPhase(
       chosen,
       costPower,
       k,
-      synBonus,
+      rankBonus,
     ),
   };
   const cursor: Record<"weapon" | "vitality" | "spirit", number> = {
@@ -1382,7 +1627,7 @@ function buildPhase(
   const seatable = (c: BuildItem) =>
     (c.pickRate >= UNIVERSAL_PICK &&
       !buyersLoseSignificantly(c, baselineWinRate)) ||
-    c.adjustedWinRate >= baselineWinRate - FILL_WR_FLOOR;
+    meritWr(c) >= baselineWinRate - FILL_WR_FLOOR;
   // The category's next candidate worth trying — skipping ones already taken, benched, or losing —
   // or undefined once it's spent. Advances the cursor past the skips it walks over.
   const peek = (
@@ -1449,14 +1694,14 @@ function buildPhase(
             baselineWinRate,
             costPower,
             k,
-            synBonus.get(b.item.id) ?? 0,
+            rankBonus.get(b.item.id) ?? 0,
           ) -
           coreWrScore(
             a,
             baselineWinRate,
             costPower,
             k,
-            synBonus.get(a.item.id) ?? 0,
+            rankBonus.get(a.item.id) ?? 0,
           ),
       );
     for (const c of rest) {
@@ -1478,6 +1723,7 @@ function buildPhase(
   const synOf = opts.synergyOf;
   const committedNow = synOf ? [...owned, ...chosen] : [];
   const rankWr = (c: BuildItem) => {
+    // Raw WR for *ordering* (see coreWrScore); the line shrink only gates eligibility (isValuePick below).
     const lcb = lowerConfidenceWinRate(
       c.adjustedWinRate,
       c.decided,
@@ -1586,7 +1832,7 @@ function buildPhase(
         consumedByOwned.has(c.item.id) // its upgrade is already owned — can't buy it standalone anymore
       )
         continue;
-      if (c.adjustedWinRate < baselineWinRate - FILL_WR_FLOOR) continue; // don't pad with a losing pick
+      if (meritWr(c) < baselineWinRate - FILL_WR_FLOOR) continue; // don't pad with a losing pick
       if (buildsFromAny(c.item, benchedIds, items)) continue; // an upgrade of a swap is that swap's line
       const role: BuildRole = isValuePick(c, baselineWinRate)
         ? "value"
@@ -1683,7 +1929,8 @@ function dominantNeed(
  * (value staples, then the rest) order by efficiency-aware shrunk adjusted win rate plus a synergy bonus
  * ({@link coreWrScore}), so the build tilts toward what wins *and* what reinforces the committed core; the
  * sample shrink keeps a 6%-pick shiny-WR item from stealing a slot from the proven staple everyone buys.
- * Niche high-WR picks still surface in `situational`. `synBonus` maps item id → its synergy bonus.
+ * Niche high-WR picks still surface in `situational`. `rankBonus` maps item id → its already-weighted
+ * additive edge bonus (synergy + line-aware down-payment).
  */
 function categoryPriority(
   candidates: BuildItem[],
@@ -1692,11 +1939,11 @@ function categoryPriority(
   chosen: Set<number>,
   costPower = 0,
   k = EB_DEFAULT_K,
-  synBonus: Map<number, number> = new Map(),
+  rankBonus: Map<number, number> = new Map(),
 ): BuildItem[] {
   const pool = candidates.filter((c) => c.item.slot === slot);
   const byPick = (a: BuildItem, b: BuildItem) => b.pickRate - a.pickRate;
-  // Discretionary picks (staples + rest) order by efficiency-aware shrunk adjusted WR + synergy bonus.
+  // Discretionary picks (staples + rest) order by efficiency-aware shrunk adjusted WR + rank bonus.
   // Universals stay by pick rate — they're mandatory regardless.
   const byDiscretionary = (a: BuildItem, b: BuildItem) =>
     coreWrScore(
@@ -1704,9 +1951,15 @@ function categoryPriority(
       baselineWinRate,
       costPower,
       k,
-      synBonus.get(b.item.id) ?? 0,
+      rankBonus.get(b.item.id) ?? 0,
     ) -
-    coreWrScore(a, baselineWinRate, costPower, k, synBonus.get(a.item.id) ?? 0);
+    coreWrScore(
+      a,
+      baselineWinRate,
+      costPower,
+      k,
+      rankBonus.get(a.item.id) ?? 0,
+    );
   const universal = pool
     .filter((c) => c.pickRate >= UNIVERSAL_PICK)
     .sort(byPick);

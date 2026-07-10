@@ -672,11 +672,6 @@ export function getHeroCounters(
 
 let patchesPromise: Promise<Patch[]> | null = null;
 
-// /v2/patches unifies the Forum + Steam feeds, so it has minor updates too. But the
-// Forum entries carry a bogus re-published pub_date (e.g. a 05-22 patch stamped 06-12),
-// so we key off the MM-DD-YYYY date in the *title*, which is reliable on every entry.
-// We window by day boundaries (00:00 UTC of the title date) to match the site's "May 22
-// – May 25"-style windows, and dedupe by day so the two feeds' copies collapse into one.
 // ---- Player profile (public data; the id is the Steam userdata/<id> account number) ----
 
 /** The player's all-time record per hero — drives the "your heroes" quick-pick. Returns [] for an
@@ -763,6 +758,11 @@ export function getPlayerMetrics(
   );
 }
 
+// /v2/patches unifies the Forum + Steam feeds, so it has minor updates too. But the
+// Forum entries carry a bogus re-published pub_date (e.g. a 05-22 patch stamped 06-12),
+// so we key off the MM-DD-YYYY date in the *title*, which is reliable on every entry.
+// We window by day boundaries (00:00 UTC of the title date) to match the site's "May 22
+// – May 25"-style windows, and dedupe by day so the two feeds' copies collapse into one.
 export function getPatches(): Promise<Patch[]> {
   if (patchesPromise) return patchesPromise;
   patchesPromise = (async () => {

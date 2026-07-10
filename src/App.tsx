@@ -165,6 +165,9 @@ export default function App() {
   // Pre-patch backfill toggle (lib/patchBlend). Default on — a young patch alone starves the
   // build's support/significance gates; off = the selected window raw, exactly the old behavior.
   const [backfillOn, setBackfillOn] = useState<boolean>(url0.backfill ?? true);
+  // Experimental: line-aware generation (survivorship shrink on upgrades). Default off — see
+  // BuildOptions.lineAware. A toggle so it can be A/B'd against the current build in the live app.
+  const [lineAware, setLineAware] = useState<boolean>(false);
   const [enemies, setEnemies] = useState<number[]>([]);
 
   const [archetypeSet, setArchetypeSet] = useState<ArchetypeSet | null>(null);
@@ -659,7 +662,7 @@ export default function App() {
         sellTimes,
         { all: base, gun, spirit },
         sig,
-        { synergyOf, jointGamesOf },
+        { synergyOf, jointGamesOf, lineAware },
       );
       setArchetypeSet(set);
       // Honor a deep-linked archetype on the first build only; otherwise default to best win rate.
@@ -684,6 +687,7 @@ export default function App() {
       patchIdx,
       patches,
       backfillOn,
+      lineAware,
       url0.build,
     ],
     setError,
@@ -1022,7 +1026,8 @@ export default function App() {
   // situational options — the discovery half of the app, surfaced where you pick flex items. Purely
   // additive (see foldTrendingBreakouts), so it can't disturb the core build.
   const shownBuild = useMemo(
-    () => (displayBuild ? foldTrendingBreakouts(displayBuild, breakouts) : null),
+    () =>
+      displayBuild ? foldTrendingBreakouts(displayBuild, breakouts) : null,
     [displayBuild, breakouts],
   );
   // Every item the build already shows anywhere — a counter pick in this set gets a tag
@@ -1140,6 +1145,17 @@ export default function App() {
               type="checkbox"
               checked={backfillOn}
               onChange={(e) => setBackfillOn(e.target.checked)}
+            />
+          </label>
+          <label
+            className="checkctl"
+            title="Experimental: line-aware generation. Shrinks an upgrade's win rate toward its component's (weighted by how many buyers actually reach it), so a survivorship-inflated upgrade few players reach is kept out of core. Off = current build."
+          >
+            Line-aware
+            <input
+              type="checkbox"
+              checked={lineAware}
+              onChange={(e) => setLineAware(e.target.checked)}
             />
           </label>
           <label

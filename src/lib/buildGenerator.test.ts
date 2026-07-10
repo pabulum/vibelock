@@ -516,3 +516,171 @@ describe("generateBuild — buyer-vs-non-buyer gate on the universal bypass", ()
     expect(coreIds).toContain(backbone.id);
   });
 });
+
+// Line-aware survivorship shrink (BuildOptions.lineAware): an upgrade few of its component's buyers reach
+// (small λ) has a selection-inflated win rate. The shrink pulls its *admission* WR toward the component's
+// broader WR, so a shiny-but-rarely-reached upgrade is kept OUT of core — while the plain build (toggle
+// off) still seats it. The shrink is a gate only: it must not change the displayed adjustedWinRate.
+describe("generateBuild — line-aware survivorship shrink", () => {
+  const component: Item = {
+    id: 1,
+    name: "Cheap Stick",
+    tier: 1,
+    cost: 800,
+    slot: "weapon",
+    componentIds: [],
+  };
+  const upgrade: Item = {
+    id: 2,
+    name: "Shiny Upgrade",
+    tier: 2,
+    cost: 1600,
+    slot: "weapon",
+    componentIds: [component.id],
+  };
+  const alt: Item = {
+    id: 3,
+    name: "Plain Alt",
+    tier: 1,
+    cost: 800,
+    slot: "weapon",
+    componentIds: [],
+  };
+  const items = new Map<number, Item>(
+    [component, upgrade, alt].map((i) => [i.id, i]),
+  );
+
+  // baseline 50%. Component is universal (everyone buys it, its broad WR 48%); the upgrade is reached by
+  // only ~14% of the lobby but flashes a shiny +10pt — a classic survivorship shine. λ = pickUp/pickComp ≈
+  // 0.143, so shrunk ≈ 0.48 + 0.143·(0.60−0.48) ≈ 0.497 < baseline ⇒ demoted only when line-aware. reached
+  // == the component's buyers so its pick-weighted soul budget covers its cost (a sparse fixture otherwise
+  // underbudgets and nothing seats). The upgrade surfaces as a situational *value* pick when off.
+  const flow: ItemFlowStats = {
+    nodes: [
+      mkNode(0, component.id, 1400, 0.48), // Lane, pick 1.0 (universal)
+      mkNode(1, upgrade.id, 200, 0.6), // Early mid, pick 0.14, shiny but rarely reached
+      mkNode(1, alt.id, 400, 0.52), // Early mid, pick 0.29, plain positive alternative
+    ],
+    edges: [],
+    summary: {
+      matches: 1400,
+      players: 1400,
+      wins: 700,
+      losses: 700,
+      avg_duration_s: 1800,
+      avg_net_worth: 8000,
+    },
+    baseline: {
+      matches: 1400,
+      players: 1400,
+      wins: 700,
+      losses: 700,
+      avg_duration_s: 1800,
+      avg_net_worth: 8000,
+    },
+    reached_per_column: [1400, 1400, 1400, 1400],
+  };
+
+  const allIds = (b: ReturnType<typeof generateBuild>) =>
+    new Set(
+      b.phases.flatMap((p) =>
+        [...p.core, ...p.situational].map((c) => c.item.id),
+      ),
+    );
+
+  it("surfaces the shiny upgrade when line-aware is OFF", () => {
+    const b = generateBuild(testHero, "R", items, flow, new Map(), new Map());
+    expect(allIds(b).has(upgrade.id)).toBe(true);
+  });
+
+  it("keeps the survivorship-inflated upgrade out of the build when line-aware is ON", () => {
+    const b = generateBuild(testHero, "R", items, flow, new Map(), new Map(), {
+      lineAware: true,
+    });
+    expect(allIds(b).has(upgrade.id)).toBe(false);
+  });
+
+  it("never alters the displayed adjustedWinRate (shrink is rank-only)", () => {
+    const b = generateBuild(testHero, "R", items, flow, new Map(), new Map(), {
+      lineAware: true,
+    });
+    // The component stays in core with its shown WR untouched (rank shrink is a separate field).
+    const comp = b.phases
+      .flatMap((p) => p.core)
+      .find((c) => c.item.id === component.id);
+    expect(comp?.adjustedWinRate).toBe(0.48);
+  });
+});
+
+// Line-collapse (BuildOptions.lineAware): when a phase shows both a component (core) and a worthy direct
+// upgrade of it (situational), the upgrade is promoted into core and the component folds away — so the
+// build recommends the finished item you actually play, not the terminal stat-stick. Mirrors the live
+// Paradox result (Lane: High-Velocity Rounds → Opening Rounds).
+describe("generateBuild — line-aware line-collapse", () => {
+  const comp: Item = {
+    id: 1,
+    name: "Base Stick",
+    tier: 1,
+    cost: 800,
+    slot: "weapon",
+    componentIds: [],
+  };
+  const upgrade: Item = {
+    id: 2,
+    name: "Finished Gun",
+    tier: 2,
+    cost: 1600,
+    slot: "weapon",
+    componentIds: [comp.id],
+  };
+  const items = new Map<number, Item>([comp, upgrade].map((i) => [i.id, i]));
+
+  // baseline 50%. Component universal (70%) at a mild −1pt (not a significant loser, so it keeps its core
+  // slot); upgrade reached by 25% at a clear +16pt. λ ≈ 0.36 so the shrink still leaves the upgrade well
+  // above the component on merit ⇒ worth collapsing into. One weapon slot, so the component takes core and
+  // the upgrade lands in situational — until collapse promotes it.
+  const flow: ItemFlowStats = {
+    nodes: [mkNode(0, comp.id, 700, 0.49), mkNode(0, upgrade.id, 250, 0.66)],
+    edges: [],
+    summary: {
+      matches: 1000,
+      players: 1000,
+      wins: 500,
+      losses: 500,
+      avg_duration_s: 1800,
+      avg_net_worth: 8000,
+    },
+    baseline: {
+      matches: 1000,
+      players: 1000,
+      wins: 500,
+      losses: 500,
+      avg_duration_s: 1800,
+      avg_net_worth: 8000,
+    },
+    reached_per_column: [1000, 1000, 1000, 1000],
+  };
+  const coreIds = (b: ReturnType<typeof generateBuild>) =>
+    new Set(b.phases.flatMap((p) => p.core.map((c) => c.item.id)));
+  const allIds = (b: ReturnType<typeof generateBuild>) =>
+    new Set(
+      b.phases.flatMap((p) =>
+        [...p.core, ...p.situational].map((c) => c.item.id),
+      ),
+    );
+
+  it("keeps the terminal component in core when line-aware is OFF", () => {
+    const b = generateBuild(testHero, "R", items, flow, new Map(), new Map());
+    expect(coreIds(b).has(comp.id)).toBe(true);
+    expect(coreIds(b).has(upgrade.id)).toBe(false);
+    expect(allIds(b).has(upgrade.id)).toBe(true); // surfaced situationally
+  });
+
+  it("collapses the component into its worthy upgrade in core when line-aware is ON", () => {
+    const b = generateBuild(testHero, "R", items, flow, new Map(), new Map(), {
+      lineAware: true,
+    });
+    expect(coreIds(b).has(upgrade.id)).toBe(true); // the finished item now holds the slot
+    expect(allIds(b).has(comp.id)).toBe(false); // the terminal component folded away
+  });
+});

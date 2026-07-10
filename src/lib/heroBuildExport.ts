@@ -8,7 +8,7 @@
 //
 //   envelope { 1: hero_build, 2: {1:1}, 3: 0, 8: 0 }
 //   hero_build {
-//     1: build_id  2: hero_id  4: last_updated(unix)  5: name  6: description
+//     1: build_id  2: hero_id  3: author(account id)  4: last_updated(unix)  5: name  6: description
 //     8: version   9: build_id  10: details  13: published(unix)
 //   }
 //   details { 1: repeated category  2: ability_order }
