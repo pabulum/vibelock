@@ -148,6 +148,8 @@ export function itemAnnotation(
   if (b.transientReason) parts.push(b.transientReason);
   else if (b.buildsToward)
     parts.push(`most build toward ${b.buildsToward.name}`);
+  else if (b.transientKind === "sold")
+    parts.push("sell-fodder when slots fill up"); // cheap-early sticks carry no reason string
   if (b.weakVsComp && b.compEdge !== undefined)
     parts.push(`weak into the selected comp (${fmtPts(b.compEdge)} pts)`);
   else if (b.compEdge !== undefined && b.compEdge > 0)

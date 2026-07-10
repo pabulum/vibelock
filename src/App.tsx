@@ -240,6 +240,10 @@ export default function App() {
   );
   // The profile's current tier, kept so the dropdown can offer its "around my rank" band option.
   const [profileTier, setProfileTier] = useState<number | null>(null);
+  // One-time cue when a Steam profile silently re-slices the data: the auto-selected band's label,
+  // shown as a note under the Rank control (friend feedback: the rank flip read as "Steam ID changes
+  // the items"). Cleared on a deliberate rank pick or a profile change; also fades out via CSS.
+  const [rankAutoSet, setRankAutoSet] = useState<string | null>(null);
 
   useEffect(() => {
     const v = steamId.trim();
@@ -316,6 +320,7 @@ export default function App() {
       if (!accountId || heroes.length === 0) {
         setHeroPool(null);
         setPlayedHeroIds(null);
+        setRankAutoSet(null);
         return;
       }
       const [stats, rankTier] = await Promise.all([
@@ -354,8 +359,11 @@ export default function App() {
       // Pre-select the profile's band, not a floor: match volume piles up at high-mid ranks, so a
       // below-the-mode floor is dominated by games well above the player — the capped band is
       // their actual neighborhood, tilted one rank into the climb.
-      if (!tierTouched.current && rankTier !== null)
-        setRankSel(bandForTier(rankTier));
+      if (!tierTouched.current && rankTier !== null) {
+        const band = bandForTier(rankTier);
+        setRankSel(band);
+        setRankAutoSet(rankSelLabel(band));
+      } else setRankAutoSet(null);
     },
     [accountId, heroes],
     setError,
@@ -1094,12 +1102,13 @@ export default function App() {
               ))}
             </select>
           </label>
-          <label>
+          <label className="rankctl">
             Rank
             <select
               value={typeof rankSel === "number" ? String(rankSel) : "band"}
               onChange={(e) => {
                 tierTouched.current = true; // a deliberate choice — profile stops pre-selecting
+                setRankAutoSet(null);
                 setRankSel(
                   e.target.value === "band" && bandChoice
                     ? bandChoice
@@ -1118,6 +1127,11 @@ export default function App() {
                 </option>
               ))}
             </select>
+            {rankAutoSet && (
+              <span className="autoset" key={rankAutoSet} aria-live="polite">
+                set to {rankAutoSet} from your profile
+              </span>
+            )}
           </label>
           <label>
             Patch

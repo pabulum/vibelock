@@ -45,18 +45,18 @@ recommendation, not an adjusted metric.
 
 A build is a moving ~9–12 item window (9 base + 3 flex slots from Walker kills), not the ~16 raw
 purchases the phases sum to — early items get sold or built into bigger ones. So the generator marks
-**transient** core items (dimmed, "TEMP" chip, excluded from the standing-slot count):
+**transient** core items (dimmed, dashed border, excluded from the standing-slot count), with a chip
+per exit route:
 
-- **Builds into another pick** — items resolve `component_items` → ids at load, so if a recommended
-  item is a component of another recommended item, it's a shared slot ("builds into Opening Rounds").
-- **Most build into** — a cheap item whose buyers _measurably_ finish a specific upgrade (≥50% of
-  its buyers also buy it, from the permutation-pair counts) is that line's first purchase, even when
-  the upgrade didn't make our list ("most build into Headhunter"). This matters because
-  `avg_sell_time_s` counts an upgrade absorbing the component as a "sell" — without the pair data,
-  upgrade lines masquerade as placeholder sales.
-- **Often sold** — a cheap (T1) item with an early `avg_sell_time_s` _and no dominant upgrade line_
-  is a placeholder ("often sold ~13:14"). item-stats has no sell _fraction_, so this is a heuristic
-  on cheap items, not a true rate.
+- **PART** — the item is a component of another recommended pick (items resolve `component_items` →
+  ids at load), so it's a shared slot: it upgrades away and refunds its cost ("builds into Opening
+  Rounds").
+- **SELL** — sell-fodder: it holds a slot only until slots bind. Flagged two ways that mean the same
+  thing to the player: a cheap (T1) stat-stick that measurably leaves inventory before ~25 min with
+  no in-build upgrade (no time label — `avg_sell_time_s` counts an upgrade absorbing a component as
+  a "sell", so the timing is unreliable), or, when the standing build still exceeds the 12-slot cap,
+  the weakest cheap picks (≤T2, lowest tier → filler-before-value → least popular) marked to sell
+  late for a slot.
 
 Items are also de-duplicated across phases (kept in their highest-pick phase). The header shows
 `N/12 standing slots`. Example: Paradox's 16 raw picks → 10 standing; Victor → 9.

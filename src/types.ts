@@ -198,8 +198,14 @@ export interface BuildItem {
   why: string;
   /** True when this item doesn't hold a permanent slot (sold, or builds into another pick). */
   transient?: boolean;
-  /** Why it's transient, e.g. "builds into Burst Fire". Undefined for a cheap early stat-stick — those
-   * show a bare TEMP badge (the old "often sold ~mm:ss" time was really upgrade timing; see markTransient). */
+  /** How it leaves the inventory — drives the row's badge. "part": consumed by an in-build upgrade
+   * (PART). "sold": sell-fodder — a cheap stat-stick that measurably leaves inventory early, or the
+   * weakest pick marked to sell when the build overflows the slot cap; either way it's what you give
+   * up when slots bind (SELL). Set iff `transient`. */
+  transientKind?: "part" | "sold";
+  /** Why it's transient, e.g. "builds into Burst Fire". Undefined for a cheap early stat-stick —
+   * those get only the badge (the old "often sold ~mm:ss" time was really upgrade timing; see
+   * markTransient). */
   transientReason?: string;
   /** Set when a comp is selected: the item's signed win-rate edge vs that comp (centered on
    * the matchup lean). Positive = answers the comp, negative = weak into it. */

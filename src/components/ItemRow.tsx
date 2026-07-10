@@ -17,11 +17,48 @@ import { ItemHover } from "./ItemHover";
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
-function roleLabel(role: BuildItem["role"]): string {
-  if (role === "universal") return "CORE";
-  if (role === "filler") return "FILLER";
-  if (role === "need") return "SUSTAIN"; // the only NeedKind we classify
-  return "VALUE";
+const ROLE_BADGES: Record<BuildItem["role"], { label: string; title: string }> =
+  {
+    universal: {
+      label: "CORE",
+      title: "Staple — most players buy this every game",
+    },
+    value: {
+      label: "VALUE",
+      title: "Wins above the hero's average for its cost",
+    },
+    situational: {
+      label: "VALUE",
+      title: "Wins above the hero's average for its cost",
+    },
+    filler: {
+      label: "FILLER",
+      title: "Fills the phase budget — not a value pick",
+    },
+    need: { label: "SUSTAIN", title: "Covers the build's sustain gap" }, // the only NeedKind we classify
+  };
+
+/** Transient picks don't hold a standing slot — the badge says *how* each one leaves. */
+const TRANSIENT_BADGES: Record<
+  NonNullable<BuildItem["transientKind"]>,
+  { label: string; title: string }
+> = {
+  part: {
+    label: "PART",
+    title: "A component — it upgrades into a later pick, refunding its cost",
+  },
+  sold: {
+    label: "SELL",
+    title: "Sell-fodder — when your slots fill up, this is what goes",
+  },
+};
+
+function badgeFor(b: BuildItem): { label: string; title: string; cls: string } {
+  if (b.transient) {
+    const kind = b.transientKind ?? "sold";
+    return { ...TRANSIENT_BADGES[kind], cls: kind };
+  }
+  return { ...ROLE_BADGES[b.role], cls: b.role };
 }
 
 /** Win rate as a signed delta vs the hero baseline (e.g. "+7.2", "−0.7"). */
@@ -55,6 +92,7 @@ function CounterBubble({ mark, hero }: { mark: CounterMark; hero?: Hero }) {
  * transient note — or, when there's nothing comp-related to say, the item's effect text. */
 function ItemTags({
   reason,
+  reasonKind,
   counter,
   enemiesById,
   imbue,
@@ -68,6 +106,8 @@ function ItemTags({
   baseline,
 }: {
   reason?: string | null;
+  /** Transient kind behind `reason`, so the note's tint matches the row's PART/SELL chip. */
+  reasonKind?: BuildItem["transientKind"];
   counter?: ItemCounters;
   enemiesById?: Map<number, Hero>;
   /** For an imbue-type item: the ability most authors imbue it onto (a "→ ability" chip). */
@@ -105,7 +145,11 @@ function ItemTags({
   if (!hasTags) return null;
   return (
     <div className="tags">
-      {reason && <span className="reason">{reason}</span>}
+      {reason && (
+        <span className={`reason ${reasonKind ? `reason-${reasonKind}` : ""}`}>
+          {reason}
+        </span>
+      )}
       {imbue && (
         <span
           className="rel imbue"
@@ -213,6 +257,7 @@ export function ItemRow({
 }) {
   const color = SLOT_COLORS[b.item.slot] ?? SLOT_COLORS.unknown;
   const reason = b.transient && b.transientReason ? b.transientReason : null;
+  const badge = badgeFor(b);
   return (
     <ItemHover
       item={b.item}
@@ -230,8 +275,8 @@ export function ItemRow({
         <div className="line1">
           <span className="name">
             {!muted && (
-              <span className={`role role-${b.transient ? "temp" : b.role}`}>
-                {b.transient ? "TEMP" : roleLabel(b.role)}
+              <span className={`role role-${badge.cls}`} title={badge.title}>
+                {badge.label}
               </span>
             )}
             {b.item.name}
@@ -262,6 +307,7 @@ export function ItemRow({
         </div>
         <ItemTags
           reason={reason}
+          reasonKind={b.transientKind}
           counter={counter}
           enemiesById={enemiesById}
           imbue={imbue}

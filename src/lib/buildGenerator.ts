@@ -87,7 +87,7 @@ export const SLOT_CAP = 12; // 9 base + 3 flex slots (unlocked via Walker kills)
 const SELL_FOR_SLOTS_MAX_TIER = 2; // only cheap stat-sticks/components (≤T2) are sold to free a slot; T3+
 // are "build complete" and never sold for room unless you're giga-late (which we don't assume — see
 // capStandingSlots). This is why builds read fine without a hard cap: the overflow is the stuff you sell.
-const SOLD_FOR_SLOTS = "sold late for a slot";
+const SOLD_FOR_SLOTS = "sell late for a slot"; // imperative — it's an instruction, unlike the passive kinds
 // --- Overtime buy-list ranking (see overtimeBuyList) ---
 const OVERTIME_MIN_TIER = 3; // an overtime buy is an upgrade you spend surplus souls on, never a cheap
 // stat-stick you're replacing. T4 dominates the late window, but standout T3s (Kelvin's Rapid Recharge,
@@ -898,12 +898,14 @@ function absorptionMap(core: BuildItem[]): Map<number, Item> {
  * and returns the count of items that *do* hold a slot. Mutates the phases' core items.
  *
  * Only the first case gets a *reason* string ("builds into X"), and only when X is itself in the build
- * so the note names a pick the player is actually holding. The cheap-early case is flagged TEMP with no
- * text: we used to print "often sold ~mm:ss" from item-stats' `avg_sell_time_s`, but that field counts a
+ * so the note names a pick the player is actually holding. The cheap-early case is flagged sell-fodder
+ * (kind "sold", same SELL badge as capStandingSlots' picks — you only ever sell because slots bind, so
+ * the UI doesn't split hairs) with no text: we used to print "often sold ~mm:ss" from item-stats'
+ * `avg_sell_time_s`, but that field counts a
  * component being absorbed into its upgrade as a "sell" — verified against Paradox @ Emissary+, where a
  * single-upgrade component's `avg_sell_time_s` lands within a minute of its upgrade's buy time (HVR
  * "sold" 6:55 = Opening Rounds bought 6:37; Extra Health "sold" 17:47 = Fortitude bought 17:06). So the
- * time was an *upgrade* time, not a sell, and the label misread nearly every early stat-stick. The TEMP
+ * time was an *upgrade* time, not a sell, and the label misread nearly every early stat-stick. The
  * flag itself still stands — a T1 stick gone before {@link SELL_BEFORE_S} isn't a permanent slot whether
  * it left via upgrade or sale, which is what the slot accounting needs — we just no longer assert a time.
  */
@@ -919,6 +921,7 @@ function markTransient(
     const leaveTime = sellTimes.get(b.item.id); // time it leaves inventory (mostly upgrade-consumption)
     if (upgrade) {
       b.transient = true;
+      b.transientKind = "part";
       b.transientReason = `builds into ${upgrade.name}`;
     } else if (
       b.item.tier <= 1 &&
@@ -926,7 +929,8 @@ function markTransient(
       leaveTime > 0 &&
       leaveTime < SELL_BEFORE_S
     ) {
-      b.transient = true; // a cheap stat-stick that's gone early — TEMP, but no (unreliable) time label
+      b.transient = true; // a cheap stat-stick that's gone early — sell-fodder, but no (unreliable) time label
+      b.transientKind = "sold";
     }
   }
 
@@ -949,8 +953,11 @@ function markTransient(
 function capStandingSlots(phases: BuildPhase[], cap: number): number {
   const core = phases.flatMap((p) => p.core);
   for (const b of core)
+    // Reason, not kind: the cheap-early sticks markTransient flags are also kind "sold" (same
+    // sell-fodder concept), but they're not this function's to clear.
     if (b.transientReason === SOLD_FOR_SLOTS) {
       b.transient = false;
+      b.transientKind = undefined;
       b.transientReason = undefined;
     }
 
@@ -973,6 +980,7 @@ function capStandingSlots(phases: BuildPhase[], cap: number): number {
   for (const b of sellable) {
     if (held <= cap) break;
     b.transient = true;
+    b.transientKind = "sold";
     b.transientReason = SOLD_FOR_SLOTS;
     held--;
   }

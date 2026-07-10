@@ -287,6 +287,46 @@ body {
   accent-color: var(--accent);
   cursor: pointer;
 }
+/* One-time cue when a Steam profile auto-selects the rank band — without it the silent re-slice
+ * reads as "Steam ID changes the items". Fades itself out; pointer-events off so the stale chip
+ * never blocks the controls (state is also cleared on a deliberate rank pick / profile change). */
+.controls .rankctl {
+  position: relative;
+}
+.autoset {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 6;
+  margin-top: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #21303f;
+  color: var(--accent);
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: autosetfade 6s ease forwards;
+}
+@keyframes autosetfade {
+  0% {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  8% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 .controls .idctl {
   position: relative;
 }
@@ -1383,6 +1423,9 @@ body {
   color: #d8b768;
   font-size: 11.5px;
 }
+.tags .reason-part {
+  color: #b7a4e0; /* match the PART chip — a structural note, not a warning */
+}
 
 /* One bubble per enemy: a small framed portrait + this item's edge vs that hero. */
 .cbubble {
@@ -1611,7 +1654,14 @@ body {
 .item.transient .name {
   font-weight: 500;
 }
-.role-temp {
+/* Transient badges — dashed rows don't hold a standing slot; the chip says how each one leaves.
+ * PART (violet, structural): consumed by an in-build upgrade. SELL (yellow, an action): sell-fodder,
+ * whether the data shows it leaving early or the slot cap forces it out late. */
+.role-part {
+  background: #2b2338;
+  color: #b7a4e0;
+}
+.role-sold {
   background: #3a3320;
   color: #d8b768;
 }

@@ -283,12 +283,12 @@ const jointLookup =
     joints[a < b ? `${a}-${b}` : `${b}-${a}`] ?? 0;
 const testHero: Hero = { id: 1, name: "Test Hero", signatureClasses: [] };
 
-// A cheap (≤T1) core pick that leaves inventory before ~25 min is flagged as a transient placeholder
-// (TEMP) — but with NO reason string. The time used to print as "often sold ~mm:ss", but item-stats'
+// A cheap (≤T1) core pick that leaves inventory before ~25 min is flagged as transient sell-fodder
+// (SELL) — but with NO reason string. The time used to print as "often sold ~mm:ss", but item-stats'
 // avg_sell_time_s counts an upgrade absorbing the component as a "sell" (verified: a single-upgrade
 // component's sell time == its upgrade's buy time), so it was an upgrade time, not a sale. We keep the
-// TEMP flag (a cheap early stat-stick isn't a permanent slot) and drop the misleading label.
-describe("generateBuild — early-placeholder TEMP flag", () => {
+// flag (a cheap early stat-stick isn't a permanent slot) and drop the misleading label.
+describe("generateBuild — early-placeholder sell-fodder flag", () => {
   const comp: Item = {
     id: 1,
     name: "Comp Stick",
@@ -346,15 +346,69 @@ describe("generateBuild — early-placeholder TEMP flag", () => {
   );
   const lane = build.phases[0];
 
-  it("flags a cheap early-placeholder pick as TEMP with no reason text", () => {
+  it("flags a cheap early-placeholder pick as sell-fodder with no reason text", () => {
     const row = lane.core.find((b) => b.item.id === comp.id);
     expect(row?.transient).toBe(true);
+    expect(row?.transientKind).toBe("sold");
     expect(row?.transientReason).toBeUndefined();
   });
 
   it("never prints a sell-time or build-into label on a cheap placeholder", () => {
     for (const b of build.phases.flatMap((p) => p.core))
-      expect(b.transientReason ?? "").not.toMatch(/sold|most build into/);
+      expect(b.transientReason ?? "").not.toMatch(/sold|sell|most build into/);
+  });
+});
+
+// A component whose upgrade is also core shares the upgrade's slot: kind "part" with a "builds into"
+// note — distinct from the sell-fodder kind above (PART vs SELL badges: an upgrade consumes a part
+// automatically; sell-fodder is what you give up when slots bind).
+describe("generateBuild — in-build component is flagged as a part", () => {
+  const comp: Item = {
+    id: 1,
+    name: "High-Velocity Rounds",
+    tier: 1,
+    cost: 800,
+    slot: "weapon",
+    componentIds: [],
+  };
+  const upg: Item = {
+    id: 2,
+    name: "Opening Rounds",
+    tier: 2,
+    cost: 1600,
+    slot: "weapon",
+    componentIds: [comp.id],
+  };
+  const items = new Map<number, Item>([comp, upg].map((i) => [i.id, i]));
+
+  // 90% pick: a phase's soul budget is pick-mass × cost, so a lone candidate only seats itself
+  // when nearly everyone buys it (budget × SOUL_SLACK must cover its own cost).
+  const flow = mkFlow([
+    mkNode(0, comp.id, 9000, 0.52), // universal lane buy…
+    mkNode(2, upg.id, 9000, 0.55), // …upgraded mid-game by most of the same players
+  ]);
+
+  const build = generateBuild(
+    testHero,
+    "Test Rank",
+    items,
+    flow,
+    new Map(),
+    new Map(),
+  );
+  const rows = build.phases.flatMap((p) => p.core);
+
+  it('flags the component transient with kind "part" and a builds-into note', () => {
+    const row = rows.find((b) => b.item.id === comp.id);
+    expect(row?.transient).toBe(true);
+    expect(row?.transientKind).toBe("part");
+    expect(row?.transientReason).toBe(`builds into ${upg.name}`);
+  });
+
+  it("leaves the upgrade itself standing", () => {
+    const row = rows.find((b) => b.item.id === upg.id);
+    expect(row).toBeDefined();
+    expect(row?.transient).toBeFalsy();
   });
 });
 
