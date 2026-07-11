@@ -29,11 +29,13 @@ const API = "https://api.deadlock-api.com/v1/matches/metadata";
 
 // The day being harvested (UTC). Default is yesterday: matches finish ingesting within hours,
 // so by the nightly run the previous day is complete; today would be a biased partial sample.
-const day = process.env.HARVEST_DAY ?? isoDay(Date.now() - 24 * 3600 * 1000);
-const BINS = Number(process.env.BINS ?? 12);
-const PER_BIN = Number(process.env.PER_BIN ?? 100);
-const OUT_DIR = process.env.OUT_DIR ?? "data/shards";
-const RETENTION_DAYS = Number(process.env.RETENTION_DAYS ?? 30);
+// `||`, not `??`: a scheduled workflow run passes `${{ inputs.day }}` through as an EMPTY string,
+// which must fall back the same as unset (empty BINS etc. would otherwise coerce to 0).
+const day = process.env.HARVEST_DAY || isoDay(Date.now() - 24 * 3600 * 1000);
+const BINS = Number(process.env.BINS || 12);
+const PER_BIN = Number(process.env.PER_BIN || 100);
+const OUT_DIR = process.env.OUT_DIR || "data/shards";
+const RETENTION_DAYS = Number(process.env.RETENTION_DAYS || 30);
 
 function isoDay(ms) {
   return new Date(ms).toISOString().slice(0, 10);
