@@ -1,0 +1,64 @@
+name: Harvest match metadata
+
+# Nightly sampler for the offline-model training set (see scripts/harvest-matches.mjs). Keeps a
+# rolling 30-day window of gzipped NDJSON shards on the orphan `data` branch. The branch is
+# rebuilt as a single commit and force-pushed each run, so purged shards actually leave the
+# repository instead of lingering in history — total repo growth stays bounded by the window.
+#
+# Ops notes:
+#  - GitHub disables scheduled workflows after 60 days without repo activity; any push resets it.
+#  - Cron start times can slip by many minutes under load — harmless here, the target day is
+#    always *yesterday* (UTC) so a late run harvests the same data.
+
+on:
+  schedule:
+    - cron: "17 6 * * *" # 06:17 UTC nightly; odd minute to dodge the on-the-hour cron rush
+  workflow_dispatch:
+    inputs:
+      day:
+        description: "UTC day to harvest (YYYY-MM-DD); empty = yesterday"
+        required: false
+
+permissions:
+  contents: write # push to the data branch
+
+concurrency:
+  group: harvest
+  cancel-in-progress: false # never abandon a half-paced harvest for a newer trigger
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Pull the current data branch contents (if the branch exists yet) so this run's shard is
+      # added to the existing window rather than starting a fresh one.
+      - name: Restore existing shards
+        run: |
+          mkdir -p _data
+          if git fetch --depth=1 origin data; then
+            git --work-tree=_data restore --source=FETCH_HEAD -- .
+          else
+            echo "No data branch yet — first harvest."
+          fi
+
+      - name: Harvest
+        env:
+          HARVEST_DAY: ${{ inputs.day }}
+          OUT_DIR: _data/shards
+        run: node scripts/harvest-matches.mjs
+
+      # Rebuild the data branch as one fresh commit (no parent), so retention purges are real
+      # deletions and the branch never accumulates history.
+      - name: Publish data branch
+        run: |
+          cd _data
+          git init -q -b data
+          git add -A
+          git -c user.name="harvest-bot" -c user.email="actions@github.com" \
+            commit -qm "Harvest $(date -u +%F)"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" data
