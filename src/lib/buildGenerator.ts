@@ -1256,17 +1256,44 @@ export const WIN_STATE_GAP = 0.035;
 export const WIN_STATE_WR_FLOOR = 0.03;
 export type WinState = "winmore" | "comeback";
 
-/** A pick's win-state character from its raw vs adjusted (game-state-corrected) win rate — or undefined
- * when the gap is within noise or the pick isn't viable enough to read as a snowball/comeback option. */
+/** Roster-wide purchase-context measurement for one item, from the nightly wp-stats bake (see
+ * api/wpStats): `wpBuy` = mean win probability at the moment it's bought, `excess` = its buyers'
+ * outcomes minus that. Direct measurement of the same character the raw-vs-adjusted gap infers. */
+export interface LabWinState {
+  wpBuy: number;
+  excess: number;
+}
+
+// Lab-evidence cutoffs. wpBuy is centered near 0.50 by construction; T4 items average ~0.56 purely
+// because expensive items are bought when ahead, so "characteristically bought ahead" starts above
+// that (0.57), and "bought from behind" well below the center (0.49 — Metal Skin sits at 0.43).
+// The excess sign must AGREE (flattered when bought ahead / holds up when bought behind); when the
+// two lab signals disagree we stay quiet rather than guess.
+export const LAB_WPBUY_AHEAD = 0.57;
+export const LAB_WPBUY_BEHIND = 0.49;
+export const LAB_EXCESS_MIN = 0.005;
+
+/** A pick's win-state character. Primary evidence is the hero-conditional raw vs adjusted
+ * (wealth-corrected) win-rate gap; when that gap is within noise, the roster-wide lab measurement
+ * (win probability at buy + outcome vs it) can still supply a tag — it's a direct reading of the
+ * same "bought ahead / bought behind" character, just not hero-specific. Undefined when neither
+ * source is confident or the pick isn't viable enough to read as a snowball/comeback option. */
 export function classifyWinState(
   rawWr: number,
   adjWr: number,
   baseline: number,
+  lab?: LabWinState,
 ): WinState | undefined {
   if (adjWr < baseline - WIN_STATE_WR_FLOOR) return undefined; // a clear loser isn't "win more", just bad
   const gap = rawWr - adjWr;
   if (gap >= WIN_STATE_GAP) return "winmore";
   if (gap <= -WIN_STATE_GAP) return "comeback";
+  if (lab) {
+    if (lab.wpBuy >= LAB_WPBUY_AHEAD && lab.excess <= -LAB_EXCESS_MIN)
+      return "winmore";
+    if (lab.wpBuy <= LAB_WPBUY_BEHIND && lab.excess >= LAB_EXCESS_MIN)
+      return "comeback";
+  }
   return undefined;
 }
 
@@ -1293,6 +1320,7 @@ const TEMPO_LIST_MAX = 3; // cap each tempo list so a phase stays a glance, not 
 export function phaseTempo(
   phase: BuildPhase,
   baseline: number,
+  labOf?: (itemId: number) => LabWinState | undefined,
 ): PhaseTempo | null {
   const rush = phase.situational
     .filter((b) => b.coreRush && b.coreLater)
@@ -1304,7 +1332,12 @@ export function phaseTempo(
     all
       .filter(
         (b) =>
-          classifyWinState(b.rawWinRate, b.adjustedWinRate, baseline) === want,
+          classifyWinState(
+            b.rawWinRate,
+            b.adjustedWinRate,
+            baseline,
+            labOf?.(b.item.id),
+          ) === want,
       )
       .sort((a, b) => strength(b) - strength(a))
       .slice(0, TEMPO_LIST_MAX);

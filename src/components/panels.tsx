@@ -2,7 +2,7 @@
 // per-phase tempo lines, category bar, overtime column, counter picker, matchup chips.
 
 import { useMemo, useState, type Ref } from "react";
-import { type PhaseTempo } from "../lib/buildGenerator";
+import { type LabWinState, type PhaseTempo } from "../lib/buildGenerator";
 import type {
   Ability,
   BuildItem,
@@ -194,12 +194,15 @@ export function OvertimeColumn({
   counterByItem,
   enemiesById,
   imbueByItem,
+  labOf,
 }: {
   build: GeneratedBuild;
   items: Map<number, Item> | null;
   counterByItem: Map<number, ItemCounters>;
   enemiesById: Map<number, Hero>;
   imbueByItem: Map<number, ImbueTarget>;
+  /** Roster-wide purchase context per item id (wp-stats bake) — see ItemRow's `lab`. */
+  labOf?: (itemId: number) => LabWinState | undefined;
 }) {
   const buys = build.overtimeBuys;
   if (!buys.length) return null;
@@ -221,6 +224,7 @@ export function OvertimeColumn({
           counter={counterByItem.get(b.item.id)}
           enemiesById={enemiesById}
           imbue={imbueByItem.get(b.item.id)}
+          lab={labOf?.(b.item.id)}
         />
       ))}
     </section>

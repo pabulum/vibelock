@@ -50,7 +50,19 @@ jobs:
         env:
           HARVEST_DAY: ${{ inputs.day }}
           OUT_DIR: _data/shards
+          # 3x the default sampling (same request count — the 10/min limit binds on requests,
+          # not matches). Densier window is what the time-sliced item-value curves need; costs
+          # ~20MB/day, ~600MB at the 30-day steady state.
+          PER_BIN: "300"
         run: node scripts/harvest-matches.mjs
+
+      # Refit the WP surface + item/hero stats over the full rolling window and ship the JSON
+      # alongside the shards; the Lab panel in the app fetches it from the data branch.
+      - name: Bake wp-stats.json
+        env:
+          SHARDS_DIR: _data/shards
+          OUT: _data/wp-stats.json
+        run: node scripts/bake-wp-stats.mjs
 
       # Rebuild the data branch as one fresh commit (no parent), so retention purges are real
       # deletions and the branch never accumulates history.

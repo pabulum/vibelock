@@ -58,6 +58,8 @@ import { useAsyncTask, useSettle } from "./hooks";
 import { CommunityRow } from "./components/CommunityRow";
 import { ExportPanel } from "./components/ExportPanel";
 import { GuideModal } from "./components/GuideModal";
+import { LabModal } from "./components/LabModal";
+import { getWpStats, type WpStats } from "./api/wpStats";
 import { CounterAddRow, ItemRow } from "./components/ItemRow";
 import { CAN_HOVER } from "./components/usePinnablePopover";
 import {
@@ -113,6 +115,58 @@ function swapTargetFor(
 }
 
 /** Time window for a chosen patch index. Patches are newest-first. */
+// Midpoint of each flow column's fixed time window (Lane 0–9, Early mid 9–20, Mid 20–30, 30+) —
+// where the phase's "typical lead ≈ X% win" note reads the baked WP surface.
+const PHASE_MID_S = [270, 870, 1500, 2100];
+
+/** What a typical (one-sigma) team soul lead is worth at this phase's midpoint, from the Lab's
+ * win-probability model: the per-phase answer to "do leads even matter yet?". Null when the
+ * surface has no bin for the time (shouldn't happen — bins cover 0–∞). */
+function leadNote(
+  wp: WpStats,
+  col: number,
+): { souls: number; pct: number } | null {
+  const t = PHASE_MID_S[col] ?? PHASE_MID_S[PHASE_MID_S.length - 1];
+  const bin = wp.wpModel.find(
+    (b) => t >= b.fromS && (b.toS === null || t < b.toS),
+  );
+  if (!bin) return null;
+  return {
+    souls: bin.sigma,
+    pct: Math.round(100 / (1 + Math.exp(-(bin.w0 + bin.w1)))),
+  };
+}
+
+/** Compact souls figure for the lead note: 1199 → "1.2k", 12304 → "12k". */
+function fmtSouls(s: number): string {
+  return s >= 10000 ? `${Math.round(s / 1000)}k` : `${(s / 1000).toFixed(1)}k`;
+}
+
+// Closing power (Lab): how much a hero wins above/below what its soul leads predict. Only a
+// clear signal (|2pt|+, ~2x the split-half noise) gets a hint — most heroes are near zero and
+// should stay quiet. The glyph marks the chip; the sentence goes in the tooltip.
+const CLOSING_NOTE = 0.02;
+
+function closingHint(closing: number | undefined): string {
+  if (closing === undefined || Math.abs(closing) < CLOSING_NOTE) return "";
+  const pt = `${closing > 0 ? "+" : "−"}${Math.abs(closing * 100).toFixed(1)}pt`;
+  return closing > 0
+    ? ` · closing power ${pt}: wins more than its soul leads predict — even games lean your way, safe to grind out`
+    : ` · closing power ${pt}: wins less than its soul leads predict — convert your lead early, don't coast on it`;
+}
+
+function closingGlyph(closing: number | undefined) {
+  if (closing === undefined || Math.abs(closing) < CLOSING_NOTE) return null;
+  return (
+    <span
+      className={`closer ${closing > 0 ? "up" : "down"}`}
+      aria-hidden="true"
+    >
+      {closing > 0 ? "⏱" : "⚡"}
+    </span>
+  );
+}
+
 function windowFor(patches: Patch[], idx: number): TimeWindow {
   if (!patches[idx]) return {};
   return {
@@ -187,6 +241,38 @@ export default function App() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
+  const [showLab, setShowLab] = useState(false);
+  // The nightly wp-stats bake (18KB, static): roster-wide purchase context per item (backs the
+  // win-more/comeback tags), per-hero closing power (annotates the your-heroes chips), and the
+  // WP-vs-lead surface (the "typical lead ≈ X% win" note on each phase). Fail-soft: without it
+  // the page renders exactly as before.
+  const [wpStats, setWpStats] = useState<WpStats | null>(null);
+  useEffect(() => {
+    let live = true;
+    getWpStats().then(
+      (s) => live && setWpStats(s),
+      () => {},
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
+  const labItems = useMemo(
+    () =>
+      wpStats &&
+      new Map(
+        wpStats.items.map((i) => [i.id, { wpBuy: i.wpBuy, excess: i.excess }]),
+      ),
+    [wpStats],
+  );
+  const labOf = useMemo(
+    () => (labItems ? (id: number) => labItems.get(id) : undefined),
+    [labItems],
+  );
+  const labHeroes = useMemo(
+    () => wpStats && new Map(wpStats.heroes.map((h) => [h.id, h.closing])),
+    [wpStats],
+  );
   const [showExport, setShowExport] = useState(false);
   // Share of the build's win-rate evidence borrowed from the pre-patch window (see lib/patchBlend):
   // ~0.85 the day after a patch, fading to ~0 as the patch matures. Surfaced in the meta line so
@@ -1228,6 +1314,14 @@ export default function App() {
           >
             How it works
           </button>
+          <button
+            type="button"
+            className="guidebtn labbtn"
+            onClick={() => setShowLab(true)}
+            title="Experimental stats from whole-match data: closing power and state-adjusted item value"
+          >
+            Lab
+          </button>
         </div>
         {busy && <div className="loadstrip" aria-hidden="true" />}
       </header>
@@ -1309,11 +1403,13 @@ export default function App() {
                 `you: ${Math.round(winRate * 100)}% over ${matches} matches` +
                 (meta
                   ? ` · hero now: ${(meta.winRate * 100).toFixed(1)}% at this rank/patch · expected tonight ≈ ${Math.round((expected ?? 0) * 100)}%`
-                  : "")
+                  : "") +
+                closingHint(labHeroes?.get(h.id))
               }
             >
               <img src={h.image} alt="" loading="lazy" />
               {h.name}
+              {closingGlyph(labHeroes?.get(h.id))}
               {expected !== undefined && <i>{Math.round(expected * 100)}%</i>}
             </button>
           ))}
@@ -1330,10 +1426,11 @@ export default function App() {
                   key={h.id}
                   className={`chip try${h.id === heroId ? " active" : ""}`}
                   onClick={() => pickHero(h.id)}
-                  title={`${(metaWinRate * 100).toFixed(1)}% at this rank/patch − ~${(NEW_HERO_TAX * 100).toFixed(1)}pt learning tax ≈ ${(taxed * 100).toFixed(1)}% while you pick them up`}
+                  title={`${(metaWinRate * 100).toFixed(1)}% at this rank/patch − ~${(NEW_HERO_TAX * 100).toFixed(1)}pt learning tax ≈ ${(taxed * 100).toFixed(1)}% while you pick them up${closingHint(labHeroes?.get(h.id))}`}
                 >
                   <img src={h.image} alt="" loading="lazy" />
                   {h.name}
+                  {closingGlyph(labHeroes?.get(h.id))}
                   <i>{Math.round(taxed * 100)}%</i>
                 </button>
               ))}
@@ -1642,6 +1739,7 @@ export default function App() {
             const counterAdds = (countersByPhase.get(phase.label) ?? [])
               .filter((c) => !buildItemIds.has(c.item.id))
               .slice(0, COUNTER_ADDS_PER_PHASE);
+            const lead = wpStats ? leadNote(wpStats, phase.column) : null;
             return (
               <section className="phase" key={phase.column}>
                 <h2>
@@ -1651,6 +1749,15 @@ export default function App() {
                   {phase.itemsBought}/{phase.targetItems} items ·{" "}
                   {Math.round(phase.coreSouls).toLocaleString()} /{" "}
                   {Math.round(phase.soulBudget).toLocaleString()} souls
+                  {lead && (
+                    <span
+                      className="wpnote"
+                      title={`From the Lab's win-probability model (refit nightly): mid-phase, a team up ${lead.souls.toLocaleString()} souls — a typical lead for this stage — wins ~${lead.pct}% of its games. Leads barely convert in lane and peak past 25 minutes: the higher this number, the more a lead is worth protecting.`}
+                    >
+                      {" "}
+                      · {fmtSouls(lead.souls)} lead ≈ {lead.pct}% win
+                    </span>
+                  )}
                 </div>
                 <CategoryBar split={phase.categorySouls} />
 
@@ -1658,6 +1765,7 @@ export default function App() {
                   tempo={phaseTempo(
                     phase,
                     shownBuild.population.baselineWinRate,
+                    labOf,
                   )}
                 />
 
@@ -1673,6 +1781,7 @@ export default function App() {
                       enemiesById={enemiesById}
                       imbue={imbueByItem.get(b.item.id)}
                       trending={trendingByItem.get(b.item.id)}
+                      lab={labOf?.(b.item.id)}
                     />
                   ))
                 ) : (
@@ -1690,6 +1799,7 @@ export default function App() {
                     enemiesById={enemiesById}
                     imbue={imbueByItem.get(b.item.id)}
                     trending={trendingByItem.get(b.item.id)}
+                    lab={labOf?.(b.item.id)}
                     muted
                   />
                 ))}
@@ -1718,6 +1828,7 @@ export default function App() {
             counterByItem={counterByItem}
             enemiesById={enemiesById}
             imbueByItem={imbueByItem}
+            labOf={labOf}
           />
         </main>
       )}
@@ -1743,6 +1854,9 @@ export default function App() {
       </footer>
 
       {showGuide && <GuideModal onClose={() => setShowGuide(false)} />}
+      {showLab && (
+        <LabModal heroId={heroId} onClose={() => setShowLab(false)} />
+      )}
 
       {showExport && build && (
         <ExportPanel

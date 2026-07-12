@@ -1,5 +1,5 @@
-import { defineConfig, type Plugin } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig, type Plugin } from "vite";
+import react from "@vitejs/plugin-react";
 
 // Content-Security-Policy, injected into index.html at *build* time only. We can't ship it as a
 // static <meta> in index.html because Vite's dev server (HMR) relies on inline scripts and eval,
@@ -21,10 +21,12 @@ import react from '@vitejs/plugin-react'
 //   - 'wasm-unsafe-eval': WASM compilation. blob:: Pyodide's worker/url plumbing.
 // Two follow-ups would tighten this back down: self-host the `keyvalues3` wheel (drops the two
 // PyPI hosts), and/or port just the KV3 *reader* to TS (drops Pyodide + jsdelivr entirely).
-const PYO_HOSTS = 'https://cdn.jsdelivr.net https://pypi.org https://files.pythonhosted.org'
+const PYO_HOSTS =
+  "https://cdn.jsdelivr.net https://pypi.org https://files.pythonhosted.org";
 const CSP = [
   "default-src 'self'",
-  `connect-src 'self' https://api.deadlock-api.com ${PYO_HOSTS}`,
+  // raw.githubusercontent.com serves wp-stats.json (the Lab), baked nightly onto the data branch.
+  `connect-src 'self' https://api.deadlock-api.com https://raw.githubusercontent.com ${PYO_HOSTS}`,
   "img-src 'self' https://assets-bucket.deadlock-api.com data:",
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net",
@@ -32,23 +34,23 @@ const CSP = [
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'none'",
-].join('; ')
+].join("; ");
 
 function cspMeta(): Plugin {
   return {
-    name: 'inject-csp',
-    apply: 'build',
+    name: "inject-csp",
+    apply: "build",
     transformIndexHtml(html) {
       return html.replace(
-        '</title>',
+        "</title>",
         `</title>\n    <meta http-equiv="Content-Security-Policy" content="${CSP}" />`,
-      )
+      );
     },
-  }
+  };
 }
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/vibelock/',
+  base: "/vibelock/",
   plugins: [react(), cspMeta()],
-})
+});

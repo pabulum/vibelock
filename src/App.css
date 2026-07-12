@@ -2093,3 +2093,136 @@ body {
     flex-basis: 100%;
   }
 }
+
+/* ---- The Lab (experimental stats modal; shares the guide-* card shell) ---- */
+
+.guide.lab {
+  width: min(760px, 100%);
+}
+.labtag {
+  margin-left: 8px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--purple);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: 2px;
+}
+.labbtn {
+  color: var(--purple);
+}
+.labintro,
+.labmeta {
+  color: var(--muted);
+}
+.labmeta {
+  margin-top: 18px;
+  font-size: 12px;
+}
+
+/* Closing-power rows: name | signed value | diverging bar around a center line. */
+.labheroes {
+  display: grid;
+  grid-template-columns: max-content max-content 1fr;
+  gap: 3px 10px;
+  margin-top: 10px;
+}
+.labhero {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+.labhero.current .labname {
+  color: var(--accent);
+  font-weight: 600;
+}
+.labname {
+  font-size: 13px;
+}
+.labval {
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  text-align: right;
+}
+.labbar {
+  position: relative;
+  height: 10px;
+  background: var(--panel2);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.labbar::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+.labbar i {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 3px;
+  opacity: 0.85;
+}
+
+.labtablewrap {
+  margin-top: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.labtable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.labtable th {
+  position: sticky;
+  top: 0;
+  background: var(--panel2);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: right;
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+.labtable th:first-child,
+.labtable td:first-child {
+  text-align: left;
+}
+.labtable td {
+  padding: 4px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 45%, transparent);
+  text-align: right;
+  white-space: nowrap;
+}
+.labtier {
+  color: var(--muted);
+}
+
+/* Phase-header lead note (from the baked WP surface) and chip closing-power glyphs. */
+.wpnote {
+  color: var(--muted);
+  cursor: help;
+}
+.chip .closer {
+  margin-left: 4px;
+  font-size: 15px;
+  line-height: 1;
+}
+.chip .closer.up {
+  color: #54c66b;
+}
+.chip .closer.down {
+  color: #d89a5a;
+}

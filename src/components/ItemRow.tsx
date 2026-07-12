@@ -1,7 +1,11 @@
 // A build/item row (and the counter-add variant): win-rate delta vs baseline, pick rate,
 // sample, plus the tag line (counter bubbles, imbue target, swap/rush clues, win-state).
 
-import { classifyWinState } from "../lib/buildGenerator";
+import {
+  classifyWinState,
+  WIN_STATE_GAP,
+  type LabWinState,
+} from "../lib/buildGenerator";
 import type { AdoptionMover } from "../lib/patchMovers";
 import type {
   BuildItem,
@@ -104,6 +108,7 @@ function ItemTags({
   rawWr,
   adjWr,
   baseline,
+  lab,
 }: {
   reason?: string | null;
   /** Transient kind behind `reason`, so the note's tint matches the row's PART/SELL chip. */
@@ -125,15 +130,23 @@ function ItemTags({
   adjWr?: number;
   /** Hero baseline WR — a win-more/comeback tag only makes sense on a pick that's at least viable. */
   baseline?: number;
+  /** Roster-wide purchase context from the nightly wp-stats bake — backs the tag when the
+   * hero-conditional gap is quiet, and enriches the tooltip either way. */
+  lab?: LabWinState;
 }) {
   const bubbles = counter && enemiesById ? counter.marks : [];
   // raw ≫ adj ⇒ the win rate leans on already being ahead ("win more"); adj ≫ raw ⇒ it holds up even when
   // bought behind ("comeback"). Same classifier the per-phase tempo block uses, so the row tag and the
-  // tempo lists never disagree about a pick's character.
+  // tempo lists never disagree about a pick's character. Lab evidence (measured win probability at the
+  // moment of purchase, roster-wide) fills in when the hero-conditional gap is within noise.
   const state =
     rawWr !== undefined && adjWr !== undefined && baseline !== undefined
-      ? classifyWinState(rawWr, adjWr, baseline)
+      ? classifyWinState(rawWr, adjWr, baseline, lab)
       : undefined;
+  // Which evidence produced the tag decides what the tooltip cites.
+  const gapBased =
+    state !== undefined &&
+    Math.abs((rawWr ?? 0) - (adjWr ?? 0)) >= WIN_STATE_GAP;
   const hasTags =
     !!reason ||
     bubbles.length > 0 ||
@@ -200,9 +213,13 @@ function ItemTags({
         <span
           className={`statetag ${state}`}
           title={
-            state === "winmore"
-              ? `Win-more: raw ${pct(rawWr!)} ≫ adjusted ${pct(adjWr!)} — its win rate leans on already being ahead`
-              : `Comeback: adjusted ${pct(adjWr!)} ≫ raw ${pct(rawWr!)} — holds up even when bought behind`
+            gapBased
+              ? state === "winmore"
+                ? `Win-more: raw ${pct(rawWr!)} ≫ adjusted ${pct(adjWr!)} — its win rate leans on already being ahead${lab ? ` (roster-wide it's bought at ${pct(lab.wpBuy)} win probability)` : ""}`
+                : `Comeback: adjusted ${pct(adjWr!)} ≫ raw ${pct(rawWr!)} — holds up even when bought behind${lab ? ` (roster-wide it's bought at ${pct(lab.wpBuy)} win probability)` : ""}`
+              : state === "winmore"
+                ? `Win-more: across the roster it's bought when already winning (${pct(lab!.wpBuy)} win probability at purchase) and buyers finish ${Math.abs(lab!.excess * 100).toFixed(1)}pt below that — the win rate is flattered by when it's bought`
+                : `Comeback: across the roster it's bought from behind (${pct(lab!.wpBuy)} win probability at purchase) and buyers still finish ${(lab!.excess * 100).toFixed(1)}pt above that — it holds up bought behind`
           }
         >
           {state === "winmore" ? "win more" : "comeback"}
@@ -240,6 +257,7 @@ export function ItemRow({
   imbue,
   trending,
   muted = false,
+  lab,
 }: {
   b: BuildItem;
   items: Map<number, Item> | null;
@@ -254,6 +272,9 @@ export function ItemRow({
   /** Set when this item is a current breakout (rising + winning this patch) — shows a 🔥 marker. */
   trending?: AdoptionMover;
   muted?: boolean;
+  /** This item's roster-wide purchase context from the nightly wp-stats bake (win probability at
+   * buy + outcome vs it) — second evidence source for the win-more/comeback tag. */
+  lab?: LabWinState;
 }) {
   const color = SLOT_COLORS[b.item.slot] ?? SLOT_COLORS.unknown;
   const reason = b.transient && b.transientReason ? b.transientReason : null;
@@ -318,6 +339,7 @@ export function ItemRow({
           rawWr={b.rawWinRate}
           adjWr={b.adjustedWinRate}
           baseline={baseline}
+          lab={lab}
         />
       </div>
     </ItemHover>
