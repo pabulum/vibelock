@@ -114,13 +114,17 @@ export function LabModal({
                   often their team <strong>actually won</strong>, and how often
                   the <strong>souls scoreboard said they should win</strong> at
                   each point in the game. The gap is closing power, in
-                  percentage points. Positive means the hero converts even games
-                  — being tied with a {stats.heroes[0]?.name ?? "scaler"} is
-                  quietly losing. Negative means the hero needs its lead to land
-                  the win — a soul lead it doesn&rsquo;t convert was never
-                  really banked. This is the most stable statistic we&rsquo;ve
-                  measured (the ranking barely moves between independent halves
-                  of the data).
+                  percentage points. One honest caveat: this tracks the
+                  hero&rsquo;s plain win rate closely (r≈0.93) — good heroes
+                  close. The genuinely new information is the part win rate
+                  does <em>not</em> explain, shown as the{" "}
+                  <span className="labstyle up">converter</span> /{" "}
+                  <span className="labstyle down">snowballer</span> chips: a
+                  converter wins even games beyond what its win rate predicts
+                  (a rough lane isn&rsquo;t fatal); a snowballer&rsquo;s wins
+                  ride on soul leads (force advantages early, don&rsquo;t coast
+                  at even souls). Both readings are highly stable across
+                  independent halves of the data (r≈0.97).
                 </p>
                 <div className="labheroes">
                   {stats.heroes.map((h) => (
@@ -128,12 +132,28 @@ export function LabModal({
                       key={h.id}
                       className={`labhero ${h.id === heroId ? "current" : ""}`}
                     >
-                      <span className="labname">{h.name}</span>
+                      <span className="labname">
+                        {h.name}
+                        {h.wr !== undefined && (
+                          <i className="labwr">
+                            {(h.wr * 100).toFixed(1)}%
+                          </i>
+                        )}
+                      </span>
                       <span
                         className="labval"
                         style={{ color: excessColor(h.closing) }}
                       >
                         {pts(h.closing)}
+                        {h.resid !== undefined &&
+                          Math.abs(h.resid) >= 0.015 && (
+                            <span
+                              className={`labstyle ${h.resid > 0 ? "up" : "down"}`}
+                              title={`${pts(h.resid)}pt beyond what the hero's win rate predicts`}
+                            >
+                              {h.resid > 0 ? "converter" : "snowballer"}
+                            </span>
+                          )}
                       </span>
                       <span className="labbar">
                         <i

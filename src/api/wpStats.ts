@@ -29,8 +29,14 @@ export interface LabHero {
   id: number;
   name: string;
   n: number;
-  /** Mean excess over every purchase the hero makes ≈ wins above what their soul lead implies. */
+  /** Mean excess over every purchase the hero makes ≈ wins above what their soul lead implies.
+   * NOTE: tracks plain hero WR closely (r≈0.93) — mostly "good heroes win". */
   closing: number;
+  /** The hero's plain win rate over the window, for context next to `closing`. */
+  wr?: number;
+  /** Closing power beyond what the hero's WR predicts — the stable style axis (split-half
+   * r≈0.97): positive converts even games, negative wins via soul leads (snowballer). */
+  resid?: number;
   se: number;
 }
 

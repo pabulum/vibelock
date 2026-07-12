@@ -237,9 +237,24 @@ const heroes = [...heroAgg.entries()]
     name: heroName.get(id) ?? String(id),
     n: a[0],
     closing: +(a[1] / a[0]).toFixed(4),
+    wr: +(a[3] / a[0]).toFixed(4),
     se: +Math.sqrt(0.25 / a[0]).toFixed(4),
   }))
   .sort((x, y) => y.closing - x.closing);
+
+// Closing power tracks plain hero win rate closely (measured r≈0.93) — most of it is "good
+// heroes win," which the UI already shows. The uniquely informative part is the RESIDUAL:
+// closing beyond what the hero's WR predicts (split-half r≈0.97, sd≈1pt). Positive = converts
+// even games / does more with less; negative = wins ride on soul leads (snowballer). The chips'
+// style hints key off this, not raw closing.
+{
+  const mx = heroes.reduce((s, h) => s + h.wr, 0) / heroes.length;
+  const my = heroes.reduce((s, h) => s + h.closing, 0) / heroes.length;
+  const b =
+    heroes.reduce((s, h) => s + (h.wr - mx) * (h.closing - my), 0) /
+    heroes.reduce((s, h) => s + (h.wr - mx) ** 2, 0);
+  for (const h of heroes) h.resid = +(h.closing - (my + b * (h.wr - mx))).toFixed(4);
+}
 
 const out = {
   generatedAt: new Date().toISOString(),

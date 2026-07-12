@@ -142,27 +142,25 @@ function fmtSouls(s: number): string {
   return s >= 10000 ? `${Math.round(s / 1000)}k` : `${(s / 1000).toFixed(1)}k`;
 }
 
-// Closing power (Lab): how much a hero wins above/below what its soul leads predict. Only a
-// clear signal (|2pt|+, ~2x the split-half noise) gets a hint — most heroes are near zero and
-// should stay quiet. The glyph marks the chip; the sentence goes in the tooltip.
-const CLOSING_NOTE = 0.02;
+// Style hint (Lab): the WR-residual of closing power — what's left after "good heroes win" is
+// accounted for (raw closing tracks hero WR at r≈0.93, which the chip already shows). Positive
+// ⇒ converts even games; negative ⇒ wins ride on soul leads (snowballer). Only a clear signal
+// (1.5pt+, well past the split-half noise) gets a hint — most heroes stay quiet.
+const STYLE_NOTE = 0.015;
 
-function closingHint(closing: number | undefined): string {
-  if (closing === undefined || Math.abs(closing) < CLOSING_NOTE) return "";
-  const pt = `${closing > 0 ? "+" : "−"}${Math.abs(closing * 100).toFixed(1)}pt`;
-  return closing > 0
-    ? ` · closing power ${pt}: wins more than its soul leads predict — even games lean your way, safe to grind out`
-    : ` · closing power ${pt}: wins less than its soul leads predict — convert your lead early, don't coast on it`;
+function closingHint(resid: number | undefined): string {
+  if (resid === undefined || Math.abs(resid) < STYLE_NOTE) return "";
+  const pt = `${resid > 0 ? "+" : "−"}${Math.abs(resid * 100).toFixed(1)}pt`;
+  return resid > 0
+    ? ` · style: converts even games (${pt} beyond its win rate) — a rough lane isn't fatal, grind it out`
+    : ` · style: snowball hero (${pt} vs its win rate) — wins ride on soul leads, force your advantage early`;
 }
 
-function closingGlyph(closing: number | undefined) {
-  if (closing === undefined || Math.abs(closing) < CLOSING_NOTE) return null;
+function closingGlyph(resid: number | undefined) {
+  if (resid === undefined || Math.abs(resid) < STYLE_NOTE) return null;
   return (
-    <span
-      className={`closer ${closing > 0 ? "up" : "down"}`}
-      aria-hidden="true"
-    >
-      {closing > 0 ? "⏱" : "⚡"}
+    <span className={`closer ${resid > 0 ? "up" : "down"}`} aria-hidden="true">
+      {resid > 0 ? "⏱" : "⚡"}
     </span>
   );
 }
@@ -269,8 +267,17 @@ export default function App() {
     () => (labItems ? (id: number) => labItems.get(id) : undefined),
     [labItems],
   );
+  // Chips key off the WR-RESIDUAL of closing power, not raw closing: raw closing tracks plain
+  // hero WR (r≈0.93), which the chip already shows as its expected %. The residual is the part
+  // WR doesn't explain — the hero's style (converts even games vs needs a soul lead).
   const labHeroes = useMemo(
-    () => wpStats && new Map(wpStats.heroes.map((h) => [h.id, h.closing])),
+    () =>
+      wpStats &&
+      new Map(
+        wpStats.heroes
+          .filter((h) => h.resid !== undefined)
+          .map((h) => [h.id, h.resid!]),
+      ),
     [wpStats],
   );
   const [showExport, setShowExport] = useState(false);

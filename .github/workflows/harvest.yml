@@ -50,10 +50,12 @@ jobs:
         env:
           HARVEST_DAY: ${{ inputs.day }}
           OUT_DIR: _data/shards
-          # 3x the default sampling (same request count — the 10/min limit binds on requests,
-          # not matches). Densier window is what the time-sliced item-value curves need; costs
-          # ~20MB/day, ~600MB at the 30-day steady state.
-          PER_BIN: "300"
+          # 10x the original sampling (same 12 requests/night — the 10/min limit binds on
+          # requests, not matches; every 2h bin holds 2,000+ matches so 1,000 is always there).
+          # This is the density at which the ROLLING window itself crosses the hero-item
+          # stabilization point (median cell ~6k vs k~3.2k), i.e. per-hero WPA becomes possible
+          # without accumulating beyond 30 days. Costs ~65MB/day, ~2GB at steady state.
+          PER_BIN: "1000"
         run: node scripts/harvest-matches.mjs
 
       # Refit the WP surface + item/hero stats over the full rolling window and ship the JSON
