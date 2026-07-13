@@ -15,15 +15,20 @@
 //    in the tens of MB.
 
 import {
+  createReadStream,
+  createWriteStream,
   mkdirSync,
   readdirSync,
-  readFileSync,
+  renameSync,
+  statSync,
   writeFileSync,
   rmSync,
   existsSync,
 } from "node:fs";
+import { once } from "node:events";
 import { join } from "node:path";
-import { gzipSync, gunzipSync } from "node:zlib";
+import { pipeline } from "node:stream/promises";
+import { createGzip, createGunzip } from "node:zlib";
 
 const API = "https://api.deadlock-api.com/v1/matches/metadata";
 
@@ -116,7 +121,19 @@ function trimMatch(m) {
 
 // --- Shard maintenance: rolling retention + a manifest regenerated from what's on disk ---
 
-function purgeAndManifest(dir) {
+// Counts records by streaming the gunzip and tallying newline bytes. A shard decompresses to
+// well over V8's ~512MB max string length, so it can never be read into a string to be split.
+async function countRecords(path) {
+  let n = 0;
+  const gunzip = createGunzip();
+  gunzip.on("data", (chunk) => {
+    for (let i = 0; i < chunk.length; i++) if (chunk[i] === 0x0a) n++;
+  });
+  await pipeline(createReadStream(path), gunzip);
+  return n;
+}
+
+async function purgeAndManifest(dir) {
   const cutoff = isoDay(Date.now() - RETENTION_DAYS * 24 * 3600 * 1000);
   const manifest = [];
   for (const f of readdirSync(dir)
@@ -129,12 +146,10 @@ function purgeAndManifest(dir) {
       console.log(`purged ${f} (older than ${RETENTION_DAYS}d)`);
       continue;
     }
-    const buf = readFileSync(path);
-    const text = gunzipSync(buf).toString();
     manifest.push({
       day: shardDay,
-      matches: text.split("\n").filter(Boolean).length,
-      gz_bytes: buf.length,
+      matches: await countRecords(path),
+      gz_bytes: statSync(path).size,
     });
   }
   writeFileSync(
@@ -156,27 +171,46 @@ if (existsSync(shardPath) && !process.env.FORCE) {
     `${shardPath} already exists — skipping fetch (set FORCE=1 to re-harvest)`,
   );
 } else {
+  // Each bin is gzipped into the shard as it arrives, rather than accumulating every trimmed
+  // match and serializing once at the end: a full-density day is several hundred MB of JSON,
+  // past V8's ~512MB max string length, so the join()-then-gzip form throws RangeError. Only
+  // match ids are held across bins (for de-duplication), and the shard is written to a temp
+  // file first so an aborted run can't leave a truncated day looking complete.
   const binSeconds = Math.floor((24 * 3600) / BINS);
-  const byId = new Map();
-  for (let i = 0; i < BINS; i++) {
-    const from = dayStart + i * binSeconds;
-    const to = i === BINS - 1 ? dayStart + 24 * 3600 : from + binSeconds;
-    const matches = await fetchBin(from, to);
-    for (const m of matches) byId.set(m.match_id, trimMatch(m));
-    console.log(
-      `bin ${i + 1}/${BINS}: ${matches.length} matches (running total ${byId.size})`,
-    );
-    if (i < BINS - 1) await new Promise((r) => setTimeout(r, 7000));
+  const tmpPath = `${shardPath}.tmp`;
+  const gzip = createGzip({ level: 9 });
+  const flushed = pipeline(gzip, createWriteStream(tmpPath));
+  const seen = new Set();
+  try {
+    for (let i = 0; i < BINS; i++) {
+      const from = dayStart + i * binSeconds;
+      const to = i === BINS - 1 ? dayStart + 24 * 3600 : from + binSeconds;
+      const matches = await fetchBin(from, to);
+      let chunk = "";
+      for (const m of matches) {
+        if (seen.has(m.match_id)) continue;
+        seen.add(m.match_id);
+        chunk += JSON.stringify(trimMatch(m)) + "\n";
+      }
+      if (chunk && !gzip.write(chunk)) await once(gzip, "drain");
+      console.log(
+        `bin ${i + 1}/${BINS}: ${matches.length} matches (running total ${seen.size})`,
+      );
+      if (i < BINS - 1) await new Promise((r) => setTimeout(r, 7000));
+    }
+    gzip.end();
+    await flushed;
+  } catch (e) {
+    gzip.destroy();
+    rmSync(tmpPath, { force: true });
+    throw e;
   }
-  const lines =
-    [...byId.values()].map((m) => JSON.stringify(m)).join("\n") + "\n";
-  const gz = gzipSync(lines, { level: 9 });
-  writeFileSync(shardPath, gz);
+  renameSync(tmpPath, shardPath);
   console.log(
-    `wrote ${shardPath}: ${byId.size} matches, ${gz.length} bytes gz`,
+    `wrote ${shardPath}: ${seen.size} matches, ${statSync(shardPath).size} bytes gz`,
   );
 }
 
-const manifest = purgeAndManifest(OUT_DIR);
+const manifest = await purgeAndManifest(OUT_DIR);
 const total = manifest.reduce((s, e) => s + e.matches, 0);
 console.log(`window now holds ${manifest.length} shards, ${total} matches`);
