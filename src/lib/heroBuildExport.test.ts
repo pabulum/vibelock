@@ -132,6 +132,7 @@ const build = (): GeneratedBuild => ({
   phases: [phase(0, "Lane", [10, 11], [11, 30]), phase(1, "Mid", [20], [31])],
   standingSlots: 3,
   overtimeBuys: [bi(40), bi(20)], // 20 is already core → should be dropped from Overtime
+  overtimeSell: [],
 });
 
 const ids = (cats: ReturnType<typeof buildExportCategories>, name: string) =>

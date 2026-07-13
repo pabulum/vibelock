@@ -1341,6 +1341,16 @@ body {
 .phase.overtime h2 .time {
   color: color-mix(in srgb, var(--accent, #9b6dd1) 80%, var(--muted));
 }
+/* The sell side of the overtime swap: which standing slots to free (weakest first) for the buys
+   below. A quiet callout box, not an item row — these are names to recognize, not picks to weigh. */
+.ot-sell {
+  margin: 2px 0 10px;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+}
 
 .phase h2 {
   margin: 0 0 10px;

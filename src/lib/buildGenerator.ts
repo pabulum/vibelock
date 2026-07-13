@@ -514,6 +514,10 @@ export function generateBuild(
   annotateRelations(phases, flow, items);
   annotateSlotRelations(phases, pairGames);
 
+  // Items the build already commits to buying — by the time overtime starts they're owned, so the
+  // overtime list must not re-offer them (items are unique; a repeat is an impossible purchase).
+  const coreIds = new Set(phases.flatMap((p) => p.core.map((b) => b.item.id)));
+
   return {
     hero,
     rankLabel,
@@ -524,27 +528,52 @@ export function generateBuild(
     },
     phases,
     standingSlots,
-    overtimeBuys: overtimeBuyList(flow, items, baselineWinRate, priorK),
+    overtimeBuys: overtimeBuyList(
+      flow,
+      items,
+      baselineWinRate,
+      priorK,
+      coreIds,
+    ),
+    overtimeSell: overtimeSellList(phases),
     pairGames,
   };
 }
 
 /**
- * A prioritized "spend your surplus" list for games that drag past the ~30-minute mark with the build
- * already full. These aren't a phase — they're the items to *replace your lowest-tier slots with* once
- * souls stop being the constraint, ranked by how they perform in the **late window specifically** (the
- * 30+ flow column), because a pick that's great at 20 minutes isn't necessarily what wins a 60-minute
- * base race. T1/T2 stat-sticks are excluded — they're what you're upgrading out of — and components
- * whose upgrade is also listed drop out (buy the finished item). Same small-sample regularization as
- * the rest of the build, so a 2%-pick luxury with a shiny late win rate can't outrank the proven
- * staples. Repeats from the main build are fine: if Boundless Spirit is already core, it still belongs
- * here as a buy — the list is "where the next chunk of souls goes", not "what's not in your build".
+ * The overtime shopping list for games that drag past the ~30-minute mark with the build already
+ * full. Not a phase, and not one ranking: by then souls stop being the constraint and slots become
+ * it, so the real decision is "sell a low-tier leftover, buy which upgrade?" — {@link
+ * overtimeSellList} is the sell side of that swap. Judged on the **late window only** (the 30+ flow
+ * column): a pick that's great at 20 minutes isn't necessarily what wins a 60-minute base race.
+ * Anything already core in the build is dropped — the column's premise is the build is bought, so
+ * those are owned, and items are unique (a repeat is an impossible purchase); picks that only appear
+ * as optional swaps stay eligible. What's left splits the way a phase does:
+ *
+ *   - **Default upgrades** (`"universal"`) — admitted by adoption (≥{@link UNIVERSAL_PICK} of late
+ *     players buy them), NOT by a positive-edge gate: a staple everyone buys late sits at ~baseline
+ *     edge by construction (its observable edge is compressed by (1−pick) — see the universal-bypass
+ *     note above), so demanding edge > 0 would drop exactly the proven picks while keeping
+ *     selection-inflated rarities. Same falsifiable bypass as the core: a staple whose buyers run
+ *     significantly behind its non-buyers is a trap, not a default, and is dropped.
+ *   - **Situational** (`"situational"`) — sub-universal picks whose late edge is *confidently*
+ *     positive (lower confidence bound above baseline, the same regularization as everywhere else)
+ *     and that clear the same abs+fractional support floor as the phase fill, so a 1–2%-pick luxury
+ *     with a shiny thin-sample win rate doesn't make the list. Their edge is
+ *     conditional by nature — people buy Curse/Metal Skin/Unstoppable when the game calls for it and
+ *     win when it fits — so they're flagged situational and presented as "if your game calls for
+ *     it", never as a fixed buy order.
+ *
+ * Within each group, strongest regularized late edge first, with a small commit bonus so a
+ * widely-bought pick edges out an equally-rated rarity. Components of a listed upgrade drop out
+ * (buy the finished item). Exported for tests.
  */
-function overtimeBuyList(
+export function overtimeBuyList(
   flow: ItemFlowStats,
   items: Map<number, Item>,
   baselineWinRate: number,
   k: number,
+  coreIds: Set<number>,
 ): BuildItem[] {
   // Read the LATE column only — the 30+ minute window is the relevant signal for a long game, so an
   // item is judged on what it does *then*, not on its blended-across-the-game average.
@@ -553,6 +582,12 @@ function overtimeBuyList(
   const lateCol = Math.min(PHASE_META.length - 1, maxCol);
   const reached =
     flow.reached_per_column[lateCol] || flow.baseline.matches || 1;
+  // Same support floor as the phase fill (abs AND fraction-of-reached). The fraction matters most
+  // here: the patch blend caps each node's *decided* evidence (see blendFlow), so the LCB shrink
+  // alone can't tell a 1%-pick rarity from a 5%-pick staple once both are near the cap — the
+  // player-count floor is the guard that still sees the real adoption gap (the Magic Carpet fix:
+  // 1% pick / n=65 topping Paradox overtime on a +13.7pt thin-sample shine).
+  const minSupport = Math.max(MIN_SUPPORT_ABS, MIN_SUPPORT_FRAC * reached);
 
   let pool = flow.nodes
     .filter((n) => n.column === lateCol)
@@ -561,41 +596,58 @@ function overtimeBuyList(
       (c): c is BuildItem =>
         c !== null &&
         c.item.tier >= OVERTIME_MIN_TIER &&
-        c.sample >= MIN_SUPPORT_ABS,
+        c.sample >= minSupport &&
+        !coreIds.has(c.item.id),
     );
 
   // Keep the upgrade, not its parts: drop any candidate that's a (transitive) component of another.
   const superseded = supersededComponents(pool, items);
   pool = pool.filter((b) => !superseded.has(b.item.id));
 
-  const edge = (b: BuildItem) => b.adjustedWinRate - baselineWinRate;
   // Lower-confidence-bound edge for ranking: the item's win-rate edge at its conservative floor (shrunk
   // toward baseline by its decided games *and* discounted for uncertainty), so a small-sample shine
-  // (Refresher, 2% pick / n≈130 / +18pt) can't outrank the proven late staples. A small commit bonus still
+  // (Refresher, 2% pick / n≈130 / +18pt) can't outrank the proven late picks. A small commit bonus still
   // nudges a widely-bought late pick past an equally-rated rarity.
   const rankEdge = (b: BuildItem) =>
     lowerConfidenceWinRate(b.adjustedWinRate, b.decided, baselineWinRate, k) -
     baselineWinRate;
   const score = (b: BuildItem) =>
     rankEdge(b) + OVERTIME_COMMIT_WEIGHT * b.pickRate;
-  const role = (b: BuildItem): BuildRole =>
-    b.pickRate >= UNIVERSAL_PICK
-      ? "universal"
-      : isValuePick(b, baselineWinRate)
-        ? "value"
-        : "filler";
+  const byScore = (a: BuildItem, b: BuildItem) => score(b) - score(a);
+  const finalize = (b: BuildItem, role: BuildRole): BuildItem => ({
+    ...b,
+    role,
+    effectiveCost: b.item.cost,
+    why: b.item.effect ?? "",
+  });
 
-  // Only items that actually win late, highest priority (regularized late edge) first.
-  return pool
-    .filter((b) => edge(b) > 0)
-    .sort((a, b) => score(b) - score(a))
-    .slice(0, OVERTIME_MAX)
-    .map<BuildItem>((b) => ({
-      ...b,
-      role: role(b),
-      effectiveCost: b.item.cost,
-      why: b.item.effect ?? "",
-    }));
+  const staples = pool
+    .filter(
+      (b) =>
+        b.pickRate >= UNIVERSAL_PICK &&
+        !buyersLoseSignificantly(b, baselineWinRate),
+    )
+    .sort(byScore)
+    .map((b) => finalize(b, "universal"));
+  const situational = pool
+    .filter((b) => b.pickRate < UNIVERSAL_PICK && rankEdge(b) > 0)
+    .sort(byScore)
+    .map((b) => finalize(b, "situational"));
+
+  return [...staples, ...situational].slice(0, OVERTIME_MAX);
+}
+
+/**
+ * The sell side of overtime (see {@link overtimeBuyList}): the ≤T2 picks still holding a standing
+ * slot once the build is bought — the slots you free, weakest first, when an overtime buy needs
+ * room. Picks the build already marks transient (sold for the slot cap, consumed by an upgrade)
+ * are excluded: the build has already told you what happens to those. Exported for tests.
+ */
+export function overtimeSellList(phases: BuildPhase[]): BuildItem[] {
+  return phases
+    .flatMap((p) => p.core)
+    .filter((b) => !b.transient && b.item.tier <= SELL_FOR_SLOTS_MAX_TIER)
+    .sort(sellPriority);
 }
 
 /** Item ids in `pool` that are a (transitive) component of some *other* item in `pool` — the parts
@@ -942,9 +994,8 @@ function markTransient(
  * game you *sell* your cheapest stat-sticks to fit your late upgrades — so we model that sale rather than
  * refuse the strong late picks (which is why builds read fine without a hard cap; the overflow is exactly
  * the stuff you'd sell). When the standing (kept, non-transient) build is over `cap`, mark the weakest cheap
- * picks transient ("{@link SOLD_FOR_SLOTS}"), weakest-first, until it fits: lowest tier first (the biggest
- * upgrade gap — "sell low-tier when the difference is big"), then filler before value before staple, then
- * least-popular, then lowest win rate. "Build-complete" picks (tier > {@link SELL_FOR_SLOTS_MAX_TIER}) are
+ * picks transient ("{@link SOLD_FOR_SLOTS}"), weakest-first ({@link sellPriority}), until it fits.
+ * "Build-complete" picks (tier > {@link SELL_FOR_SLOTS_MAX_TIER}) are
  * never sold for room — you'd only do that giga-late, which we don't assume — so if every standing pick left
  * is a keeper the build is honestly left over the cap (App.tsx warns). Idempotent: it clears *its own* prior
  * flags first (leaving builds-into / cheap-early alone), so it's safe to re-run after a comp re-rank shuffles
@@ -965,17 +1016,9 @@ function capStandingSlots(phases: BuildPhase[], cap: number): number {
   let held = standing.length;
   if (held <= cap) return held;
 
-  const roleWeakness = (r: BuildRole) =>
-    r === "filler" ? 0 : r === "value" ? 1 : 2;
   const sellable = standing
     .filter((b) => b.item.tier <= SELL_FOR_SLOTS_MAX_TIER)
-    .sort(
-      (a, b) =>
-        a.item.tier - b.item.tier ||
-        roleWeakness(a.role) - roleWeakness(b.role) ||
-        a.pickRate - b.pickRate ||
-        a.adjustedWinRate - b.adjustedWinRate,
-    );
+    .sort(sellPriority);
 
   for (const b of sellable) {
     if (held <= cap) break;
@@ -985,6 +1028,21 @@ function capStandingSlots(phases: BuildPhase[], cap: number): number {
     held--;
   }
   return held;
+}
+
+/** Weakest-first sell order for standing cheap picks: lowest tier first (the biggest upgrade gap —
+ * "sell low-tier when the difference is big"), then filler before value before staple, then
+ * least-popular, then lowest win rate. Shared by {@link capStandingSlots} (what to sell to fit the
+ * slot cap) and {@link overtimeSellList} (which slots to free for an overtime buy). */
+function sellPriority(a: BuildItem, b: BuildItem): number {
+  const roleWeakness = (r: BuildRole) =>
+    r === "filler" ? 0 : r === "value" ? 1 : 2;
+  return (
+    a.item.tier - b.item.tier ||
+    roleWeakness(a.role) - roleWeakness(b.role) ||
+    a.pickRate - b.pickRate ||
+    a.adjustedWinRate - b.adjustedWinRate
+  );
 }
 
 const COST_BAND = 1.6; // a "swap" only makes sense between items of comparable cost

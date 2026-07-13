@@ -276,10 +276,18 @@ export interface GeneratedBuild {
   phases: BuildPhase[];
   /** Count of items that hold a permanent slot (excludes transient/sold/component picks). */
   standingSlots: number;
-  /** Prioritized "spend your surplus" list for games that drag past ~30 min with the build already
-   * full: the T3+ upgrades to replace your lowest-tier slots with, ranked by how they perform in the
-   * *late* window (the 30+ flow column) — not blended across the game. Highest priority first. */
+  /** The overtime shopping list for games that drag past ~30 min with the build already full: T3+
+   * upgrades judged in the *late* window (the 30+ flow column), with anything already core in the
+   * build filtered out — the premise is the build is bought, so those are owned (and items are
+   * unique, so they're literally unbuyable). Two groups, flagged by `role`: `"universal"` = default
+   * upgrades (adoption-admitted staples, like a phase core — no win-rate gate), followed by
+   * `"situational"` = sub-universal picks whose late edge is confidently positive but conditional
+   * on the game (buyer-selected). Each group strongest first. */
   overtimeBuys: BuildItem[];
+  /** The sell side of overtime: the ≤T2 picks still holding a standing slot once the build is
+   * bought — the slots you free, weakest first, when an overtime buy needs room (slots, not souls,
+   * are the late-game constraint). */
+  overtimeSell: BuildItem[];
   /** Measured co-purchase lookup (see {@link PairGames}); absent when no pair data was supplied. */
   pairGames?: PairGames;
 }

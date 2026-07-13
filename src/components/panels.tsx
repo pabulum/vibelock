@@ -183,10 +183,13 @@ export function CategoryBar({
   );
 }
 
-// The overtime buy-list column — a prioritized "spend your surplus" list for games that drag past
-// 30 min with the build already full. Rendered as the natural continuation of the Lane→Late columns,
-// but it's not a time slice: it's the T3+ upgrades (ranked by *late-window* win rate) to replace your
-// lowest-tier slots with once souls stop being the constraint. Reuses ItemRow so each buy still
+// The overtime column — for games that drag past 30 min with the build already full. Rendered as
+// the natural continuation of the Lane→Late columns, but it's not a time slice and not one ranked
+// list: at that point slots (not souls) are the constraint, so it reads as a *swap* — which standing
+// low-tier slots to free (weakest first), the T3+ upgrades most players default into (adoption-
+// admitted, like a phase core), and then the situational picks whose late edge is real but
+// conditional on the game (their counter portraits carry the "when"). Items the build already
+// commits to are filtered at generation — they're owned by now. Reuses ItemRow so each buy still
 // carries its win-rate delta, counter portraits, and imbue/learn-more tags.
 export function OvertimeColumn({
   build,
@@ -206,27 +209,55 @@ export function OvertimeColumn({
 }) {
   const buys = build.overtimeBuys;
   if (!buys.length) return null;
+  const staples = buys.filter((b) => b.role === "universal");
+  const situational = buys.filter((b) => b.role !== "universal");
+  const sell = build.overtimeSell;
+  const row = (b: BuildItem, muted = false) => (
+    <ItemRow
+      key={b.item.id}
+      b={b}
+      items={items}
+      baseline={build.population.baselineWinRate}
+      counter={counterByItem.get(b.item.id)}
+      enemiesById={enemiesById}
+      imbue={imbueByItem.get(b.item.id)}
+      lab={labOf?.(b.item.id)}
+      muted={muted}
+    />
+  );
   return (
     <section className="phase overtime">
       <h2>
         Overtime buys <span className="time">build full · 30+ min</span>
       </h2>
       <div className="budget">
-        Surplus souls? Replace your lowest-tier slots — best at late, top first.
+        Slots are the constraint now, not souls — free your weakest slots for
+        what wins late.
       </div>
-      <h3 className="grouphdr core">Buy in this order</h3>
-      {buys.map((b) => (
-        <ItemRow
-          key={b.item.id}
-          b={b}
-          items={items}
-          baseline={build.population.baselineWinRate}
-          counter={counterByItem.get(b.item.id)}
-          enemiesById={enemiesById}
-          imbue={imbueByItem.get(b.item.id)}
-          lab={labOf?.(b.item.id)}
-        />
-      ))}
+      {sell.length > 0 && (
+        <div
+          className="ot-sell"
+          title="Your cheapest standing picks, weakest first — the slots to free when an overtime buy needs room."
+        >
+          Sell first: {sell.map((b) => b.item.name).join(" · ")}
+        </div>
+      )}
+      {staples.length > 0 && (
+        <>
+          <h3 className="grouphdr core">Default upgrades</h3>
+          {staples.map((b) => row(b))}
+        </>
+      )}
+      {situational.length > 0 && (
+        <>
+          <h3
+            className={`grouphdr situational ${staples.length === 0 ? "core" : ""}`}
+          >
+            If the game calls for it
+          </h3>
+          {situational.map((b) => row(b, true))}
+        </>
+      )}
     </section>
   );
 }

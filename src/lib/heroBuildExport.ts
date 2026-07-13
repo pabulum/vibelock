@@ -132,6 +132,8 @@ export function itemAnnotation(
   );
   if (b.role === "universal") parts.push("staple — most players buy this");
   else if (b.role === "value") parts.push("value pick");
+  else if (b.role === "situational")
+    parts.push("situational — when the game calls for it");
   else if (b.role === "filler")
     parts.push("fills the phase budget, not a value pick");
   if (b.why && b.why !== b.item.effect) parts.push(b.why); // custom rationale only — effect text is on the card
@@ -261,11 +263,15 @@ export function buildExportCategories(
       seen.add(b.item.id);
       ot.push(toMod(b));
     }
+    // Name the slots to free right in the category note — in overtime slots, not souls, are the
+    // constraint, so "what do I sell?" is half the instruction. Capped so the note stays short.
+    const sellNames = build.overtimeSell.slice(0, 3).map((b) => b.item.name);
     if (ot.length)
       cats.push({
         name: "Overtime",
-        description:
-          "Spend surplus souls late — replace your lowest-tier slots",
+        description: sellNames.length
+          ? `Defaults first, then situational — sell ${sellNames.join(" / ")} to make room`
+          : "Defaults first, then situational — replace your lowest-tier slots",
         mods: ot,
         optional: true,
       });

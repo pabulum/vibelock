@@ -3,8 +3,18 @@ import {
   WIN_STATE_GAP,
   classifyWinState,
   generateBuild,
+  overtimeBuyList,
+  overtimeSellList,
 } from "./buildGenerator";
-import type { Hero, Item, ItemFlowStats } from "../types";
+import type {
+  BuildItem,
+  BuildPhase,
+  BuildRole,
+  FlowNode,
+  Hero,
+  Item,
+  ItemFlowStats,
+} from "../types";
 
 // classifyWinState reads the raw-vs-adjusted (game-state-corrected) win-rate gap: a pick whose raw
 // rate runs well above its adjusted rate mostly wins games you were already winning ("win more"); the
@@ -736,5 +746,189 @@ describe("generateBuild — line-aware line-collapse", () => {
     });
     expect(coreIds(b).has(upgrade.id)).toBe(true); // the finished item now holds the slot
     expect(allIds(b).has(comp.id)).toBe(false); // the terminal component folded away
+  });
+});
+
+// The overtime list is a slot swap, not a phase: anything the build already commits to is owned by
+// 30+ min (items are unique — a repeat is an impossible purchase), staples are admitted by adoption
+// (a pick everyone buys late shows ~baseline edge by construction, so a positive-edge gate would
+// drop exactly the proven picks), and sub-universal picks need a *confidently* positive late edge
+// and are flagged situational — their edge is conditional on the game that made players buy them.
+describe("overtimeBuyList — the overtime swap list", () => {
+  const baseline = 0.5;
+  const K = 300; // fixed prior strength: tests reason about exact shrink/LCB numbers
+
+  const t4 = (id: number): Item => ({
+    id,
+    name: `Luxury ${id}`,
+    tier: 4,
+    cost: 6200,
+    slot: "spirit",
+    componentIds: [],
+  });
+  const lateNode = (
+    item_id: number,
+    players: number,
+    adj: number,
+  ): FlowNode => ({
+    column: 3,
+    item_id,
+    wins: Math.round(players * adj),
+    losses: players - Math.round(players * adj),
+    players,
+    matches: players,
+    adjusted_win_rate: adj,
+    avg_net_worth_at_buy: 40000,
+    total_kills: 0,
+    total_deaths: 0,
+    total_assists: 0,
+  });
+  const flowOf = (nodes: FlowNode[]): ItemFlowStats => ({
+    nodes,
+    edges: [],
+    summary: {
+      matches: 1000,
+      players: 1000,
+      wins: 500,
+      losses: 500,
+      avg_duration_s: 2400,
+      avg_net_worth: 40000,
+    },
+    baseline: {
+      matches: 1000,
+      players: 1000,
+      wins: 500,
+      losses: 500,
+      avg_duration_s: 2400,
+      avg_net_worth: 40000,
+    },
+    reached_per_column: [1000, 1000, 1000, 1000], // pickRate = players / 1000
+  });
+  const itemsOf = (nodes: FlowNode[]) =>
+    new Map(nodes.map((n) => [n.item_id, t4(n.item_id)]));
+  const run = (nodes: FlowNode[], coreIds: number[] = []) =>
+    overtimeBuyList(
+      flowOf(nodes),
+      itemsOf(nodes),
+      baseline,
+      K,
+      new Set(coreIds),
+    );
+
+  it("drops buys the build already commits to — owned by overtime, so unbuyable", () => {
+    const nodes = [lateNode(1, 600, 0.55), lateNode(2, 600, 0.55)];
+    const out = run(nodes, [1]);
+    expect(out.map((b) => b.item.id)).toEqual([2]);
+  });
+
+  it("admits a widely-bought staple at ~baseline edge — adoption, not a positive-edge gate", () => {
+    // 60% of late players buy it, edge slightly *negative* (−0.5pt) — exactly the compression a
+    // consensus pick shows. The old edge>0 gate dropped these while keeping thin-sample rarities.
+    const out = run([lateNode(1, 600, 0.495)]);
+    expect(out.map((b) => b.item.id)).toEqual([1]);
+    expect(out[0].role).toBe("universal");
+  });
+
+  it("still drops a popular late trap — buyers significantly behind non-buyers", () => {
+    // 50% pick but adjusted 44%: the implied buyer-vs-non-buyer contrast is wide and significant,
+    // so the adoption bypass is revoked (same falsifiable check the core fill runs).
+    const out = run([lateNode(1, 500, 0.44)]);
+    expect(out).toEqual([]);
+  });
+
+  it("applies the fractional support floor — a 1%-pick shine can't ride a blend-capped sample", () => {
+    // 3% of the 1000 late players ⇒ floor 40 (abs) vs 30 (frac) → still 40 here, so scale reached
+    // via a big-population column: 10k reached ⇒ floor 300. The 120-player (+13pt!) rarity is out;
+    // the 400-player pick stays. This is the Magic Carpet case: the patch blend caps *decided*
+    // evidence per node, so only the player-count floor still sees the real adoption gap.
+    const bigFlow = flowOf([lateNode(1, 120, 0.63), lateNode(2, 400, 0.56)]);
+    bigFlow.reached_per_column = [10000, 10000, 10000, 10000];
+    const out = overtimeBuyList(
+      bigFlow,
+      itemsOf(bigFlow.nodes),
+      baseline,
+      K,
+      new Set(),
+    );
+    expect(out.map((b) => b.item.id)).toEqual([2]);
+  });
+
+  it("gates sub-universal picks on a confidently positive late edge, not the point estimate", () => {
+    const out = run([
+      lateNode(1, 200, 0.6), // solid sample, LCB clears baseline ⇒ in
+      lateNode(2, 50, 0.65), // thin-sample shine ⇒ LCB under baseline ⇒ out
+      lateNode(3, 200, 0.505), // positive point edge but not confidently ⇒ out (old gate kept this)
+    ]);
+    expect(out.map((b) => b.item.id)).toEqual([1]);
+    expect(out[0].role).toBe("situational");
+  });
+
+  it("lists default upgrades before situational picks, each group strongest first", () => {
+    const out = run([
+      lateNode(4, 200, 0.58), // situational, weaker
+      lateNode(2, 900, 0.5), // staple, weaker
+      lateNode(3, 200, 0.62), // situational, stronger — outscores staple 2, but grouping wins
+      lateNode(1, 600, 0.54), // staple, stronger
+    ]);
+    expect(out.map((b) => b.item.id)).toEqual([1, 2, 3, 4]);
+    expect(out.map((b) => b.role)).toEqual([
+      "universal",
+      "universal",
+      "situational",
+      "situational",
+    ]);
+  });
+});
+
+// The sell side of the overtime swap: which standing slots to free, weakest first.
+describe("overtimeSellList", () => {
+  const sellBi = (
+    id: number,
+    tier: number,
+    role: BuildRole,
+    opts: Partial<BuildItem> = {},
+  ): BuildItem => ({
+    item: {
+      id,
+      name: `I${id}`,
+      tier,
+      cost: 500 * tier,
+      slot: "weapon",
+      componentIds: [],
+    },
+    role,
+    pickRate: 0.5,
+    adjustedWinRate: 0.5,
+    rawWinRate: 0.5,
+    sample: 100,
+    decided: 100,
+    avgNetWorthAtBuy: 0,
+    why: "",
+    ...opts,
+  });
+  const phaseOf = (core: BuildItem[]): BuildPhase => ({
+    column: 0,
+    label: "Lane",
+    timeLabel: "",
+    targetItems: core.length,
+    itemsBought: core.length,
+    soulBudget: 0,
+    coreSouls: 0,
+    categorySouls: { weapon: 0, vitality: 0, spirit: 0 },
+    core,
+    situational: [],
+  });
+
+  it("lists standing ≤T2 picks weakest first; T3+ and transient picks never sell", () => {
+    const sell = overtimeSellList([
+      phaseOf([
+        sellBi(1, 2, "universal"), // cheap but a staple ⇒ sold last
+        sellBi(2, 1, "value"),
+        sellBi(3, 1, "filler"), // weakest standing pick ⇒ first out
+        sellBi(4, 1, "filler", { transient: true, transientKind: "part" }), // consumed by an upgrade — not a sale
+      ]),
+      phaseOf([sellBi(5, 4, "universal")]), // build-complete — never sold for room
+    ]);
+    expect(sell.map((b) => b.item.id)).toEqual([3, 2, 1]);
   });
 });
