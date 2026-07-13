@@ -208,6 +208,7 @@ body {
 .crow,
 .mchip,
 .movers,
+.meta,
 .fundamentals {
   position: relative;
 }
@@ -216,6 +217,7 @@ body {
 .crow::after,
 .mchip::after,
 .movers::after,
+.meta::after,
 .fundamentals::after {
   content: "";
   position: absolute;
@@ -239,6 +241,7 @@ body {
 .crow::before,
 .mchip::before,
 .movers::before,
+.meta::before,
 .fundamentals::before {
   content: "";
   position: absolute;

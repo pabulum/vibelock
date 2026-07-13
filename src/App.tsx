@@ -1172,6 +1172,12 @@ export default function App() {
   // wear the same settle scrim so a reload visibly develops rather than silently swapping numbers.
   const moversRef = useSettle<HTMLDivElement>(loading);
   const fundamentalsRef = useSettle<HTMLElement>(fundamentalsLoading);
+  // The hero name/metadata block. Its identity (face + name) reads from the live selection so it
+  // swaps the instant you click a hero, while the stats it carries (matches, WR, standing slots)
+  // are still the *previous* hero's until the build query lands — so the block wears the settle
+  // scrim, developing the new numbers under the frost rather than showing a truthful face over
+  // stale figures with no cue that anything is loading.
+  const metaRef = useSettle<HTMLDivElement>(loading);
 
   return (
     <div className="app">
@@ -1459,15 +1465,22 @@ export default function App() {
         )}
 
         {build && (
-          <div className="meta">
-            {build.hero.image && (
+          // Identity (face + name) comes from the live selection, NOT build.hero, so it swaps the
+          // instant you pick a hero instead of lagging until the build query returns. The numbers
+          // below are still the old hero's until then, so the block wears the settle scrim.
+          <div className="meta" ref={metaRef}>
+            {(hero ?? build.hero).image && (
               // The unmissable "you are looking at THIS hero" anchor — a friend read Abrams
               // numbers mid-match while playing someone else; a name alone is too quiet.
-              <img className="metaface" src={build.hero.image} alt="" />
+              <img
+                className="metaface"
+                src={(hero ?? build.hero).image}
+                alt=""
+              />
             )}
             <div className="metabody">
               <div className="metatitle">
-                {build.hero.name}
+                {(hero ?? build.hero).name}
                 {archetypeSet?.flex && activeArchetype && (
                   <span className="metaarch">{activeArchetype.label}</span>
                 )}
