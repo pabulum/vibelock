@@ -1,9 +1,15 @@
 name: Harvest match metadata
 
-# Nightly sampler for the offline-model training set (see scripts/harvest-matches.mjs). Keeps a
-# rolling 30-day window of gzipped NDJSON shards on the orphan `data` branch. The branch is
-# rebuilt as a single commit and force-pushed each run, so purged shards actually leave the
-# repository instead of lingering in history — total repo growth stays bounded by the window.
+# Nightly sampler for the offline-model training set (see scripts/harvest-matches.mjs).
+#
+# Storage layout — two homes, chosen for GitHub's limits:
+#  - SHARDS (one ~65MB .ndjson.gz per day) live as assets on the rolling `harvest-data`
+#    release. Git blobs hard-fail pushes at 100MB and weigh down every clone; release assets
+#    allow 2GB/file and count toward nothing. Retention = assets older than the window are
+#    deleted each night.
+#  - The tiny artifacts the app and humans read (wp-stats.json, manifest.json) live on the
+#    orphan `data` branch, rebuilt as a single parentless commit each night so it never
+#    accumulates history. The Lab fetches wp-stats.json from raw.githubusercontent.com.
 #
 # Ops notes:
 #  - GitHub disables scheduled workflows after 60 days without repo activity; any push resets it.
@@ -20,11 +26,14 @@ on:
         required: false
 
 permissions:
-  contents: write # push to the data branch
+  contents: write # push to the data branch + manage the harvest-data release
 
 concurrency:
   group: harvest
   cancel-in-progress: false # never abandon a half-paced harvest for a newer trigger
+
+env:
+  RETENTION_DAYS: "30"
 
 jobs:
   harvest:
@@ -35,42 +44,71 @@ jobs:
         with:
           node-version: 22
 
-      # Pull the current data branch contents (if the branch exists yet) so this run's shard is
-      # added to the existing window rather than starting a fresh one.
-      - name: Restore existing shards
+      # Pull the current rolling window from the release (runner-side, GitHub-internal
+      # bandwidth). Migration fallback: until the release has assets, the window still lives on
+      # the pre-Releases fat data branch — inherit it from there exactly once, after which the
+      # slim branch has no shards and the release is authoritative.
+      - name: Restore shards from release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p _data
-          if git fetch --depth=1 origin data; then
-            git --work-tree=_data restore --source=FETCH_HEAD -- .
-          else
-            echo "No data branch yet — first harvest."
+          mkdir -p _data/shards
+          gh release download harvest-data -D _data/shards -p '*.ndjson.gz' 2>/dev/null || true
+          if ! ls _data/shards/*.ndjson.gz >/dev/null 2>&1; then
+            if git fetch --depth=1 origin data && \
+               git --work-tree=_data restore --source=FETCH_HEAD -- shards/ 2>/dev/null; then
+              echo "Restored $(ls _data/shards | wc -l) shards from the data branch (one-time migration)."
+            else
+              echo "No shards anywhere — starting a fresh window."
+            fi
           fi
 
       - name: Harvest
         env:
           HARVEST_DAY: ${{ inputs.day }}
           OUT_DIR: _data/shards
+          # RETENTION_DAYS comes from the workflow-level env.
           # 10x the original sampling (same 12 requests/night — the 10/min limit binds on
           # requests, not matches; every 2h bin holds 2,000+ matches so 1,000 is always there).
           # This is the density at which the ROLLING window itself crosses the hero-item
           # stabilization point (median cell ~6k vs k~3.2k), i.e. per-hero WPA becomes possible
-          # without accumulating beyond 30 days. Costs ~65MB/day, ~2GB at steady state.
+          # without accumulating beyond 30 days. Costs ~65MB/day — fine as release assets.
           PER_BIN: "1000"
         run: node scripts/harvest-matches.mjs
 
-      # Refit the WP surface + item/hero stats over the full rolling window and ship the JSON
-      # alongside the shards; the Lab panel in the app fetches it from the data branch.
+      # Refit the WP surface + item/hero stats over the full rolling window.
       - name: Bake wp-stats.json
         env:
           SHARDS_DIR: _data/shards
           OUT: _data/wp-stats.json
         run: node scripts/bake-wp-stats.mjs
 
-      # Rebuild the data branch as one fresh commit (no parent), so retention purges are real
-      # deletions and the branch never accumulates history.
+      # Sync the release to the local window: upload shards it doesn't have (normally just
+      # today's), delete assets that aged out. Mirrors the harvester's local purge.
+      - name: Publish shards to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view harvest-data >/dev/null 2>&1 || gh release create harvest-data \
+            --prerelease --title "Harvest data (rolling ${RETENTION_DAYS}-day window)" \
+            --notes "Nightly match-metadata shards consumed by the wp-stats bake. Assets older than the retention window are deleted; do not link to them."
+          existing=$(gh api "repos/${{ github.repository }}/releases/tags/harvest-data" --jq '.assets[].name')
+          for f in _data/shards/*.ndjson.gz; do
+            n=$(basename "$f")
+            grep -qxF "$n" <<<"$existing" || gh release upload harvest-data "$f"
+          done
+          cutoff=$(date -u -d "${RETENTION_DAYS} days ago" +%F)
+          while IFS= read -r a; do
+            [[ -n "$a" && "${a%%.ndjson.gz}" < "$cutoff" ]] && gh release delete-asset harvest-data "$a" -y
+          done <<<"$existing" || true
+
+      # The data branch carries only the small read-side artifacts, as one fresh parentless
+      # commit — no shards, no history growth.
       - name: Publish data branch
         run: |
-          cd _data
+          mkdir -p _pub
+          cp _data/wp-stats.json _data/manifest.json _pub/
+          cd _pub
           git init -q -b data
           git add -A
           git -c user.name="harvest-bot" -c user.email="actions@github.com" \
