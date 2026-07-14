@@ -2,15 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   WIN_STATE_GAP,
   classifyWinState,
+  finalizeOvertimeBuys,
   generateBuild,
   overtimeBuyList,
   overtimeSellList,
+  rerankBuildForComp,
 } from "./buildGenerator";
+import type { CompEdge } from "./counters";
 import type {
   BuildItem,
   BuildPhase,
   BuildRole,
   FlowNode,
+  GeneratedBuild,
   Hero,
   Item,
   ItemFlowStats,
@@ -877,6 +881,86 @@ describe("overtimeBuyList — the overtime swap list", () => {
       "situational",
       "situational",
     ]);
+  });
+});
+
+// A comp re-rank moves items between core and situational. Both overtime lists are derived from core
+// membership, so they have to be rebuilt against the *re-ranked* core — not carried over from the
+// base build. Regression: Victor vs a 6-enemy comp showed Greater Expansion as core in Early mid
+// *and* in the overtime buy list ("buy this at 30+" for an item the build already owns by 20).
+describe("rerankBuildForComp — overtime lists follow the re-ranked core", () => {
+  const spiritT4 = (id: number, name: string): Item => ({
+    id,
+    name,
+    tier: 4,
+    cost: 6200,
+    slot: "spirit",
+    componentIds: [],
+  });
+  const CORE = spiritT4(1, "Core Pick");
+  const SWAP = spiritT4(2, "Greater Expansion"); // situational in the base build, so overtime-eligible
+  const items = new Map([CORE, SWAP].map((i) => [i.id, i]));
+
+  const bi = (item: Item, adjustedWinRate: number): BuildItem => ({
+    item,
+    role: "value",
+    pickRate: 0.3,
+    adjustedWinRate,
+    rawWinRate: adjustedWinRate,
+    sample: 500,
+    decided: 500,
+    avgNetWorthAtBuy: 40000,
+    effectiveCost: item.cost,
+    why: "",
+  });
+
+  const buildWith = (core: BuildItem[], situational: BuildItem[]) => {
+    const pool = [{ ...bi(SWAP, 0.55), role: "situational" as const }];
+    const phase: BuildPhase = {
+      column: 1,
+      label: "Early mid",
+      timeLabel: "9–20 min",
+      targetItems: 2,
+      itemsBought: core.length,
+      soulBudget: 12000,
+      coreSouls: 6200,
+      categorySouls: { weapon: 0, vitality: 0, spirit: 6200 },
+      core,
+      situational,
+    };
+    const build: GeneratedBuild = {
+      hero: { id: 1, name: "Victor" } as Hero,
+      rankLabel: "Eternus",
+      population: { matches: 1000, avgDurationS: 2400, baselineWinRate: 0.5 },
+      phases: [phase],
+      standingSlots: core.length,
+      overtimePool: pool,
+      // The base build's exclusion: SWAP is only situational, so it legitimately sits in overtime.
+      overtimeBuys: finalizeOvertimeBuys(
+        pool,
+        items,
+        new Set(core.map((b) => b.item.id)),
+      ),
+      overtimeSell: [],
+    };
+    return build;
+  };
+
+  it("drops an overtime buy the comp promoted into core", () => {
+    const build = buildWith([bi(CORE, 0.52)], [bi(SWAP, 0.55)]);
+    // Baseline sanity: with no comp, the situational swap is a legitimate overtime buy.
+    expect(build.overtimeBuys.map((b) => b.item.id)).toEqual([SWAP.id]);
+
+    // A comp that strongly favours SWAP promotes it into the phase core...
+    const edges = new Map<number, CompEdge>([
+      [SWAP.id, { edge: 0.08, se: 0.01 }],
+    ]);
+    const out = rerankBuildForComp(build, edges, items);
+
+    const coreIds = out.phases.flatMap((p) => p.core.map((b) => b.item.id));
+    expect(coreIds).toContain(SWAP.id);
+    // ...so it must no longer be offered as an overtime buy — it's already owned by then.
+    expect(out.overtimeBuys.map((b) => b.item.id)).not.toContain(SWAP.id);
   });
 });
 

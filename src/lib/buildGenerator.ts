@@ -517,6 +517,7 @@ export function generateBuild(
   // Items the build already commits to buying — by the time overtime starts they're owned, so the
   // overtime list must not re-offer them (items are unique; a repeat is an impossible purchase).
   const coreIds = new Set(phases.flatMap((p) => p.core.map((b) => b.item.id)));
+  const overtimePool = overtimeCandidates(flow, items, baselineWinRate, priorK);
 
   return {
     hero,
@@ -528,13 +529,8 @@ export function generateBuild(
     },
     phases,
     standingSlots,
-    overtimeBuys: overtimeBuyList(
-      flow,
-      items,
-      baselineWinRate,
-      priorK,
-      coreIds,
-    ),
+    overtimePool,
+    overtimeBuys: finalizeOvertimeBuys(overtimePool, items, coreIds),
     overtimeSell: overtimeSellList(phases),
     pairGames,
   };
@@ -575,6 +571,22 @@ export function overtimeBuyList(
   k: number,
   coreIds: Set<number>,
 ): BuildItem[] {
+  return finalizeOvertimeBuys(
+    overtimeCandidates(flow, items, baselineWinRate, k),
+    items,
+    coreIds,
+  );
+}
+
+/** The ranked overtime pool, before the "already core" exclusion (see {@link finalizeOvertimeBuys}).
+ * Split out from {@link overtimeBuyList} because core membership isn't settled until after any comp
+ * re-rank, so the exclusion has to be applied later — and twice. */
+export function overtimeCandidates(
+  flow: ItemFlowStats,
+  items: Map<number, Item>,
+  baselineWinRate: number,
+  k: number,
+): BuildItem[] {
   // Read the LATE column only — the 30+ minute window is the relevant signal for a long game, so an
   // item is judged on what it does *then*, not on its blended-across-the-game average.
   let maxCol = 0;
@@ -589,20 +601,15 @@ export function overtimeBuyList(
   // 1% pick / n=65 topping Paradox overtime on a +13.7pt thin-sample shine).
   const minSupport = Math.max(MIN_SUPPORT_ABS, MIN_SUPPORT_FRAC * reached);
 
-  let pool = flow.nodes
+  const pool = flow.nodes
     .filter((n) => n.column === lateCol)
     .map((n) => toCandidate(n, reached, items))
     .filter(
       (c): c is BuildItem =>
         c !== null &&
         c.item.tier >= OVERTIME_MIN_TIER &&
-        c.sample >= minSupport &&
-        !coreIds.has(c.item.id),
+        c.sample >= minSupport,
     );
-
-  // Keep the upgrade, not its parts: drop any candidate that's a (transitive) component of another.
-  const superseded = supersededComponents(pool, items);
-  pool = pool.filter((b) => !superseded.has(b.item.id));
 
   // Lower-confidence-bound edge for ranking: the item's win-rate edge at its conservative floor (shrunk
   // toward baseline by its decided games *and* discounted for uncertainty), so a small-sample shine
@@ -634,7 +641,33 @@ export function overtimeBuyList(
     .sort(byScore)
     .map((b) => finalize(b, "situational"));
 
-  return [...staples, ...situational].slice(0, OVERTIME_MAX);
+  return [...staples, ...situational];
+}
+
+/**
+ * Applies the "you already own it" exclusion to the ranked overtime pool and trims it to the
+ * displayed length. Anything core in the *final* build is dropped — the column's premise is that the
+ * build is bought, and items are unique, so re-offering a core pick is an impossible purchase. Picks
+ * that are only optional swaps stay eligible: you may well not have bought those.
+ *
+ * Separate from {@link overtimeCandidates} because it runs twice. `generateBuild` excludes against
+ * the base core; a comp re-rank then moves items between core and situational, so
+ * {@link rerankBuildForComp} re-applies it against the re-ranked core. Doing it once at generation
+ * let a comp-promoted item sit in both the build and the overtime list at the same time.
+ *
+ * Components of a listed upgrade drop out here too (buy the finished item), computed against the
+ * eligible set rather than the whole pool — a component whose upgrade is core is itself moot.
+ */
+export function finalizeOvertimeBuys(
+  pool: BuildItem[],
+  items: Map<number, Item>,
+  coreIds: Set<number>,
+): BuildItem[] {
+  const eligible = pool.filter((b) => !coreIds.has(b.item.id));
+  const superseded = supersededComponents(eligible, items);
+  return eligible
+    .filter((b) => !superseded.has(b.item.id))
+    .slice(0, OVERTIME_MAX);
 }
 
 /**
@@ -2277,5 +2310,19 @@ export function rerankBuildForComp(
   recomputeCosts(phases, items); // marginal costs + coreSouls/categorySouls for the re-ranked core
   const standingSlots = capStandingSlots(phases, SLOT_CAP); // re-fit the cap to the re-ranked membership
   annotateSlotRelations(phases, build.pairGames); // swap/rush pairings for the re-ranked membership
-  return { ...build, phases, standingSlots };
+
+  // Both overtime lists are derived from core membership, which the re-rank just changed — so they
+  // have to be rebuilt, not carried over. Otherwise a pick the comp promoted into core still shows
+  // in the buy list ("buy this at 30+" for an item the build already owns by 20), and the sell list
+  // still names slots the re-ranked build no longer holds.
+  const newCoreIds = new Set(
+    phases.flatMap((p) => p.core.map((b) => b.item.id)),
+  );
+  return {
+    ...build,
+    phases,
+    standingSlots,
+    overtimeBuys: finalizeOvertimeBuys(build.overtimePool, items, newCoreIds),
+    overtimeSell: overtimeSellList(phases),
+  };
 }

@@ -113,6 +113,7 @@ const buildOf = (
   population: { matches: 1000, avgDurationS: 1800, baselineWinRate: 0.5 },
   phases,
   standingSlots: 0,
+  overtimePool: overtime.map(bi),
   overtimeBuys: overtime.map(bi),
   overtimeSell: [],
 });

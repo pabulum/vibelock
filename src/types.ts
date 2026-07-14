@@ -284,6 +284,12 @@ export interface GeneratedBuild {
    * `"situational"` = sub-universal picks whose late edge is confidently positive but conditional
    * on the game (buyer-selected). Each group strongest first. */
   overtimeBuys: BuildItem[];
+  /** The ranked overtime pool *before* the "already core" exclusion — every candidate that cleared
+   * the tier/support/edge gates, strongest first. Kept because core membership isn't final at
+   * generation: a comp re-rank ({@link rerankBuildForComp}) moves items between core and
+   * situational, and the exclusion has to be re-applied against the core the player actually sees,
+   * or a promoted pick shows up as both "you own this by 20 min" and "buy this at 30+". */
+  overtimePool: BuildItem[];
   /** The sell side of overtime: the ≤T2 picks still holding a standing slot once the build is
    * bought — the slots you free, weakest first, when an overtime buy needs room (slots, not souls,
    * are the late-game constraint). */

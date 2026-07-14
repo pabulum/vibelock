@@ -131,6 +131,7 @@ const build = (): GeneratedBuild => ({
   population: { matches: 1000, avgDurationS: 1980, baselineWinRate: 0.5 },
   phases: [phase(0, "Lane", [10, 11], [11, 30]), phase(1, "Mid", [20], [31])],
   standingSlots: 3,
+  overtimePool: [bi(40), bi(20)],
   overtimeBuys: [bi(40), bi(20)], // 20 is already core → should be dropped from Overtime
   overtimeSell: [],
 });
