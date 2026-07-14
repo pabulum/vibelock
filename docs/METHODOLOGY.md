@@ -207,6 +207,22 @@ probability is r ≈ 0.10), but it is currently a global, roster-wide number rat
 so the generator still ranks on `adjusted_win_rate`. The per-item **comeback / win more** tags are the
 honest per-pick read on the bias in the meantime.
 
+**A corrupt net worth in the lane phase.** There is an upstream data bug: in the per-match data, an
+item's `net_worth_at_buy` reports the player's _final_ net worth for their first ~4–5 purchases. Those
+are lane buys, so the lane column's `adjusted_win_rate` is standardized against end-of-game wealth.
+Golden Goose Egg — 800 souls, bought in the opening minutes — reports an average net worth at buy of
+38,179, which is essentially the average net worth at the _end_ of a game. The server duly "adjusts"
+its win rate as if a rich player had bought it, taking it from 53.1% raw to 45.7% adjusted: from above
+baseline to below it, entirely on bad data.
+
+Vibelock detects this and drops the adjustment for the affected items, ranking and displaying them on
+their raw win rate instead. The test is self-calibrating rather than a hardcoded soul value: a node is
+flagged when its net worth at buy exceeds twice its _column's_ median. Measured across heroes, columns
+1–3 contain no such node, while the lane column has 9–15 per hero. Lane is also the phase where the
+confound the adjustment exists to fix is weakest — everyone is poor, so there is little net-worth
+variance to confound — which is why falling back to the raw rate is the honest move there. A wrong
+adjustment is worse than none.
+
 **Selection and survivorship.** Pick-rate-selected core items win at roughly the baseline by
 construction, so discretionary slots are ranked by shrunk adjusted win rate instead. Upgrade paths
 are survivorship-inflated. Objective- and urn-related gold is outcome-tied rather than a lever a

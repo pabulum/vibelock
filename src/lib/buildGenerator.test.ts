@@ -5,6 +5,7 @@ import {
   finalizeOvertimeBuys,
   generateBuild,
   overtimeBuyList,
+  unreliableAdjustedNodes,
   overtimeSellList,
   rerankBuildForComp,
 } from "./buildGenerator";
@@ -961,6 +962,136 @@ describe("rerankBuildForComp — overtime lists follow the re-ranked core", () =
     expect(coreIds).toContain(SWAP.id);
     // ...so it must no longer be offered as an overtime buy — it's already owned by then.
     expect(out.overtimeBuys.map((b) => b.item.id)).not.toContain(SWAP.id);
+  });
+});
+
+// Upstream, an item's net_worth_at_buy is the player's FINAL net worth for their first few buys, so
+// the lane column's adjusted_win_rate is standardized against end-of-game wealth. Golden Goose Egg
+// (800 souls, bought in the opening minutes) reports 38,179 — the average final net worth — and gets
+// "adjusted" from 53.1% raw down to 45.7%, i.e. from above baseline to below it, on bad data.
+describe("unreliableAdjustedNodes — the corrupt net-worth-at-buy guard", () => {
+  const node = (
+    column: number,
+    item_id: number,
+    avg_net_worth_at_buy: number,
+    adjusted_win_rate = 0.5,
+  ): FlowNode => ({
+    column,
+    item_id,
+    wins: 531,
+    losses: 469,
+    players: 1000,
+    matches: 1000,
+    adjusted_win_rate,
+    avg_net_worth_at_buy,
+    total_kills: 0,
+    total_deaths: 0,
+    total_assists: 0,
+  });
+  const flowOf = (nodes: FlowNode[]): ItemFlowStats => ({
+    nodes,
+    edges: [],
+    summary: {
+      matches: 1000,
+      players: 1000,
+      wins: 500,
+      losses: 500,
+      avg_duration_s: 2400,
+      avg_net_worth: 38684,
+    },
+    baseline: {
+      matches: 1000,
+      players: 1000,
+      wins: 500,
+      losses: 500,
+      avg_duration_s: 2400,
+      avg_net_worth: 38684,
+    },
+    reached_per_column: [1000, 1000, 1000, 1000],
+  });
+
+  it("flags a lane node whose net worth at buy is a multiple of the column median", () => {
+    // A realistic lane column: most items a few thousand souls, Golden Goose Egg at end-of-game wealth.
+    const flow = flowOf([
+      node(0, 1, 3000),
+      node(0, 2, 4269), // median
+      node(0, 3, 5000),
+      node(0, 4, 38179), // Golden Goose Egg — impossible before 9 min
+    ]);
+    const bad = unreliableAdjustedNodes(flow);
+    expect([...bad]).toEqual(["0:4"]);
+  });
+
+  it("leaves later columns alone — their net worth is legitimately high", () => {
+    // Late-phase buys really do happen at 30-40k. Nothing here should be flagged.
+    const flow = flowOf([
+      node(3, 1, 31263),
+      node(3, 2, 35072),
+      node(3, 3, 42225),
+    ]);
+    expect(unreliableAdjustedNodes(flow).size).toBe(0);
+  });
+
+  it("falls back to the raw rate for a flagged node, and leaves clean ones adjusted", () => {
+    const items = new Map<number, Item>([
+      [
+        1,
+        {
+          id: 1,
+          name: "Clean",
+          tier: 1,
+          cost: 800,
+          slot: "weapon",
+          componentIds: [],
+        },
+      ],
+      [
+        2,
+        {
+          id: 2,
+          name: "Golden Goose Egg",
+          tier: 1,
+          cost: 800,
+          slot: "spirit",
+          componentIds: [],
+        },
+      ],
+      [
+        3,
+        {
+          id: 3,
+          name: "Filler",
+          tier: 1,
+          cost: 800,
+          slot: "vitality",
+          componentIds: [],
+        },
+      ],
+    ]);
+    // Both nodes: 531 wins / 469 losses => raw 53.1%. The server "adjusts" GGE down to 45.7%.
+    const flow = flowOf([
+      node(0, 1, 4269, 0.52),
+      node(0, 2, 38179, 0.457),
+      node(0, 3, 5000, 0.51),
+    ]);
+    const build = generateBuild(
+      { id: 1, name: "Abrams", signatureClasses: [] } as Hero,
+      "Eternus",
+      items,
+      flow,
+      new Map(),
+      new Map(),
+    );
+    const lane = [...build.phases[0].core, ...build.phases[0].situational];
+    const gge = lane.find((b) => b.item.id === 2);
+    const clean = lane.find((b) => b.item.id === 1);
+
+    // The bogus 45.7% is discarded for the honest 53.1% raw rate...
+    expect(gge?.adjustedWinRate).toBeCloseTo(0.531, 3);
+    expect(gge?.unadjusted).toBe(true);
+    // ...while a clean lane node keeps the server's adjustment.
+    expect(clean?.adjustedWinRate).toBeCloseTo(0.52, 3);
+    expect(clean?.unadjusted).toBeUndefined();
   });
 });
 

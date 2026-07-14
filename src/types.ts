@@ -179,6 +179,11 @@ export interface BuildItem {
    * selection-inflated). Undefined ⇒ ranking falls back to `adjustedWinRate` (identical to before). */
   rankWinRate?: number;
   rawWinRate: number;
+  /** Set when the server's `adjusted_win_rate` was discarded because the net worth it standardizes on
+   * is corrupt upstream (see unreliableAdjustedNodes) — `adjustedWinRate` then carries the RAW rate,
+   * so the row shows an honest number rather than one adjusted against end-of-game wealth. Lane-phase
+   * cheap items only; undefined everywhere else. */
+  unadjusted?: boolean;
   /** Number of players (sample size) behind the numbers. */
   sample: number;
   /** Decided games (wins + losses) — the denominator of the win rate, used as the sample
