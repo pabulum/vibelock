@@ -158,11 +158,7 @@ export interface ItemRef {
  * guaranteed a slot because it's the plurality answer to a near-universal need (see
  * {@link NeedKind}), not because its own pick rate or win rate cleared a gate. */
 export type BuildRole =
-  | "universal"
-  | "value"
-  | "situational"
-  | "filler"
-  | "need";
+  "universal" | "value" | "situational" | "filler" | "need";
 
 export interface BuildItem {
   item: Item;
@@ -493,11 +489,8 @@ export interface HeroCounterRow {
 export interface Matchup {
   enemyHeroId: number;
   winRate: number;
-  /** Raw mode: win rate − the hero's overall win rate. De-noised mode: the sample-shrunk residual
-   * vs the Bradley-Terry expectation (negative = they counter you beyond mere hero strength). */
+  /** Win rate − the hero's overall win rate (negative = this enemy counters you). */
   delta: number;
-  /** De-noised mode only: the win rate hero strengths alone predict for this pairing. */
-  expectedWinRate?: number;
   sample: number;
   /** Avg last-hit lead vs this hero (negative = you get out-farmed in lane). */
   laneCsDelta: number;

@@ -232,9 +232,6 @@ export default function App() {
   // Pre-patch backfill toggle (lib/patchBlend). Default on — a young patch alone starves the
   // build's support/significance gates; off = the selected window raw, exactly the old behavior.
   const [backfillOn, setBackfillOn] = useState<boolean>(url0.backfill ?? true);
-  // Experimental: line-aware generation (survivorship shrink on upgrades). Default off — see
-  // BuildOptions.lineAware. A toggle so it can be A/B'd against the current build in the live app.
-  const [lineAware, setLineAware] = useState<boolean>(false);
   const [enemies, setEnemies] = useState<number[]>([]);
 
   const [archetypeSet, setArchetypeSet] = useState<ArchetypeSet | null>(null);
@@ -817,7 +814,7 @@ export default function App() {
         sellTimes,
         { all: base, gun, spirit },
         sig,
-        { synergyOf, jointGamesOf, lineAware },
+        { synergyOf, jointGamesOf },
       );
       setArchetypeSet(set);
       // Honor a deep-linked archetype on the first build only; otherwise default to best win rate.
@@ -842,7 +839,6 @@ export default function App() {
       patchIdx,
       patches,
       backfillOn,
-      lineAware,
       url0.build,
     ],
     setError,
@@ -960,16 +956,9 @@ export default function App() {
     setError,
   );
 
-  // Bradley-Terry de-noising for the matchup chips (see lib/matchups): off = raw deltas vs the
-  // hero's own baseline (today's behavior), on = strength-adjusted residuals, so "Tough" means
-  // "counters you" rather than "is currently meta".
-  const [denoiseMatchups, setDenoiseMatchups] = useState(false);
   const matchups = useMemo(
-    () =>
-      counterMatrix && hero
-        ? heroMatchups(counterMatrix, hero.id, denoiseMatchups)
-        : null,
-    [counterMatrix, hero, denoiseMatchups],
+    () => (counterMatrix && hero ? heroMatchups(counterMatrix, hero.id) : null),
+    [counterMatrix, hero],
   );
 
   // The hero's abilities in in-game slot order (signature1→4), as ability ids.
@@ -1315,17 +1304,6 @@ export default function App() {
             />
           </label>
           <label
-            className="checkctl"
-            title="Experimental: line-aware generation. Shrinks an upgrade's win rate toward its component's (weighted by how many buyers actually reach it), so a survivorship-inflated upgrade few players reach is kept out of core. Off = current build."
-          >
-            Line-aware
-            <input
-              type="checkbox"
-              checked={lineAware}
-              onChange={(e) => setLineAware(e.target.checked)}
-            />
-          </label>
-          <label
             className="idctl"
             title="Paste your Steam profile URL, steamID64, or the userdata/<id> number — or type a display name and press Enter to search. Unlocks the your-heroes quick-pick, pre-selects your rank, and signs exported builds. Stored only in this browser."
           >
@@ -1517,7 +1495,80 @@ export default function App() {
         </div>
       )}
 
-      <div className="topflow">
+      {build && (
+        // Identity (face + name) comes from the live selection, NOT build.hero, so it swaps the
+        // instant you pick a hero instead of lagging until the build query returns. The numbers
+        // below are still the old hero's until then, so the block wears the settle scrim.
+        <div className="meta" ref={metaRef}>
+          {(hero ?? build.hero).image && (
+            // The unmissable "you are looking at THIS hero" anchor — a friend read Abrams
+            // numbers mid-match while playing someone else; a name alone is too quiet.
+            <img className="metaface" src={(hero ?? build.hero).image} alt="" />
+          )}
+          <div className="metabody">
+            <div className="metatitle">
+              {(hero ?? build.hero).name}
+              {archetypeSet?.flex && activeArchetype && (
+                <span className="metaarch">{activeArchetype.label}</span>
+              )}
+            </div>
+            {build.rankLabel} · {patchLabel}
+            {backfillLabel} · {build.population.matches.toLocaleString()}{" "}
+            matches · avg game {Math.round(build.population.avgDurationS / 60)}{" "}
+            min · {(build.population.baselineWinRate * 100).toFixed(0)}% avg WR
+            (rows show ± vs this) ·{" "}
+            <span
+              className={
+                (displayBuild ?? build).standingSlots > SLOT_CAP
+                  ? "warn"
+                  : undefined
+              }
+            >
+              {(displayBuild ?? build).standingSlots}/{SLOT_CAP} standing slots
+            </span>
+            {lowPopulation && (
+              <span className="warn"> · ⚠ low sample, treat as noisy</span>
+            )}{" "}
+            ·{" "}
+            <button
+              type="button"
+              className="guidelink"
+              onClick={() => setShowExport(true)}
+              title="Add this build to your in-game build list so the shop guides you through it"
+            >
+              ⬇ Export to in-game build
+            </button>
+          </div>
+        </div>
+      )}
+
+      {archetypeSet?.flex && (
+        <div className="archetypes">
+          <span className="lbl">Build style</span>
+          {archetypeSet.archetypes.map((a) => (
+            <button
+              key={a.key}
+              className={`archtab ${a.key === archKey ? "active" : ""}`}
+              onClick={() => setArchKey(a.key)}
+              title={
+                a.signature
+                  ? `players who built ${a.signature.name}`
+                  : "every build, blended"
+              }
+            >
+              <span className="atlabel">{a.label}</span>
+              <span className="atmeta">
+                {(a.winRate * 100).toFixed(0)}% WR ·{" "}
+                {(a.share * 100).toFixed(0)}% of games
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {archetypeSet && <div className="identity">{archetypeSet.note}</div>}
+
+      <div className="dash">
         {abilities && skillBuild ? (
           <SkillOrder
             skill={skillBuild}
@@ -1528,85 +1579,6 @@ export default function App() {
         ) : (
           hero && !skillLoading && <SkillEmpty />
         )}
-
-        {build && (
-          // Identity (face + name) comes from the live selection, NOT build.hero, so it swaps the
-          // instant you pick a hero instead of lagging until the build query returns. The numbers
-          // below are still the old hero's until then, so the block wears the settle scrim.
-          <div className="meta" ref={metaRef}>
-            {(hero ?? build.hero).image && (
-              // The unmissable "you are looking at THIS hero" anchor — a friend read Abrams
-              // numbers mid-match while playing someone else; a name alone is too quiet.
-              <img
-                className="metaface"
-                src={(hero ?? build.hero).image}
-                alt=""
-              />
-            )}
-            <div className="metabody">
-              <div className="metatitle">
-                {(hero ?? build.hero).name}
-                {archetypeSet?.flex && activeArchetype && (
-                  <span className="metaarch">{activeArchetype.label}</span>
-                )}
-              </div>
-              {build.rankLabel} · {patchLabel}
-              {backfillLabel} · {build.population.matches.toLocaleString()}{" "}
-              matches · avg game{" "}
-              {Math.round(build.population.avgDurationS / 60)} min ·{" "}
-              {(build.population.baselineWinRate * 100).toFixed(0)}% avg WR
-              (rows show ± vs this) ·{" "}
-              <span
-                className={
-                  (displayBuild ?? build).standingSlots > SLOT_CAP
-                    ? "warn"
-                    : undefined
-                }
-              >
-                {(displayBuild ?? build).standingSlots}/{SLOT_CAP} standing
-                slots
-              </span>
-              {lowPopulation && (
-                <span className="warn"> · ⚠ low sample, treat as noisy</span>
-              )}{" "}
-              ·{" "}
-              <button
-                type="button"
-                className="guidelink"
-                onClick={() => setShowExport(true)}
-                title="Add this build to your in-game build list so the shop guides you through it"
-              >
-                ⬇ Export to in-game build
-              </button>
-            </div>
-          </div>
-        )}
-
-        {archetypeSet?.flex && (
-          <div className="archetypes">
-            <span className="lbl">Build style</span>
-            {archetypeSet.archetypes.map((a) => (
-              <button
-                key={a.key}
-                className={`archtab ${a.key === archKey ? "active" : ""}`}
-                onClick={() => setArchKey(a.key)}
-                title={
-                  a.signature
-                    ? `players who built ${a.signature.name}`
-                    : "every build, blended"
-                }
-              >
-                <span className="atlabel">{a.label}</span>
-                <span className="atmeta">
-                  {(a.winRate * 100).toFixed(0)}% WR ·{" "}
-                  {(a.share * 100).toFixed(0)}% of games
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {archetypeSet && <div className="identity">{archetypeSet.note}</div>}
 
         {fundamentals && hero && (
           <section
@@ -1771,79 +1743,59 @@ export default function App() {
         )}
       </div>
 
-      {matchups &&
-        (matchups.tough.length > 0 ||
-          matchups.favorable.length > 0 ||
-          denoiseMatchups) && (
-          <div className="matchups" ref={matrixRef}>
-            {matchups.tough.length > 0 && (
-              <div className="mrow">
-                <span className="lbl tough">Tough vs</span>
-                {matchups.tough.map((m) => (
-                  <MatchupChip
-                    key={m.enemyHeroId}
-                    m={m}
-                    tough
-                    hero={heroes.find((h) => h.id === m.enemyHeroId)}
-                    active={enemies.includes(m.enemyHeroId)}
-                    onClick={() => toggleEnemy(m.enemyHeroId)}
-                  />
-                ))}
-              </div>
-            )}
-            {matchups.favorable.length > 0 && (
-              <div className="mrow">
-                <span className="lbl fav">Favored vs</span>
-                {matchups.favorable.map((m) => (
-                  <MatchupChip
-                    key={m.enemyHeroId}
-                    m={m}
-                    hero={heroes.find((h) => h.id === m.enemyHeroId)}
-                    active={enemies.includes(m.enemyHeroId)}
-                    onClick={() => toggleEnemy(m.enemyHeroId)}
-                  />
-                ))}
-              </div>
-            )}
-            {denoiseMatchups &&
-              matchups.tough.length === 0 &&
-              matchups.favorable.length === 0 && (
-                <p className="hint">
-                  No matchup moves this hero's win rate beyond what hero
-                  strengths already explain — the raw list was meta, not
-                  counters.
-                </p>
+      <div className="counters">
+        {matchups &&
+          (matchups.tough.length > 0 || matchups.favorable.length > 0) && (
+            <div className="matchups" ref={matrixRef}>
+              {matchups.tough.length > 0 && (
+                <div className="mrow">
+                  <span className="lbl tough">Tough vs</span>
+                  {matchups.tough.map((m) => (
+                    <MatchupChip
+                      key={m.enemyHeroId}
+                      m={m}
+                      tough
+                      hero={heroes.find((h) => h.id === m.enemyHeroId)}
+                      active={enemies.includes(m.enemyHeroId)}
+                      onClick={() => toggleEnemy(m.enemyHeroId)}
+                    />
+                  ))}
+                </div>
               )}
-            <p className="hint">
-              Click a hero to add it below and see what to build against it.{" "}
-              <label
-                className="denoise"
-                title="Separate 'counters you' from 'is simply strong right now': fit one strength number per hero from the whole matrix (Bradley-Terry, the Elo family), predict every pairing from strengths alone, and flag only what's left over. A meta hero stops showing as everyone's counter; genuine rock-paper-scissors stays."
-              >
-                <input
-                  type="checkbox"
-                  checked={denoiseMatchups}
-                  onChange={(e) => setDenoiseMatchups(e.target.checked)}
-                />
-                De-noise (strength-adjusted)
-              </label>{" "}
-              <button
-                type="button"
-                className="guidelink"
-                onClick={() => setShowGuide(true)}
-              >
-                How matchup rates work →
-              </button>
-            </p>
-          </div>
-        )}
+              {matchups.favorable.length > 0 && (
+                <div className="mrow">
+                  <span className="lbl fav">Favored vs</span>
+                  {matchups.favorable.map((m) => (
+                    <MatchupChip
+                      key={m.enemyHeroId}
+                      m={m}
+                      hero={heroes.find((h) => h.id === m.enemyHeroId)}
+                      active={enemies.includes(m.enemyHeroId)}
+                      onClick={() => toggleEnemy(m.enemyHeroId)}
+                    />
+                  ))}
+                </div>
+              )}
+              <p className="hint">
+                Click a hero to add it below and see what to build against it.{" "}
+                <button
+                  type="button"
+                  className="guidelink"
+                  onClick={() => setShowGuide(true)}
+                >
+                  How matchup rates work →
+                </button>
+              </p>
+            </div>
+          )}
 
-      <CounterPicker
-        heroes={heroes}
-        enemies={enemies}
-        onAdd={(id) => setEnemies((e) => (e.includes(id) ? e : [...e, id]))}
-        onRemove={(id) => setEnemies((e) => e.filter((x) => x !== id))}
-      />
+        <CounterPicker
+          heroes={heroes}
+          enemies={enemies}
+          onAdd={(id) => setEnemies((e) => (e.includes(id) ? e : [...e, id]))}
+          onRemove={(id) => setEnemies((e) => e.filter((x) => x !== id))}
+        />
+      </div>
 
       {enemies.length > 0 && (
         <p className="counters-note">

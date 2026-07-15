@@ -399,7 +399,7 @@ export function MatchupChip({
     <button
       className={`mchip ${tough ? "tough" : "fav"} ${active ? "active" : ""}`}
       onClick={onClick}
-      title={`${hero?.name ?? "?"}: ${(m.winRate * 100).toFixed(0)}% win rate (${m.delta >= 0 ? "+" : ""}${(m.delta * 100).toFixed(1)}${m.expectedWinRate !== undefined ? ` vs the ${(m.expectedWinRate * 100).toFixed(0)}% hero strengths predict` : " vs avg"}), n=${m.sample.toLocaleString()}${m.laneCsDelta < -10 ? ` · they out-farm you by ~${Math.abs(Math.round(m.laneCsDelta))} CS in lane` : ""}`}
+      title={`${hero?.name ?? "?"}: ${(m.winRate * 100).toFixed(0)}% win rate (${m.delta >= 0 ? "+" : ""}${(m.delta * 100).toFixed(1)} vs avg), n=${m.sample.toLocaleString()}${m.laneCsDelta < -10 ? ` · they out-farm you by ~${Math.abs(Math.round(m.laneCsDelta))} CS in lane` : ""}`}
     >
       {hero?.image && <img src={hero.image} alt="" loading="lazy" />}
       <span className="mname">{hero?.name ?? m.enemyHeroId}</span>

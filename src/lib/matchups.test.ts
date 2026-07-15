@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import type { HeroCounterRow } from '../types';
-import { fitBradleyTerry, heroMatchups } from './matchups';
+import { describe, expect, it } from "vitest";
+import type { HeroCounterRow } from "../types";
+import { heroMatchups } from "./matchups";
 
 /** Build the full symmetric matrix for heroes with given true strengths π and optional per-pair
  * counter effects (added to hero 1's win rate vs that enemy). Big n so sampling noise ≈ 0. */
@@ -29,45 +29,25 @@ function makeMatrix(
   return rows;
 }
 
-describe('fitBradleyTerry', () => {
-  it('recovers relative strengths from a clean matrix', () => {
-    const pi = fitBradleyTerry(makeMatrix({ 1: 1, 2: 1.5, 3: 0.8, 4: 1.2 }));
-    // Ratios are what's identified; compare against hero 1.
-    expect(pi.get(2)! / pi.get(1)!).toBeCloseTo(1.5, 1);
-    expect(pi.get(3)! / pi.get(1)!).toBeCloseTo(0.8, 1);
-  });
-});
+describe("heroMatchups", () => {
+  // Hero 2 is stronger than hero 1 (below baseline ⇒ tough); hero 3 is weaker (above ⇒ favored).
+  const matrix = makeMatrix({ 1: 1, 2: 1.5, 3: 0.6, 4: 1, 5: 1 });
 
-describe('heroMatchups with denoise', () => {
-  // Hero 2 is simply strong (1.4×); hero 3 genuinely counters hero 1 by 4pts on equal strength.
-  const matrix = makeMatrix({ 1: 1, 2: 1.4, 3: 1, 4: 1, 5: 1, 6: 1 }, { 3: -0.04 });
-
-  it('raw mode flags the merely-strong hero as tough', () => {
-    const raw = heroMatchups(matrix, 1, false);
-    expect(raw.tough.map((m) => m.enemyHeroId)).toContain(2);
+  it("splits enemies into tough (below baseline) and favored (above)", () => {
+    const m = heroMatchups(matrix, 1);
+    expect(m.tough.map((x) => x.enemyHeroId)).toContain(2);
+    expect(m.favorable.map((x) => x.enemyHeroId)).toContain(3);
+    // Deltas are measured against hero 1's own overall win rate.
+    expect(m.tough.find((x) => x.enemyHeroId === 2)!.delta).toBeLessThan(0);
+    expect(m.favorable.find((x) => x.enemyHeroId === 3)!.delta).toBeGreaterThan(
+      0,
+    );
   });
 
-  it('de-noised mode keeps the true counter and drops the merely-strong hero', () => {
-    const dn = heroMatchups(matrix, 1, true);
-    const toughIds = dn.tough.map((m) => m.enemyHeroId);
-    expect(toughIds).toContain(3); // the genuine counter survives
-    expect(toughIds).not.toContain(2); // "they're just meta" is explained away
-    const vsStrong = [...dn.tough, ...dn.favorable].find((m) => m.enemyHeroId === 2);
-    expect(vsStrong).toBeUndefined();
-  });
-
-  it('shrinks a floor-sample cell to ~no effect instead of flagging it', () => {
-    // A dramatic 6pt "counter" backed by only 50 games: the strengths-are-right prior (K=300)
-    // shrinks it to ~0.9pt, under the surfacing floor. It earns the flag around n≈60+.
-    const thin = makeMatrix({ 1: 1, 2: 1, 3: 1 }, { 3: -0.06 }, 50);
-    const dn = heroMatchups(thin, 1, true);
-    expect(dn.tough.find((m) => m.enemyHeroId === 3)).toBeUndefined();
-  });
-
-  it('carries the strengths-only expectation for the tooltip', () => {
-    const dn = heroMatchups(matrix, 1, true);
-    const vs3 = dn.tough.find((m) => m.enemyHeroId === 3)!;
-    expect(vs3.expectedWinRate).toBeCloseTo(0.5, 1);
-    expect(vs3.winRate).toBeCloseTo(0.46, 2);
+  it("drops cells thinner than the sample floor", () => {
+    const thin = makeMatrix({ 1: 1, 2: 1.5, 3: 0.6 }, {}, 100);
+    const m = heroMatchups(thin, 1);
+    expect(m.tough).toHaveLength(0);
+    expect(m.favorable).toHaveLength(0);
   });
 });

@@ -395,17 +395,11 @@ body {
   letter-spacing: 0;
 }
 
-/* De-noise toggle inline in the matchups hint line. */
-.matchups .denoise {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  cursor: pointer;
-  color: var(--muted);
-}
-.matchups .denoise input {
-  accent-color: var(--accent);
-  cursor: pointer;
+/* The counters section — enemy matchups (Tough/Favored vs) sitting directly above the manual
+   enemy picker, grouped full-width just above the build they re-rank. Its children (.matchups,
+   .enemies) self-gutter to the 22px page edge, so this is a thin semantic wrapper only. */
+.counters {
+  margin-top: 6px;
 }
 
 /* "Patch movers" strip — items whose win rate verifiably moved across the patch boundary.
@@ -619,12 +613,96 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Top region: the skill-order card floats into the top-right corner and the build
-   summary, style tabs, and community check flow up around it — so the card reads as a
-   tucked sidebar and nothing is left stretched across the window or gapped beside it.
-   flow-root contains the float so the sections below start cleanly underneath. */
-.topflow {
-  display: flow-root;
+/* Pre-build dashboard: your fundamentals, skill order, and the community check as uniform
+   cards in a wrap row — three-up on a wide screen, wrapping to fewer per row as it narrows.
+   Fundamentals is ordered first (leftmost) since it's the tallest, so it anchors the row; the
+   community card sizes to its content so its build cards sit side by side rather than stacking
+   into a long strip. Each is a self-contained card; the page gutter and inter-card spacing
+   live here, so the cards carry no outer margin. */
+.dash {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 8px 22px 4px;
+}
+/* Shared card frame for the dashboard panels. */
+.dash > .skills,
+.dash > .fundamentals,
+.dash > .community {
+  margin: 0;
+  padding: 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+/* Landscape layout: the percentile bars sit beside the "To climb" tips (rather than stacked
+   above them), so the tallest panel is roughly as short as the skill/community cards next to
+   it instead of hanging a ragged ~100px lower. */
+.dash > .fundamentals {
+  order: -1;
+  flex: 0 1 660px;
+  max-width: none;
+  cursor: help;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 240px);
+  grid-template-areas:
+    "head head"
+    "rows climb";
+  gap: 4px 22px;
+  align-content: start;
+}
+.dash > .fundamentals > h2 {
+  grid-area: head;
+}
+.dash > .fundamentals > .fundrows {
+  grid-area: rows;
+}
+.dash > .fundamentals > .climbtips {
+  grid-area: climb;
+  margin-top: 0;
+  padding-top: 0;
+  padding-left: 20px;
+  border-top: none;
+  border-left: 1px solid var(--line);
+  align-self: start;
+}
+/* Keep the skill timeline compact so its level pips don't stretch sparse. */
+.dash > .skills {
+  flex: 0 1 auto;
+  width: min(100%, 600px);
+}
+/* Sized to its content (max-content = build cards on one line), so one card is a tidy box and
+   two sit side by side rather than stacking into a long strip — and it never blows out to a
+   full-width band when it wraps to its own row. */
+.dash > .community {
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: 100%;
+}
+@media (max-width: 760px) {
+  .dash {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}
+/* On a narrow card the fundamentals bars and tips can't sit side by side — stack them, and
+   restore the tips' top divider (it becomes a left divider only in the landscape layout). */
+@media (max-width: 560px) {
+  .dash > .fundamentals {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "head"
+      "rows"
+      "climb";
+  }
+  .dash > .fundamentals > .climbtips {
+    margin-top: 8px;
+    padding-top: 8px;
+    padding-left: 0;
+    border-top: 1px solid var(--line);
+    border-left: none;
+  }
 }
 
 /* The build header: hero portrait + name as a real title, the stat line tucked under it —
@@ -805,6 +883,11 @@ body {
   font-weight: 400;
   font-size: 11.5px;
   color: var(--muted);
+}
+/* Cap the hint's line length so it doesn't drive the (max-content) card width — the build
+   cards should decide how wide the community card is (one card narrow, two side by side). */
+.community .hint {
+  max-width: 46ch;
 }
 .crows {
   display: flex;
@@ -1246,24 +1329,17 @@ body {
   color: #f0b8b8;
 }
 
+/* The skill-order card — a full-width card in the right grid column (it was a right-floated
+   sidebar before the pre-build stats were gridded). */
 .skills {
-  float: right;
-  width: 400px;
-  margin: 4px 22px 10px 18px;
-  padding: 11px 14px;
+  margin: 4px 0 10px;
+  padding: 14px 16px 16px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 10px;
 }
-@media (max-width: 880px) {
-  .skills {
-    float: none;
-    width: auto;
-    margin: 10px 22px 2px;
-  }
-}
 .skills h2 {
-  margin: 0 0 9px;
+  margin: 0 0 11px;
   font-size: 14px;
 }
 .skills h2 .sub {
@@ -1271,17 +1347,19 @@ body {
   color: var(--muted);
   font-size: 11.5px;
 }
+/* One shared label column (subgrid) sized to the widest ability name, so labels align across
+   rows and names show in full instead of truncating in a fixed 104px box. */
 .skill-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 5px 8px;
   overflow-x: auto;
 }
 .skill-row {
   display: grid;
-  grid-template-columns: 104px 1fr;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
   align-items: center;
-  gap: 8px;
 }
 .srow-label {
   display: flex;
@@ -2112,7 +2190,6 @@ body {
   .identity,
   .matchups,
   .archetypes,
-  .community,
   .enemies,
   .phases,
   .foot {
