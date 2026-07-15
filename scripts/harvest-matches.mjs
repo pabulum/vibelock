@@ -31,6 +31,7 @@ import { pipeline } from "node:stream/promises";
 import { createGzip, createGunzip } from "node:zlib";
 
 const API = "https://api.deadlock-api.com/v1/matches/metadata";
+const MATCH_API = "https://api.deadlock-api.com/v1/matches";
 
 // The day being harvested (UTC). Default is yesterday: matches finish ingesting within hours,
 // so by the nightly run the previous day is complete; today would be a biased partial sample.
@@ -39,6 +40,12 @@ const API = "https://api.deadlock-api.com/v1/matches/metadata";
 const day = process.env.HARVEST_DAY || isoDay(Date.now() - 24 * 3600 * 1000);
 const BINS = Number(process.env.BINS || 12);
 const PER_BIN = Number(process.env.PER_BIN || 100);
+// How many matches per bin to additionally fetch per-source gold for (the soul-economy norms). The
+// bulk endpoint can't return `gold_sources` (breakables/boxes live only there), so these come from a
+// subsample of single-match calls — cached (disable_steam), ~300ms each. A subsample, not all
+// PER_BIN: a median gold-per-source per (hero, rank) needs a few hundred games per cell, which
+// ~120/bin × 12 bins × 30-day window supplies many times over. 0 disables the pass.
+const GOLD_PER_BIN = Number(process.env.GOLD_PER_BIN || 120);
 const OUT_DIR = process.env.OUT_DIR || "data/shards";
 const RETENTION_DAYS = Number(process.env.RETENTION_DAYS || 30);
 
@@ -68,6 +75,57 @@ async function fetchBin(fromUnix, toUnix) {
   return res.json();
 }
 
+// --- Per-source gold (soul economy): a subsample of single-match fetches ---
+//
+// EGoldSource ids we keep (verified against the flat gold_* fields): 1 kills, 2 lane creeps,
+// 3 neutral camps, 4 bosses, 5 treasure/urn, 6 assists, 7 denies, 12 breakables. `gold_orbs` is
+// folded into `gold` so the total matches what the client's economy view reads.
+const SRC_KEEP = [1, 2, 3, 4, 5, 6, 7, 12];
+
+/** Final per-source gold for one single-match player, or null when the sample has no ledger. */
+function goldFromPlayer(p) {
+  const last = p.stats?.[p.stats.length - 1];
+  if (!last?.gold_sources) return null;
+  const g = {};
+  for (const gs of last.gold_sources) {
+    if (SRC_KEEP.includes(gs.source))
+      g[gs.source] = (gs.gold ?? 0) + (gs.gold_orbs ?? 0);
+  }
+  return g;
+}
+
+/**
+ * Fetch `gold_sources` for a list of match ids via the cached single-match endpoint (a different,
+ * looser rate family than the bulk metadata call). Returns match_id → (player_slot → {src:gold}).
+ * Fails soft per match — a miss just means that match contributes no economy sample.
+ */
+async function fetchGoldSources(ids, concurrency = 8) {
+  const out = new Map();
+  let idx = 0;
+  async function worker() {
+    while (idx < ids.length) {
+      const id = ids[idx++];
+      try {
+        const r = await fetch(`${MATCH_API}/${id}/metadata?disable_steam=true`);
+        if (!r.ok) continue;
+        const mi = (await r.json()).match_info;
+        const bySlot = {};
+        for (const p of mi?.players ?? []) {
+          const g = goldFromPlayer(p);
+          if (g) bySlot[p.player_slot] = g;
+        }
+        out.set(id, bySlot);
+      } catch {
+        /* skip this match's economy sample */
+      }
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, ids.length) }, worker),
+  );
+  return out;
+}
+
 // --- Trim: keep only what a model would read; gzip handles the repeated keys ---
 
 function trimItem(it) {
@@ -82,7 +140,7 @@ function trimItem(it) {
   };
 }
 
-function trimPlayer(p) {
+function trimPlayer(p, gsrc) {
   return {
     account_id: p.account_id,
     hero_id: p.hero_id,
@@ -102,10 +160,13 @@ function trimPlayer(p) {
     items: (p.items ?? []).map(trimItem),
     nw_series: p.stats_net_worth,
     nw_times_s: p.stats_time_stamp_s,
+    // Per-source gold, present only on the economy subsample (see fetchGoldSources). Absent ⇒ this
+    // player's match wasn't sampled for economy; the bake simply skips it.
+    ...(gsrc ? { gold_src: gsrc } : {}),
   };
 }
 
-function trimMatch(m) {
+function trimMatch(m, goldBySlot) {
   return {
     match_id: m.match_id,
     start_time: m.start_time,
@@ -115,7 +176,9 @@ function trimMatch(m) {
     match_mode: m.match_mode,
     average_badge_team0: m.average_badge_team0,
     average_badge_team1: m.average_badge_team1,
-    players: (m.players ?? []).map(trimPlayer),
+    players: (m.players ?? []).map((p) =>
+      trimPlayer(p, goldBySlot?.[p.player_slot]),
+    ),
   };
 }
 
@@ -186,15 +249,20 @@ if (existsSync(shardPath) && !process.env.FORCE) {
       const from = dayStart + i * binSeconds;
       const to = i === BINS - 1 ? dayStart + 24 * 3600 : from + binSeconds;
       const matches = await fetchBin(from, to);
+      const fresh = matches.filter((m) => !seen.has(m.match_id));
+      // Economy subsample: fetch per-source gold for the first GOLD_PER_BIN fresh matches (order is
+      // arbitrary within a time bin, so first-N is an unbiased sample). One extra request each, on
+      // the looser single-match rate family — spaced out by the 7s inter-bin sleep below.
+      const goldIds = fresh.slice(0, GOLD_PER_BIN).map((m) => m.match_id);
+      const gold = goldIds.length ? await fetchGoldSources(goldIds) : new Map();
       let chunk = "";
-      for (const m of matches) {
-        if (seen.has(m.match_id)) continue;
+      for (const m of fresh) {
         seen.add(m.match_id);
-        chunk += JSON.stringify(trimMatch(m)) + "\n";
+        chunk += JSON.stringify(trimMatch(m, gold.get(m.match_id))) + "\n";
       }
       if (chunk && !gzip.write(chunk)) await once(gzip, "drain");
       console.log(
-        `bin ${i + 1}/${BINS}: ${matches.length} matches (running total ${seen.size})`,
+        `bin ${i + 1}/${BINS}: ${matches.length} matches, ${gold.size} with economy (running total ${seen.size})`,
       );
       if (i < BINS - 1) await new Promise((r) => setTimeout(r, 7000));
     }

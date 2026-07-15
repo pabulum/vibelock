@@ -60,6 +60,13 @@ export interface WpStats {
   };
   items: LabItem[];
   heroes: LabHero[];
+  /** Percentile grid the {@link farmNorms} arrays correspond to, e.g. [10,25,50,75,90]. */
+  farmPcts?: number[];
+  /** Soul-economy norms for match analysis: per `"heroId:tier"`, each source id maps to that
+   * source's gold-per-minute at {@link farmPcts}. Populated from the harvester's economy subsample;
+   * a missing cell or source just means no population benchmark there yet (day-one, rare hero/rank).
+   * Source ids: 1 kills, 2 lane, 3 camps, 4 boss, 5 urn, 6 assists, 7 denies, 12 breakables. */
+  farmNorms?: Record<string, { n: number; src: Record<string, number[]> }>;
 }
 
 const URL =

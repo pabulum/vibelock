@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { MetricDistribution } from "../types";
-import { fundamentalsRows, percentileOf } from "./fundamentals";
+import type { MatchHistoryRow, MetricDistribution } from "../types";
+import {
+  climbAdvice,
+  fundamentalsRows,
+  percentileOf,
+  recentWindow,
+  WEAK_PERCENTILE,
+  type FundamentalRow,
+} from "./fundamentals";
 
 const dist = (scale = 1): MetricDistribution => ({
   avg: 50 * scale,
@@ -65,5 +72,134 @@ describe("fundamentalsRows", () => {
     ) as unknown as MetricDistribution;
     expect(fundamentalsRows({ deaths: nulls }, { deaths: dist() })).toEqual([]);
     expect(fundamentalsRows({ deaths: dist() }, { deaths: nulls })).toEqual([]);
+  });
+});
+
+describe("recentWindow", () => {
+  const DAY = 86400;
+  const now = Math.floor(Date.now() / 1000);
+  const game = (heroId: number, daysAgo: number): MatchHistoryRow => ({
+    match_id: daysAgo,
+    hero_id: heroId,
+    start_time: now - daysAgo * DAY,
+    match_duration_s: 2000,
+    match_result: 0,
+    player_team: 0,
+    player_kills: 0,
+    player_deaths: 0,
+    player_assists: 0,
+    net_worth: 0,
+  });
+
+  it("windows to the Nth most recent game on the hero", () => {
+    const history = [
+      game(1, 1),
+      game(1, 5),
+      game(2, 6), // other hero — excluded
+      game(1, 10),
+      game(1, 40), // outside the last 3
+    ];
+    const w = recentWindow(history, 1, 3)!;
+    expect(w.games).toBe(3);
+    // Window opens just before the 3rd-newest hero-1 game (10 days ago), so the 40-day-old one is out.
+    expect(w.minUnixTimestamp).toBe(now - 10 * DAY - 1);
+    expect(w.spanDays).toBe(10);
+  });
+
+  it("never reaches past the games it counted — a long break can't leak in", () => {
+    // A returning player: 4 recent games, and an old self from ~2 years ago.
+    const history = [
+      game(1, 1),
+      game(1, 2),
+      game(1, 3),
+      game(1, 4),
+      game(1, 650),
+    ];
+    const w = recentWindow(history, 1, 4)!;
+    expect(w.games).toBe(4);
+    expect(w.spanDays).toBe(4);
+    expect(w.minUnixTimestamp).toBeGreaterThan(now - 5 * DAY);
+  });
+
+  it("takes everything when the player has fewer games than asked for", () => {
+    const w = recentWindow([game(1, 1), game(1, 9), game(1, 20)], 1, 50)!;
+    expect(w.games).toBe(3);
+    expect(w.spanDays).toBe(20);
+  });
+
+  it("pools all heroes when heroId is null", () => {
+    const w = recentWindow([game(1, 1), game(2, 2), game(3, 3)], null, 20)!;
+    expect(w.games).toBe(3);
+  });
+
+  it("honors an explicit last-game request rather than widening it", () => {
+    const w = recentWindow([game(1, 1), game(1, 8)], 1, 1)!;
+    expect(w.games).toBe(1);
+    expect(w.spanDays).toBe(1); // just the newest game
+  });
+
+  it("returns null only when the hero has no games at all", () => {
+    expect(recentWindow([game(2, 1)], 1, 20)).toBeNull(); // other hero only
+    expect(recentWindow([], 1, 20)).toBeNull();
+    expect(recentWindow([game(1, 1)], 1, 20)).not.toBeNull(); // one game is enough
+  });
+});
+
+describe("climbAdvice", () => {
+  const row = (key: string, percentile: number): FundamentalRow => ({
+    key,
+    label: key,
+    value: "0",
+    percentile,
+    ladderMedian: "0",
+  });
+
+  it("surfaces the weakest controllable levers, furthest-below first", () => {
+    const tips = climbAdvice(
+      [
+        row("last_hits", 15), // weak, and weakest
+        row("neutral_damage_per_min", 30), // weak
+        row("deaths", 80), // strong — ignored
+        row("accuracy", 10), // not a lever — ignored even though low
+      ],
+      "Abrams",
+    );
+    expect(tips.map((t) => t.key)).toEqual([
+      "last_hits",
+      "neutral_damage_per_min",
+    ]);
+    expect(tips[0].action).toBe("Soak more lane");
+    expect(tips[0].detail).toContain("Abrams"); // {hero} substituted
+  });
+
+  it("caps at two tips by default", () => {
+    const tips = climbAdvice(
+      [
+        row("deaths", 5),
+        row("last_hits", 10),
+        row("neutral_damage_per_min", 12),
+        row("denies", 14),
+      ],
+      "Haze",
+    );
+    expect(tips).toHaveLength(2);
+  });
+
+  it("breaks percentile ties by lever priority (survival/farm over fights)", () => {
+    const tips = climbAdvice(
+      [row("player_damage_per_min", 20), row("deaths", 20)],
+      "Seven",
+    );
+    expect(tips[0].key).toBe("deaths"); // priority 3 > 1 at equal percentile
+  });
+
+  it("returns nothing when controllables sit at or above the ladder", () => {
+    expect(
+      climbAdvice([row("last_hits", WEAK_PERCENTILE), row("deaths", 60)], "Mo"),
+    ).toEqual([]);
+  });
+
+  it("never recommends a non-lever outcome (kills), even if low", () => {
+    expect(climbAdvice([row("kills", 5)], "Vindicta")).toEqual([]);
   });
 });

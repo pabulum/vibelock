@@ -74,6 +74,11 @@ jobs:
           # stabilization point (median cell ~6k vs k~3.2k), i.e. per-hero WPA becomes possible
           # without accumulating beyond 30 days. Costs ~65MB/day — fine as release assets.
           PER_BIN: "1000"
+          # Soul-economy subsample: per-source gold (incl. breakables, which the bulk endpoint can't
+          # return) for this many matches/bin, via single-match cached fetches (~120 × 12 bins ≈
+          # 1,440 extra requests/night, ~1 min at the concurrency cap). Feeds the match-analysis farm
+          # norms; enough per (hero, rank) cell to stabilize within a few nights, not the full window.
+          GOLD_PER_BIN: "120"
         run: node scripts/harvest-matches.mjs
 
       # Refit the WP surface + item/hero stats over the full rolling window.

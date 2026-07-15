@@ -530,6 +530,43 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Climb tips: the 1–2 weakest controllable levers, turned into concrete "do this next game"
+   advice under the fundamentals bars (lib/fundamentals.climbAdvice). */
+.climbtips {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.climbhdr {
+  display: block;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+.climbtip {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+.climbaction {
+  flex: none;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.climbdetail {
+  color: var(--muted);
+}
+.climbnote {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+
 /* "Your heroes" quick-pick strip — the player's most-played heroes as portrait chips,
    shown once a Steam id resolves to a profile. Mirrors the enemies row's layout. */
 .myheroes {
@@ -2262,4 +2299,327 @@ body {
 .labstyle.down {
   color: #d89a5a;
   border: 1px solid color-mix(in srgb, #d89a5a 45%, transparent);
+}
+
+/* --- Match analysis modal (components/MatchModal) --- */
+/* Reuses the guide/lab modal shell and the fundamentals-row grid; adds the match lookup,
+   the WP line chart, and the soul-economy rows. */
+
+.matchinput {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  margin-bottom: 14px;
+}
+.matchback {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12.5px;
+  padding: 2px 0;
+  margin-bottom: 2px;
+}
+.matchback:hover {
+  color: var(--accent);
+}
+.matchinput input {
+  flex: 1;
+  max-width: 320px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 7px 10px;
+  font-size: 13px;
+}
+.matchinput button {
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 7px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.matchinput button:hover {
+  border-color: var(--accent);
+}
+
+.matchrecent h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 12px 0 6px;
+}
+.matchrow {
+  display: grid;
+  grid-template-columns: 44px 1fr 76px 78px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.matchrow:hover {
+  border-color: var(--accent);
+}
+.matchrow .mhero {
+  font-weight: 600;
+}
+.mwin,
+.mloss {
+  font-weight: 700;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+}
+.mwin {
+  color: #7ecf9e;
+}
+.mloss {
+  color: #e08989;
+}
+.mkda,
+.mwhen {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.matchnote {
+  color: var(--muted);
+  font-size: 11.5px;
+  margin: 6px 0 0;
+}
+.matchhead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  margin: 6px 0 4px;
+}
+.matchhead .mmuted,
+.mmuted {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+}
+.matchdeaths {
+  font-size: 12.5px;
+  margin: 2px 0 0;
+}
+.linkbtn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: inherit;
+  padding: 0;
+  text-decoration: underline;
+}
+
+/* WP line chart: one series (no legend), dashed 50% midline, death ticks on the baseline. */
+.wpchart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  touch-action: none;
+}
+.wpmid {
+  stroke: var(--line);
+  stroke-dasharray: 4 4;
+  stroke-width: 1;
+}
+.wpline {
+  stroke: var(--accent);
+  stroke-width: 2;
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.wparea {
+  fill: var(--accent);
+  opacity: 0.1;
+  stroke: none;
+}
+.wpdeath {
+  stroke: #e08989;
+  stroke-width: 2;
+}
+.wpdot {
+  fill: var(--accent);
+  stroke: var(--bg);
+  stroke-width: 2;
+}
+.wpread {
+  color: var(--muted);
+  font-size: 11.5px;
+  margin-top: 4px;
+  min-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Soul-economy rows: fundamentals grid plus a kind chip; bar lengths are share-of-largest. */
+.econrow {
+  display: grid;
+  grid-template-columns: 118px 74px 1fr 48px 56px 30px;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 12.5px;
+}
+.econrow .epct {
+  text-align: right;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.econrow .epct.hi {
+  color: #7ecf9e;
+}
+.econrow .epct.lo {
+  color: #e08989;
+}
+.econrow .fbar {
+  height: 6px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.econrow .fbar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--muted);
+}
+.econkind {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.econkind.k-lever {
+  color: #7ecf9e;
+}
+.econrow .fbar > span.k-lever {
+  background: #7ecf9e;
+}
+.econrow .fbar > span.k-lane {
+  background: var(--accent);
+}
+.econrow .fbar > span.k-outcome {
+  background: #d8a05a;
+}
+.econrow .fbar > span.k-passive {
+  background: var(--muted);
+}
+.econrow .fval,
+.econrow .fpct {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.econrow .fpct {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+@media (max-width: 560px) {
+  .matchrow {
+    grid-template-columns: 40px 1fr 64px;
+  }
+  .matchrow .mwhen {
+    display: none;
+  }
+  .econrow {
+    grid-template-columns: 96px 1fr 44px 50px 28px;
+  }
+  .econrow .econkind {
+    display: none;
+  }
+}
+
+/* Games-window selector in the fundamentals header — scoping by games, not days, is what keeps a
+   long break out of the average (lib/fundamentals.recentWindow). */
+.fundwin {
+  margin-left: 8px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 1px 4px;
+  cursor: pointer;
+}
+
+/* Death read + the "build against your nemesis" list (MatchModal). */
+.deathread {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+  line-height: 1.45;
+}
+.nemesis {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.nemrow {
+  display: grid;
+  grid-template-columns: 1fr 60px 90px;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+  padding: 2px 0;
+}
+.nemitem {
+  font-weight: 600;
+}
+.nemedge {
+  text-align: right;
+  color: #7ecf9e;
+  font-variant-numeric: tabular-nums;
+}
+.nemn {
+  text-align: right;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* "climbing" tag next to the benchmark rank in the fundamentals header. */
+.climbmark {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--purple);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
+  vertical-align: middle;
+}
+
+/* "Analyze your last game" bridge from the fundamentals card into the match modal. */
+.lastgamelink {
+  display: inline-block;
+  margin-top: 8px;
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12.5px;
+  padding: 0;
+}
+.lastgamelink:hover {
+  text-decoration: underline;
 }

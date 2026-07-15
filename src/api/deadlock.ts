@@ -16,6 +16,8 @@ import type {
   ItemFlowStats,
   ItemPermutationStats,
   ItemStat,
+  MatchHistoryRow,
+  MatchInfo,
   NeedKind,
   Patch,
   PlayerHeroStat,
@@ -877,4 +879,90 @@ interface RawBuildEnvelope {
       };
     };
   };
+}
+
+// --- Single-match metadata (match analysis) ---
+//
+// A DIFFERENT rate family from everything above. The analytics endpoints allow 200 req/60s and
+// send ratelimit headers; the match endpoints are far tighter and header-less — when a match isn't
+// in the API's database, fetching it spends a Steam call from a budget of roughly THREE PER HOUR
+// per IP, and a 429 gives no reset hint. So this client:
+//   - never retries (a retry loop would silently drain an hour of budget),
+//   - asks cached-first (`disable_steam=true` — free at any rate, fails fast if not ingested),
+//   - gates the explicit Steam fallback behind a self-paced cooldown.
+// Most matches ARE ingested: the API crawls continuously and uploader users submit their own
+// matches' salts, so a played match typically appears within the hour without any Steam spend.
+
+/** Thrown when the match isn't in the API's database and the Steam fallback wasn't allowed —
+ * the caller can offer an explicit "fetch via Steam" retry. */
+export class MatchNotIngestedError extends Error {
+  constructor(matchId: number) {
+    super(`match ${matchId} not ingested yet`);
+    this.name = "MatchNotIngestedError";
+  }
+}
+
+/** Minimum spacing between Steam-fallback attempts (~3/hour budget ⇒ one per 20 min). */
+const STEAM_FETCH_COOLDOWN_MS = 20 * 60 * 1000;
+let steamFetchLastAttempt = 0;
+
+/** Epoch ms when the next Steam-fallback attempt is allowed; ≤ now means available. */
+export function steamFetchAvailableAt(): number {
+  return steamFetchLastAttempt + STEAM_FETCH_COOLDOWN_MS;
+}
+
+const matchCache = new Map<number, Promise<MatchInfo>>();
+
+/**
+ * One match's full metadata. Cached-first: with `allowSteam` unset this can't spend any scarce
+ * budget — it 404s fast when the match isn't ingested (thrown as {@link MatchNotIngestedError}).
+ * With `allowSteam` the server may fetch from Steam; the attempt is stamped against the cooldown
+ * whether or not it succeeds, because the budget is spent server-side either way.
+ */
+export function getMatchMetadata(
+  matchId: number,
+  opts?: { allowSteam?: boolean },
+): Promise<MatchInfo> {
+  const hit = matchCache.get(matchId);
+  if (hit) return hit;
+  const allowSteam = opts?.allowSteam ?? false;
+  if (allowSteam) steamFetchLastAttempt = Date.now();
+  const url = `${BASE}/v1/matches/${matchId}/metadata${allowSteam ? "" : "?disable_steam=true"}`;
+  const p = (async () => {
+    const res = await fetch(url); // deliberately NOT getJson: no retries in this rate family
+    if (res.status === 404 && !allowSteam)
+      throw new MatchNotIngestedError(matchId);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${url}`);
+    const body = (await res.json()) as { match_info: MatchInfo };
+    return body.match_info;
+  })();
+  matchCache.set(matchId, p);
+  p.catch(() => matchCache.delete(matchId)); // a failure shouldn't poison later attempts
+  return p;
+}
+
+/**
+ * The player's recent matches, newest first. Steam-sourced, so it can lag the ingested DB by
+ * hours; `forceRefetch` asks the server to re-pull from Steam (propagates asynchronously — the
+ * next call sees the update, not this one, and bypasses the cache).
+ *
+ * Session-cached per account: both the match modal and the build page's fundamentals card read it
+ * (the latter to turn "my last N games on this hero" into a timestamp window), so it shouldn't cost
+ * a round trip per consumer.
+ */
+const historyCache = new Map<number, Promise<MatchHistoryRow[]>>();
+
+export function getPlayerMatchHistory(
+  accountId: number,
+  opts?: { forceRefetch?: boolean },
+): Promise<MatchHistoryRow[]> {
+  const force = opts?.forceRefetch ?? false;
+  const hit = !force && historyCache.get(accountId);
+  if (hit) return hit;
+  const p = getJson<MatchHistoryRow[]>(
+    `${BASE}/v1/players/${accountId}/match-history${force ? "?force_refetch=true" : ""}`,
+  ).then((rows) => [...rows].sort((a, b) => b.start_time - a.start_time));
+  historyCache.set(accountId, p);
+  p.catch(() => historyCache.delete(accountId));
+  return p;
 }

@@ -76,6 +76,15 @@ const pIid = [],
   pLead = [],
   pWon = []; // purchase events
 let nMatches = 0;
+
+// Soul-economy norms: per-source gold-per-minute distributions, per (hero, rank tier). Populated
+// from the harvester's economy subsample (players carrying `gold_src`); absent players are skipped.
+// Keyed `hero*100 + tier`; each cell maps a source id to an array of per-minute values we percentile
+// at the end. See scripts/harvest-matches.mjs SRC_KEEP for the source ids.
+const SRC_KEEP = [1, 2, 3, 4, 5, 6, 7, 12];
+const FARM_MIN_N = Number(process.env.FARM_MIN_N || 100); // below this a per-cell percentile is too thin to show
+const farmCells = new Map();
+
 const shardFiles = readdirSync(SHARDS_DIR)
   .filter((f) => f.endsWith(".ndjson.gz"))
   .sort();
@@ -111,6 +120,7 @@ for (const f of shardFiles) {
       obsLead.push(lead[(t / 30) | 0]);
       obsY.push(y0);
     }
+    const mins = Math.max(1, dur / 60);
     for (const p of m.players) {
       const sign = p.team === "Team0" ? 1 : -1;
       const won = p.team === m.winning_team ? 1 : 0;
@@ -122,6 +132,20 @@ for (const f of shardFiles) {
         pT.push(t);
         pLead.push(sign * lead[Math.min((t / 30) | 0, lead.length - 1)]);
         pWon.push(won);
+      }
+      // Economy sample (subsampled matches only): file each source's gold/min under (hero, tier).
+      if (p.gold_src) {
+        const badge =
+          (p.team === "Team0"
+            ? m.average_badge_team0
+            : m.average_badge_team1) ?? 0;
+        const tier = Math.floor(badge / 10);
+        const key = p.hero_id * 100 + tier;
+        let cell = farmCells.get(key);
+        if (!cell) farmCells.set(key, (cell = {}));
+        for (const src of SRC_KEEP) {
+          (cell[src] ??= []).push((p.gold_src[src] ?? 0) / mins);
+        }
       }
     }
   }
@@ -253,7 +277,40 @@ const heroes = [...heroAgg.entries()]
   const b =
     heroes.reduce((s, h) => s + (h.wr - mx) * (h.closing - my), 0) /
     heroes.reduce((s, h) => s + (h.wr - mx) ** 2, 0);
-  for (const h of heroes) h.resid = +(h.closing - (my + b * (h.wr - mx))).toFixed(4);
+  for (const h of heroes)
+    h.resid = +(h.closing - (my + b * (h.wr - mx))).toFixed(4);
+}
+
+// Soul-economy norms: per (hero, tier), each source's gold/min at a small percentile grid, so the
+// client can place a single game's per-source farm on the population (like the fundamentals card).
+// Only cells with a real sample are emitted; the client falls back to no-benchmark when a cell or
+// source is missing (day-one, rare hero/rank).
+const FARM_PCTS = [10, 25, 50, 75, 90];
+const farmNorms = {};
+let farmCellsEmitted = 0;
+let farmSamplesTotal = 0;
+for (const [key, cell] of farmCells) {
+  const hero = Math.floor(key / 100);
+  const tier = key % 100;
+  const bySrc = {};
+  for (const src of SRC_KEEP) {
+    const vals = cell[src];
+    if (!vals || vals.length < FARM_MIN_N) continue;
+    vals.sort((a, b) => a - b);
+    bySrc[src] = FARM_PCTS.map((q) =>
+      Math.round(
+        vals[Math.min(vals.length - 1, Math.floor((q / 100) * vals.length))],
+      ),
+    );
+    farmSamplesTotal += vals.length;
+  }
+  if (Object.keys(bySrc).length) {
+    farmNorms[`${hero}:${tier}`] = {
+      n: (cell[SRC_KEEP[0]] ?? []).length,
+      src: bySrc,
+    };
+    farmCellsEmitted++;
+  }
 }
 
 const out = {
@@ -274,6 +331,9 @@ const out = {
   readiness,
   items,
   heroes,
+  // Percentile grid the farmNorms arrays correspond to (so the client interpolates correctly).
+  farmPcts: FARM_PCTS,
+  farmNorms,
 };
 writeFileSync(OUT, JSON.stringify(out) + "\n");
 console.log(
@@ -281,4 +341,7 @@ console.log(
 );
 console.log(
   `readiness: ${readiness.cellsPastK}/${readiness.cellsTracked} hero-item cells past k=${READY_K} (median n=${readiness.medianCellN})`,
+);
+console.log(
+  `farm norms: ${farmCellsEmitted} (hero,tier) cells emitted from ${farmSamplesTotal} economy samples`,
 );

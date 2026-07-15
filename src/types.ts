@@ -534,3 +534,103 @@ export interface ItemCounters {
   /** Best single-enemy delta — used for ranking and the headline number. */
   topDelta: number;
 }
+
+// --- Single-match metadata (match analysis) ---
+// The slice of /v1/matches/{id}/metadata the analyzer reads. The full payload is ~1MB with dozens
+// more fields per player; only what's typed here is consumed, and TypeScript ignores the rest.
+
+/** One entry of a player's per-source soul ledger. Sources are the EGoldSource enum, verified
+ * numerically against the flat `gold_*` fields: 1 kills, 2 lane creeps, 3 neutral camps, 4 bosses,
+ * 5 treasure (urn), 6 assists, 7 denies, 8 team bonus, 10/11 item-generated, 12 breakables. */
+export interface MatchGoldSource {
+  source: number;
+  gold?: number;
+  gold_orbs?: number;
+  kills?: number;
+}
+
+/** A sampled snapshot of one player's stats at `time_stamp_s` (~every 3–4 min plus game end). */
+export interface MatchStatSample {
+  time_stamp_s: number;
+  net_worth: number;
+  kills: number;
+  deaths: number;
+  assists: number;
+  last_hits?: number;
+  denies: number;
+  creep_kills?: number;
+  neutral_kills?: number;
+  shots_hit?: number;
+  shots_missed?: number;
+  player_damage?: number;
+  player_healing?: number;
+  player_damage_taken?: number;
+  gold_death_loss?: number;
+  gold_sources?: MatchGoldSource[];
+}
+
+export interface MatchItemEvent {
+  game_time_s: number;
+  item_id: number;
+  sold_time_s?: number;
+  /** Non-zero when this purchase event upgraded into that item id. */
+  upgrade_id?: number;
+  imbued_ability_id?: number;
+}
+
+export interface MatchDeath {
+  game_time_s: number;
+  /** Slot of the killer, resolvable to a player via `player_slot`. */
+  killer_player_slot?: number;
+  /** How long the engagement that killed you lasted. `-1` is the API's "unknown" sentinel — always
+   * guard for it. Measured distribution across a real match: p25 ≈ 7s, median ≈ 13s, p75 ≈ 19s, so a
+   * sub-5s death is genuinely a burst, not just the low end of normal. */
+  time_to_kill_s?: number;
+}
+
+export interface MatchPlayer {
+  account_id: number;
+  player_slot: number;
+  /** "Team0" | "Team1" (proto enum names, not numbers). */
+  team: string;
+  hero_id: number;
+  kills: number;
+  deaths: number;
+  assists: number;
+  net_worth: number;
+  last_hits?: number;
+  denies?: number;
+  assigned_lane?: number;
+  abandon_match_time_s?: number;
+  items?: MatchItemEvent[];
+  stats?: MatchStatSample[];
+  death_details?: MatchDeath[];
+}
+
+export interface MatchInfo {
+  match_id: number;
+  start_time: number;
+  duration_s: number;
+  /** "Team0" | "Team1". */
+  winning_team: string;
+  average_badge_team0?: number;
+  average_badge_team1?: number;
+  players: MatchPlayer[];
+}
+
+/** One row of /v1/players/{id}/match-history (Steam-sourced; can lag the ingested DB). */
+export interface MatchHistoryRow {
+  match_id: number;
+  hero_id: number;
+  start_time: number;
+  match_duration_s: number;
+  /** The WINNING TEAM's number (0/1), not a won/lost flag — verified against match metadata on
+   * matches with known outcomes. The player won iff `match_result === player_team`. */
+  match_result: number;
+  /** Which team (0/1) this player was on. */
+  player_team: number;
+  player_kills: number;
+  player_deaths: number;
+  player_assists: number;
+  net_worth: number;
+}

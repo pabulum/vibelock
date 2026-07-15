@@ -14,6 +14,7 @@ import {
   getItemStats,
   getPatches,
   getPlayerHeroStats,
+  getPlayerMatchHistory,
   getPlayerMetrics,
   getPlayerRankTier,
   searchSteamPlayers,
@@ -39,17 +40,29 @@ import {
   type AdoptionMover,
   type PatchMover,
 } from "./lib/patchMovers";
-import { fundamentalsRows, type FundamentalRow } from "./lib/fundamentals";
+import {
+  climbAdvice,
+  fundamentalsRows,
+  recentWindow,
+  RECENT_GAMES_DEFAULT,
+  type FundamentalRow,
+  type RecentWindow,
+} from "./lib/fundamentals";
 import { buildJointGamesLookup } from "./lib/pairs";
 import { buildSynergyLookup, singleRecordsFromFlow } from "./lib/synergy";
 import { bestImbueTargets } from "./lib/imbue";
 import { heroMatchups } from "./lib/matchups";
 import {
   bandForTier,
+  climbBand,
   RANK_TIERS,
+  rankBandLabel,
   rankFloorLabel,
   rankSelLabel,
   rankSelToBadges,
+  tierOf,
+  tierToMaxBadge,
+  tierToMinBadge,
   type RankSel,
 } from "./lib/ranks";
 import { bestSkillBuild } from "./lib/skills";
@@ -59,6 +72,7 @@ import { CommunityRow } from "./components/CommunityRow";
 import { ExportPanel } from "./components/ExportPanel";
 import { GuideModal } from "./components/GuideModal";
 import { LabModal } from "./components/LabModal";
+import { MatchModal } from "./components/MatchModal";
 import { getWpStats, type WpStats } from "./api/wpStats";
 import { CounterAddRow, ItemRow } from "./components/ItemRow";
 import { CAN_HOVER } from "./components/usePinnablePopover";
@@ -91,6 +105,7 @@ import type {
   Patch,
   PlayerHeroStat,
   Item,
+  MatchHistoryRow,
   SkillBuild,
 } from "./types";
 
@@ -240,6 +255,10 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
   const [showLab, setShowLab] = useState(false);
+  const [showMatch, setShowMatch] = useState(false);
+  // Whether the match modal should open onto the player's most recent game (the "analyze last game"
+  // link) vs the blank recent-games list (the header "Match" button).
+  const [matchAutoLatest, setMatchAutoLatest] = useState(false);
   // The nightly wp-stats bake (18KB, static): roster-wide purchase context per item (backs the
   // win-more/comeback tags), per-hero closing power (annotates the your-heroes chips), and the
   // WP-vs-lead surface (the "typical lead ≈ X% win" note on each phase). Fail-soft: without it
@@ -319,13 +338,21 @@ export default function App() {
     number,
     { winRate: number; decided: number }
   > | null>(null);
-  // "Your fundamentals" benchmark rows (lib/fundamentals) — your typical game on this hero placed
-  // on the selected ladder's percentile distributions. heroScoped=false ⇒ the account had no games
-  // on this hero, so the all-heroes history stands in (still your fundamentals, less specific).
+  // "Your fundamentals" benchmark rows (lib/fundamentals) — your recent games on this hero placed
+  // on the selected ladder's percentile distributions. heroScoped=false ⇒ too few recent games on
+  // this hero, so the account's all-hero history stands in (still your fundamentals, less specific).
+  // `window` records what was actually measured, so the card can say so.
   const [fundamentals, setFundamentals] = useState<{
     rows: FundamentalRow[];
     heroScoped: boolean;
+    window: RecentWindow | null;
+    /** The rank being benchmarked against — the climb target, one tier up. */
+    benchmarkLabel: string;
   } | null>(null);
+  // How many recent games the fundamentals card reads. Scoping by *games* (not days) is what keeps a
+  // long break out of the average — see lib/fundamentals.recentWindow. Default small: right after a
+  // session you want your *current* form, not an average dragged back weeks.
+  const [recentGames, setRecentGames] = useState(RECENT_GAMES_DEFAULT);
   // The profile's rank pre-selects the band only until the player picks a rank deliberately —
   // a deep-linked rank or a manual select always wins and is never overridden afterwards.
   const tierTouched = useRef(
@@ -584,32 +611,59 @@ export default function App() {
               maxUnixTimestamp: window.maxUnixTimestamp,
             }
           : window;
+      // Scope MY side to my last N games on this hero. Without this the metrics endpoint applies its
+      // own default (last 30 days), which on an occasionally-played hero is two or three games — and
+      // for a player returning from a break it would happily average in a year-old version of them.
+      const history = await getPlayerMatchHistory(accountId).catch(
+        () => [] as MatchHistoryRow[],
+      );
+      if (signal.aborted) return;
+      const heroWin = recentWindow(history, hero.id, recentGames);
+
+      // Benchmark against the rank you're CLIMBING TO (one tier up), not your own peers — the card
+      // answers "how do I rank up", and your own-rank players are where you already are.
+      const climb = climbBand(tierOf(rankSel));
+      const benchmarkLabel = rankBandLabel(climb.lo, climb.hi);
+      const climbBadges = {
+        minBadge: tierToMinBadge(climb.lo),
+        maxBadge: tierToMaxBadge(climb.hi),
+      };
+
       const [me, ladder] = await Promise.all([
-        getPlayerMetrics({ accountIds: [accountId], heroId: hero.id }).catch(
-          () => ({}),
-        ),
+        getPlayerMetrics({
+          accountIds: [accountId],
+          heroId: hero.id,
+          ...(heroWin ? { minUnixTimestamp: heroWin.minUnixTimestamp } : {}),
+        }).catch(() => ({})),
         getPlayerMetrics({
           heroId: hero.id,
-          minBadge,
-          maxBadge,
+          ...climbBadges,
           ...ladderWindow,
         }).catch(() => ({})),
       ]);
       if (signal.aborted) return;
-      let rows = fundamentalsRows(me, ladder);
+      let rows = heroWin ? fundamentalsRows(me, ladder) : [];
       let heroScoped = true;
+      let usedWindow = heroWin;
       if (rows.length === 0) {
-        // No games on this hero — benchmark the account's overall fundamentals instead.
+        // Too few recent games on this hero — benchmark the account's recent all-hero play instead.
+        const allWin = recentWindow(history, null, recentGames);
         const meAll = await getPlayerMetrics({
           accountIds: [accountId],
+          ...(allWin ? { minUnixTimestamp: allWin.minUnixTimestamp } : {}),
         }).catch(() => ({}));
         if (signal.aborted) return;
         rows = fundamentalsRows(meAll, ladder);
         heroScoped = false;
+        usedWindow = allWin;
       }
-      setFundamentals(rows.length ? { rows, heroScoped } : null);
+      setFundamentals(
+        rows.length
+          ? { rows, heroScoped, window: usedWindow, benchmarkLabel }
+          : null,
+      );
     },
-    [accountId, hero, minBadge, maxBadge, patchIdx, patches, backfillOn],
+    [accountId, hero, rankSel, patchIdx, patches, backfillOn, recentGames],
     setError,
   );
 
@@ -1335,6 +1389,17 @@ export default function App() {
           >
             Lab
           </button>
+          <button
+            type="button"
+            className="guidebtn"
+            onClick={() => {
+              setMatchAutoLatest(false);
+              setShowMatch(true);
+            }}
+            title="Post-game read of one match: win-probability trajectory, fundamentals vs the ladder, soul economy, deaths"
+          >
+            Match
+          </button>
         </div>
         {busy && <div className="loadstrip" aria-hidden="true" />}
       </header>
@@ -1552,9 +1617,33 @@ export default function App() {
             <h2>
               Your fundamentals{" "}
               <span className="sub">
-                {fundamentals.heroScoped ? hero.name : "all heroes"} vs{" "}
-                {rankLabel}
+                {fundamentals.heroScoped ? hero.name : "all heroes"}
+                {fundamentals.window && (
+                  <>
+                    ,{" "}
+                    {fundamentals.window.games === 1
+                      ? "last game"
+                      : `last ${fundamentals.window.games} games`}{" "}
+                    ({fundamentals.window.spanDays}d)
+                  </>
+                )}{" "}
+                vs {fundamentals.benchmarkLabel}{" "}
+                <span className="climbmark">climbing</span>
               </span>
+              <select
+                className="fundwin"
+                value={recentGames}
+                onChange={(e) => setRecentGames(Number(e.target.value))}
+                onClick={(e) => e.stopPropagation()}
+                aria-label="How many recent games to benchmark"
+                title="How many of your recent games to read. Scoping by games (not days) keeps a long break — or an old, worse version of you — out of the average."
+              >
+                {[1, 5, 10, 20].map((n) => (
+                  <option key={n} value={n}>
+                    {n === 1 ? "last game" : `last ${n}`}
+                  </option>
+                ))}
+              </select>
             </h2>
             <div className="fundrows">
               {fundamentals.rows.map((r) => (
@@ -1581,6 +1670,40 @@ export default function App() {
                 </div>
               ))}
             </div>
+            {(() => {
+              const tips = climbAdvice(
+                fundamentals.rows,
+                fundamentals.heroScoped ? hero.name : "these",
+              );
+              return (
+                <div className="climbtips">
+                  <span className="climbhdr">To climb</span>
+                  {tips.length === 0 ? (
+                    <p className="climbnote">
+                      Your controllables are at or above the ladder here — play
+                      your game.
+                    </p>
+                  ) : (
+                    tips.map((t) => (
+                      <div className="climbtip" key={t.key}>
+                        <span className="climbaction">{t.action}</span>
+                        <span className="climbdetail">{t.detail}</span>
+                      </div>
+                    ))
+                  )}
+                  <button
+                    type="button"
+                    className="lastgamelink"
+                    onClick={() => {
+                      setMatchAutoLatest(true);
+                      setShowMatch(true);
+                    }}
+                  >
+                    Analyze your last game →
+                  </button>
+                </div>
+              );
+            })()}
           </section>
         )}
 
@@ -1876,6 +1999,14 @@ export default function App() {
       {showGuide && <GuideModal onClose={() => setShowGuide(false)} />}
       {showLab && (
         <LabModal heroId={heroId} onClose={() => setShowLab(false)} />
+      )}
+      {showMatch && (
+        <MatchModal
+          accountId={accountId}
+          heroes={heroes}
+          autoLoadLatest={matchAutoLatest}
+          onClose={() => setShowMatch(false)}
+        />
       )}
 
       {showExport && build && (

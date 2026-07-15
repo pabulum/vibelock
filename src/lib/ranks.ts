@@ -13,18 +13,18 @@ export interface RankTier {
 }
 
 export const RANK_TIERS: RankTier[] = [
-  { tier: 0, name: 'Obscurus' },
-  { tier: 1, name: 'Initiate' },
-  { tier: 2, name: 'Seeker' },
-  { tier: 3, name: 'Alchemist' },
-  { tier: 4, name: 'Arcanist' },
-  { tier: 5, name: 'Ritualist' },
-  { tier: 6, name: 'Emissary' },
-  { tier: 7, name: 'Archon' },
-  { tier: 8, name: 'Oracle' },
-  { tier: 9, name: 'Phantom' },
-  { tier: 10, name: 'Ascendant' },
-  { tier: 11, name: 'Eternus' },
+  { tier: 0, name: "Obscurus" },
+  { tier: 1, name: "Initiate" },
+  { tier: 2, name: "Seeker" },
+  { tier: 3, name: "Alchemist" },
+  { tier: 4, name: "Arcanist" },
+  { tier: 5, name: "Ritualist" },
+  { tier: 6, name: "Emissary" },
+  { tier: 7, name: "Archon" },
+  { tier: 8, name: "Oracle" },
+  { tier: 9, name: "Phantom" },
+  { tier: 10, name: "Ascendant" },
+  { tier: 11, name: "Eternus" },
 ];
 
 /** Lowest average_badge value that counts as `tier` (subtier I). */
@@ -63,6 +63,23 @@ export type RankSel = number | { lo: number; hi: number };
 export function bandForTier(tier: number): { lo: number; hi: number } {
   const t = Math.max(1, Math.min(tier, 11));
   return { lo: Math.max(1, t - 1), hi: Math.min(t + 1, 11) };
+}
+
+/** The tier a selection is anchored on: a floor's own tier, or a band's centre. */
+export function tierOf(sel: RankSel): number {
+  return typeof sel === "number" ? sel : Math.round((sel.lo + sel.hi) / 2);
+}
+
+/**
+ * The benchmark band for *climbing*: the rank a player at `tier` is trying to reach, not their own.
+ * "How should I play to rank up" is answered by the tier above, so the fundamentals card and the
+ * post-game read both grade against one tier up (clamped at Eternus). A single tier, not a wide
+ * band, so the target is concrete ("Oracle farm this many camps"), and it's the up direction the
+ * player cares about — their own-rank peers are, by definition, where they already are.
+ */
+export function climbBand(tier: number): { lo: number; hi: number } {
+  const t = Math.min(11, Math.max(0, Math.round(tier)) + 1);
+  return { lo: t, hi: t };
 }
 
 /** The average_badge window a selection queries: floor ⇒ min only; band ⇒ min and max. */
