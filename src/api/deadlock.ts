@@ -1,6 +1,40 @@
 // Thin client for api.deadlock-api.com. The API sends `access-control-allow-origin: *`,
 // so we call it straight from the browser — no backend, no API key.
+//
+// Caching lives in TanStack Query (see src/queryClient.ts): every fetcher here funnels through
+// `queryClient.fetchQuery`, so two composed queries asking for the same URL share one round trip
+// (what the old URL-keyed promise cache did), assets persist to localStorage via
+// persistQueryClient (what the old hand-rolled 24h cache did), and every response is validated
+// against its Valibot schema (api/schemas.ts) at parse time.
 
+import * as v from "valibot";
+import { queryOptions } from "@tanstack/react-query";
+import { queryClient } from "../queryClient";
+import {
+  AbilityOrderRowSchema,
+  HeroBuildStatRowSchema,
+  HeroCounterRowSchema,
+  HeroLadderStatSchema,
+  ItemFlowStatsSchema,
+  ItemPermutationStatsSchema,
+  ItemStatSchema,
+  MatchHistoryRowSchema,
+  MatchMetadataResponseSchema,
+  MmrRowSchema,
+  parseAs,
+  PlayerHeroStatSchema,
+  PlayerMetricsSchema,
+  RawBuildEnvelopeSchema,
+  RawHeroSchema,
+  RawItemSchema,
+  RawPatchSchema,
+  SteamPlayerMatchSchema,
+  type RawBuildEnvelope,
+  type RawItem,
+  type RawPatch,
+  type RawProp,
+  type SteamPlayerMatch,
+} from "./schemas";
 import type {
   Ability,
   AbilityOrderRow,
@@ -26,10 +60,16 @@ import type {
   TextSegment,
 } from "../types";
 
+export type { SteamPlayerMatch };
+
 const BASE = "https://api.deadlock-api.com";
 
-// Assets (heroes/items) change rarely; cache them in module scope + localStorage.
-const ASSET_TTL_MS = 24 * 60 * 60 * 1000;
+// Assets (heroes/items) change rarely: within a day they're served from the persisted cache
+// without a network hit; past that they refetch in the background while the stale copy renders.
+const ASSET_STALE_MS = 24 * 60 * 60 * 1000;
+// Keep asset entries alive as long as the persister does (persistOptions.maxAge) so a stale
+// copy can still stand in when a refresh fails.
+const ASSET_GC_MS = 7 * 24 * 60 * 60 * 1000;
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const MAX_RETRIES = 3;
@@ -46,7 +86,12 @@ function retryAfterMs(res: Response, attempt: number): number {
   return Math.min(8000, 400 * 2 ** attempt) + Math.random() * 300; // jittered backoff
 }
 
-async function getJson<T>(url: string): Promise<T> {
+type AnySchema = v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>;
+
+async function getJson<TSchema extends AnySchema>(
+  url: string,
+  schema: TSchema,
+): Promise<v.InferOutput<TSchema>> {
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(url);
     // Retry rate limits (per the server's hint) and transient 5xx flaps (the API intermittently
@@ -59,7 +104,7 @@ async function getJson<T>(url: string): Promise<T> {
     if (!res.ok) {
       throw new Error(`${res.status} ${res.statusText} for ${url}`);
     }
-    return res.json() as Promise<T>;
+    return parseAs(schema, await res.json(), url);
   }
 }
 
@@ -95,65 +140,32 @@ function throttle<T>(task: () => Promise<T>): Promise<T> {
   });
 }
 
-// Analytics endpoints recompute server-side and return small payloads, but a cold
-// query can take several seconds. Cache each response in-memory (session-scoped) by
-// URL, so revisiting a hero/rank/patch — or two effects asking for the same query —
-// costs one round trip, not N. Cleared on reload; assets use the longer-lived cache.
-const analyticsCache = new Map<string, Promise<unknown>>();
-
-function getAnalytics<T>(url: string): Promise<T> {
-  const hit = analyticsCache.get(url);
-  if (hit) return hit as Promise<T>;
-  const p = throttle(() => getJson<T>(url));
-  analyticsCache.set(url, p);
-  p.catch(() => analyticsCache.delete(url)); // never cache a failure
-  return p;
+// Analytics endpoints recompute server-side and return small payloads, but a cold query can take
+// several seconds. Each response is cached by URL in the query cache (staleTime Infinity = one
+// round trip per session), so revisiting a hero/rank/patch — or two composed queries asking for
+// the same underlying URL — is free. Failures aren't cached (an errored query with no data
+// refetches on the next ask). Not persisted: the `analytics` prefix is outside the persister's
+// `assets` filter, so multi-MB payloads never touch localStorage.
+function getAnalytics<TSchema extends AnySchema>(
+  url: string,
+  schema: TSchema,
+): Promise<v.InferOutput<TSchema>> {
+  return queryClient.fetchQuery({
+    queryKey: ["analytics", url],
+    queryFn: () => throttle(() => getJson(url, schema)),
+  });
 }
 
-function cached<T>(key: string): T | null {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    const { at, data } = JSON.parse(raw) as { at: number; data: T };
-    if (Date.now() - at > ASSET_TTL_MS) return null;
-    return data;
-  } catch {
-    return null;
-  }
-}
-
-/** The cached copy regardless of age — the fallback when a refresh fails and a stale answer
- * beats no answer (see getPatches). */
-function cachedStale<T>(key: string): T | null {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    return (JSON.parse(raw) as { data: T }).data;
-  } catch {
-    return null;
-  }
-}
-
-function putCache<T>(key: string, data: T): void {
-  try {
-    localStorage.setItem(key, JSON.stringify({ at: Date.now(), data }));
-  } catch {
-    // localStorage full / disabled — fine, we just refetch next time.
-  }
-}
-
-let heroesPromise: Promise<Hero[]> | null = null;
-
-export function getHeroes(): Promise<Hero[]> {
-  if (heroesPromise) return heroesPromise;
-  heroesPromise = (async () => {
-    const cacheKey = "dl.heroes.v3";
-    const hit = cached<Hero[]>(cacheKey);
-    if (hit) return hit;
-    const raw = await getJson<RawHero[]>(
+export const heroesQueryOptions = queryOptions({
+  // The "assets" prefix opts the query into localStorage persistence (see queryClient.ts);
+  // the trailing version busts stale copies when the processed shape changes.
+  queryKey: ["assets", "heroes", "v3"],
+  queryFn: async (): Promise<Hero[]> => {
+    const raw = await getJson(
       `${BASE}/v1/assets/heroes?only_active=true`,
+      v.array(RawHeroSchema),
     );
-    const heroes = raw
+    return raw
       .filter((h) => h.name)
       .map<Hero>((h) => ({
         id: h.id,
@@ -165,57 +177,51 @@ export function getHeroes(): Promise<Hero[]> {
           .filter((c): c is string => typeof c === "string"),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
-    putCache(cacheKey, heroes);
-    return heroes;
-  })();
-  return heroesPromise;
-}
+  },
+  staleTime: ASSET_STALE_MS,
+  gcTime: ASSET_GC_MS,
+});
 
 // The /v1/assets/items list contains both items and abilities; fetch it once and
-// derive both maps from it.
-let rawItemsPromise: Promise<RawItem[]> | null = null;
+// derive both asset queries from it. This raw query is only a dedup point for the
+// two derivations on a cold load — it's the processed lists that persist.
 function getRawItems(): Promise<RawItem[]> {
-  if (!rawItemsPromise)
-    rawItemsPromise = getJson<RawItem[]>(`${BASE}/v1/assets/items`);
-  return rawItemsPromise;
+  return queryClient.fetchQuery({
+    queryKey: ["assetsRaw", "items"],
+    queryFn: () => getJson(`${BASE}/v1/assets/items`, v.array(RawItemSchema)),
+    staleTime: ASSET_STALE_MS,
+    gcTime: 5 * 60 * 1000,
+  });
 }
 
-let itemsPromise: Promise<Map<number, Item>> | null = null;
+export const itemListQueryOptions = queryOptions({
+  queryKey: ["assets", "items", "v5"],
+  queryFn: async (): Promise<Item[]> => buildItemList(await getRawItems()),
+  staleTime: ASSET_STALE_MS,
+  gcTime: ASSET_GC_MS,
+});
 
-export function getItems(): Promise<Map<number, Item>> {
-  if (itemsPromise) return itemsPromise;
-  itemsPromise = (async () => {
-    const cacheKey = "dl.items.v5";
-    const hit = cached<Item[]>(cacheKey);
-    const list = hit ?? buildItemList(await getRawItems());
-    if (!hit) putCache(cacheKey, list);
-    return new Map(list.map((i) => [i.id, i]));
-  })();
-  return itemsPromise;
+/** The item map for imperative callers (the match modal); components under the provider
+ * use {@link itemListQueryOptions} and build the map in a memo. */
+export async function getItems(): Promise<Map<number, Item>> {
+  const list = await queryClient.fetchQuery(itemListQueryOptions);
+  return new Map(list.map((i) => [i.id, i]));
 }
 
-let abilitiesPromise: Promise<Map<number, Ability>> | null = null;
-
-export function getAbilities(): Promise<Map<number, Ability>> {
-  if (abilitiesPromise) return abilitiesPromise;
-  abilitiesPromise = (async () => {
-    const cacheKey = "dl.abilities.v2";
-    const hit = cached<Ability[]>(cacheKey);
-    const list =
-      hit ??
-      (await getRawItems())
-        .filter((i) => i.type === "ability" && i.name)
-        .map<Ability>((i) => ({
-          id: i.id,
-          name: i.name,
-          className: i.class_name ?? "",
-          image: i.image ?? i.shop_image,
-        }));
-    if (!hit) putCache(cacheKey, list);
-    return new Map(list.map((a) => [a.id, a]));
-  })();
-  return abilitiesPromise;
-}
+export const abilityListQueryOptions = queryOptions({
+  queryKey: ["assets", "abilities", "v2"],
+  queryFn: async (): Promise<Ability[]> =>
+    (await getRawItems())
+      .filter((i) => i.type === "ability" && i.name)
+      .map<Ability>((i) => ({
+        id: i.id,
+        name: i.name,
+        className: i.class_name ?? "",
+        image: i.image ?? i.shop_image,
+      })),
+  staleTime: ASSET_STALE_MS,
+  gcTime: ASSET_GC_MS,
+});
 
 export interface AbilityOrderQuery extends TimeWindow, RankWindow {
   heroId: number;
@@ -223,6 +229,8 @@ export interface AbilityOrderQuery extends TimeWindow, RankWindow {
   /** Restrict to players who bought these items (used to match the build archetype). */
   includeItemIds?: number[];
 }
+
+const AbilityOrderRowsSchema = v.array(AbilityOrderRowSchema);
 
 export function getAbilityOrder(
   q: AbilityOrderQuery,
@@ -235,8 +243,9 @@ export function getAbilityOrder(
   if (q.includeItemIds?.length)
     params.set("include_item_ids", q.includeItemIds.join(","));
   applyWindow(params, q);
-  return getAnalytics<AbilityOrderRow[]>(
+  return getAnalytics(
     `${BASE}/v1/analytics/ability-order-stats?${params}`,
+    AbilityOrderRowsSchema,
   );
 }
 
@@ -520,8 +529,9 @@ export function getItemFlowStats(q: FlowQuery): Promise<ItemFlowStats> {
   if (q.includeItemIds?.length)
     params.set("include_item_ids", q.includeItemIds.join(","));
   applyWindow(params, q);
-  return getAnalytics<ItemFlowStats>(
+  return getAnalytics(
     `${BASE}/v1/analytics/item-flow-stats?${params}`,
+    ItemFlowStatsSchema,
   );
 }
 
@@ -539,9 +549,11 @@ export interface PermutationQuery extends TimeWindow, RankWindow {
   combSize?: number;
 }
 
+const ItemPermutationStatsRowsSchema = v.array(ItemPermutationStatsSchema);
+
 /**
  * Every item permutation of size `combSize` (default 2) for the hero, with its win/loss record. Note this
- * is one largish payload (all pairs ≈ 1–2 MB), cached server-side 1h and in our analytics cache, so it's
+ * is one largish payload (all pairs ≈ 1–2 MB), cached server-side 1h and in the query cache, so it's
  * fetched on demand (the synergy view), not on every build. See {@link ItemPermutationStats}.
  */
 export function getItemPermutationStats(
@@ -553,10 +565,13 @@ export function getItemPermutationStats(
   });
   applyRank(params, q);
   applyWindow(params, q);
-  return getAnalytics<ItemPermutationStats[]>(
+  return getAnalytics(
     `${BASE}/v1/analytics/item-permutation-stats?${params}`,
+    ItemPermutationStatsRowsSchema,
   );
 }
+
+const ItemStatRowsSchema = v.array(ItemStatSchema);
 
 export function getItemStats(q: ItemStatsQuery): Promise<ItemStat[]> {
   const params = new URLSearchParams({
@@ -567,8 +582,13 @@ export function getItemStats(q: ItemStatsQuery): Promise<ItemStat[]> {
   if (q.enemyHeroIds?.length)
     params.set("enemy_hero_ids", q.enemyHeroIds.join(","));
   applyWindow(params, q);
-  return getAnalytics<ItemStat[]>(`${BASE}/v1/analytics/item-stats?${params}`);
+  return getAnalytics(
+    `${BASE}/v1/analytics/item-stats?${params}`,
+    ItemStatRowsSchema,
+  );
 }
+
+const HeroBuildStatRowsSchema = v.array(HeroBuildStatRowSchema);
 
 // Win rate of each player-authored build, over matches in the window at/above the rank
 // floor. `min_average_badge` filters by the *match's* average badge (both teams) — i.e.
@@ -581,10 +601,13 @@ export function getHeroBuildStats(
   });
   applyRank(params, q);
   applyWindow(params, q);
-  return getAnalytics<HeroBuildStatRow[]>(
+  return getAnalytics(
     `${BASE}/v1/analytics/hero-build-stats/${q.heroId}?${params}`,
+    HeroBuildStatRowsSchema,
   );
 }
+
+const RawBuildEnvelopesSchema = v.array(RawBuildEnvelopeSchema);
 
 // The community builds for a hero, latest version of each, most-favorited first, reduced
 // to the items each recommends (mod entries that resolve to a known item; abilities drop).
@@ -599,7 +622,7 @@ export async function getCommunityBuilds(
     limit: "200",
   });
   const [raw, items] = await Promise.all([
-    getAnalytics<RawBuildEnvelope[]>(`${BASE}/v1/builds?${params}`),
+    getAnalytics(`${BASE}/v1/builds?${params}`, RawBuildEnvelopesSchema),
     getItems(),
   ]);
   return raw
@@ -620,7 +643,7 @@ function parseCommunityBuild(
     const core = cat.optional !== true; // unmarked (null) counts as core; only `true` is situational
     for (const mod of cat.mods ?? []) {
       const id = mod.ability_id;
-      if (id === undefined || !items.has(id)) continue;
+      if (id == null || !items.has(id)) continue;
       ids.add(id);
       if (core) coreIds.add(id);
       // Only imbue-type items carry a target; most mods leave it null. Keep the raw pair —
@@ -639,7 +662,7 @@ function parseCommunityBuild(
   // unlocks and upgrades — are kept; first-max is derived downstream and is robust to it.)
   const skillOrder = (hb.details?.ability_order?.currency_changes ?? [])
     .map((c) => c.ability_id)
-    .filter((id): id is number => id !== undefined);
+    .filter((id): id is number => typeof id === "number");
   return {
     id: hb.hero_build_id,
     name: hb.name ?? `Build ${hb.hero_build_id}`,
@@ -657,6 +680,8 @@ export interface CounterMatrixQuery extends TimeWindow, RankWindow {
   minMatches?: number;
 }
 
+const HeroCounterRowsSchema = v.array(HeroCounterRowSchema);
+
 // hero-counter-stats ignores hero filters and returns the whole hero-vs-hero matrix,
 // so we fetch it once per rank/patch and filter to the selected hero client-side.
 export function getHeroCounters(
@@ -667,41 +692,40 @@ export function getHeroCounters(
   });
   applyRank(params, q);
   applyWindow(params, q);
-  return getAnalytics<HeroCounterRow[]>(
+  return getAnalytics(
     `${BASE}/v1/analytics/hero-counter-stats?${params}`,
+    HeroCounterRowsSchema,
   );
 }
 
-let patchesPromise: Promise<Patch[]> | null = null;
-
 // ---- Player profile (public data; the id is the Steam userdata/<id> account number) ----
+
+const PlayerHeroStatsSchema = v.array(PlayerHeroStatSchema);
 
 /** The player's all-time record per hero — drives the "your heroes" quick-pick. Returns [] for an
  * account with no Deadlock games (or an unknown id). */
 export function getPlayerHeroStats(
   accountId: number,
 ): Promise<PlayerHeroStat[]> {
-  return getAnalytics<PlayerHeroStat[]>(
+  return getAnalytics(
     `${BASE}/v1/players/${accountId}/hero-stats`,
+    PlayerHeroStatsSchema,
   );
 }
 
-/** One match from the Steam-profile name search. Names are freely changeable and collide, so the
- * UI shows avatars and lets the player pick — the account id is what we keep. */
-export interface SteamPlayerMatch {
-  account_id: number;
-  personaname: string;
-  avatar?: string;
-}
+const SteamPlayerMatchesSchema = v.array(SteamPlayerMatchSchema);
 
 /** Search Steam profiles (with Deadlock presence) by display name — server-side, no Steam login.
  * Names collide freely; treat results as candidates to disambiguate, not an answer. */
 export function searchSteamPlayers(query: string): Promise<SteamPlayerMatch[]> {
   const params = new URLSearchParams({ search_query: query });
-  return getAnalytics<SteamPlayerMatch[]>(
+  return getAnalytics(
     `${BASE}/v1/players/steam-search?${params}`,
+    SteamPlayerMatchesSchema,
   );
 }
+
+const MmrRowsSchema = v.array(MmrRowSchema);
 
 /** The player's current rank tier on the app's 0–11 rank-floor scale (11 = Eternus), from the batch
  * mmr endpoint's latest entry (`division` is already tier-scaled; `rank` is the full badge). Null
@@ -709,14 +733,17 @@ export function searchSteamPlayers(query: string): Promise<SteamPlayerMatch[]> {
 export async function getPlayerRankTier(
   accountId: number,
 ): Promise<number | null> {
-  const rows = await getAnalytics<Array<{ division?: number }>>(
+  const rows = await getAnalytics(
     `${BASE}/v1/players/mmr?account_ids=${accountId}`,
+    MmrRowsSchema,
   );
   const division = rows[0]?.division;
   return typeof division === "number" && division > 0
     ? Math.min(division, 11)
     : null;
 }
+
+const HeroLadderStatsSchema = v.array(HeroLadderStatSchema);
 
 /** Every hero's ladder record at a rank floor + window — the "meta strength" side of the
  * what-to-queue ranking on the your-heroes row. */
@@ -726,8 +753,9 @@ export function getHeroLadderStats(
   const params = new URLSearchParams();
   applyRank(params, q);
   applyWindow(params, q);
-  return getAnalytics<HeroLadderStat[]>(
+  return getAnalytics(
     `${BASE}/v1/analytics/hero-stats?${params}`,
+    HeroLadderStatsSchema,
   );
 }
 
@@ -755,32 +783,33 @@ export function getPlayerMetrics(
     params.set("max_average_badge", String(q.maxBadge));
   if (q.accountIds?.length) params.set("account_ids", q.accountIds.join(","));
   applyWindow(params, q);
-  return getAnalytics<PlayerMetrics>(
+  return getAnalytics(
     `${BASE}/v1/analytics/player-stats/metrics?${params}`,
+    PlayerMetricsSchema,
   );
 }
+
+const RawPatchesSchema = v.array(RawPatchSchema);
+const PATCHES_KEY = ["assets", "patches", "v2"];
 
 // /v2/patches unifies the Forum + Steam feeds, so it has minor updates too. But the
 // Forum entries carry a bogus re-published pub_date (e.g. a 05-22 patch stamped 06-12),
 // so we key off the MM-DD-YYYY date in the *title*, which is reliable on every entry.
 // We window by day boundaries (00:00 UTC of the title date) to match the site's "May 22
 // – May 25"-style windows, and dedupe by day so the two feeds' copies collapse into one.
-export function getPatches(): Promise<Patch[]> {
-  if (patchesPromise) return patchesPromise;
-  patchesPromise = (async () => {
-    const cacheKey = "dl.patches.v2";
-    const hit = cached<Patch[]>(cacheKey);
-    if (hit) return hit;
-
+export const patchesQueryOptions = queryOptions({
+  queryKey: PATCHES_KEY,
+  queryFn: async (): Promise<Patch[]> => {
     let raw: RawPatch[];
     try {
-      raw = await getJson<RawPatch[]>(`${BASE}/v2/patches`);
+      raw = await getJson(`${BASE}/v2/patches`, RawPatchesSchema);
     } catch {
       // The patch feed is the spine of every data window, so a (post-retry) failure must degrade,
-      // not blank the app: serve the last good copy however stale; with nothing cached at all,
-      // run patch-less — an empty list makes every window query fall back to the API's default
-      // last-30-days and disables backfill until a reload succeeds.
-      return cachedStale<Patch[]>(cacheKey) ?? [];
+      // not blank the app: serve the last good copy (still in the cache — possibly restored from a
+      // previous session by the persister); with nothing cached at all, run patch-less — an empty
+      // list makes every window query fall back to the API's default last-30-days and disables
+      // backfill until a reload succeeds.
+      return queryClient.getQueryData<Patch[]>(PATCHES_KEY) ?? [];
     }
     const byDay = new Map<string, Patch>();
     for (const p of raw) {
@@ -796,90 +825,11 @@ export function getPatches(): Promise<Patch[]> {
       });
     }
 
-    const patches = [...byDay.values()].sort((a, b) => b.ts - a.ts);
-    putCache(cacheKey, patches);
-    return patches;
-  })();
-  return patchesPromise;
-}
-
-// ---- Raw API shapes (only the fields we touch) ----
-
-interface RawHero {
-  id: number;
-  name: string;
-  image?: string;
-  images?: { icon_hero_card?: string };
-  description?: { role?: string };
-  items?: Record<string, string>;
-}
-
-interface RawItem {
-  id: number;
-  name: string;
-  type?: string;
-  class_name?: string;
-  item_tier?: number;
-  item_slot_type?: string | null;
-  cost?: number;
-  shop_image?: string;
-  image?: string;
-  description?: { desc?: string } | string | null;
-  is_active_item?: boolean;
-  properties?: Record<string, RawProp>;
-  tooltip_sections?: Array<{
-    section_type?: string | null;
-    section_attributes?: Array<{
-      loc_string?: string;
-      properties?: string[];
-      elevated_properties?: string[];
-      important_properties?: string[];
-    }>;
-  }>;
-  component_items?: string[];
-}
-
-interface RawProp {
-  value?: string | number;
-  postfix?: string;
-  label?: string;
-  /** When `value` equals this, the stat is inactive for the item and not shown. */
-  disable_value?: string;
-}
-
-interface RawPatch {
-  title?: string;
-  name?: string;
-  pub_date?: string;
-  timestamp?: number;
-}
-
-interface RawBuildEnvelope {
-  hero_build?: {
-    hero_build_id: number;
-    name?: string;
-    author_account_id?: number;
-    version?: number;
-    last_updated_timestamp?: number;
-    publish_timestamp?: number;
-    details?: {
-      mod_categories?: Array<{
-        name?: string | null;
-        // Author flag marking a section as situational. Set on ~a third of sections; null
-        // (the majority) means unmarked, which we treat as core. Only `true` demotes.
-        optional?: boolean | null;
-        mods?: Array<{
-          ability_id?: number;
-          imbue_target_ability_id?: number | null;
-        }>;
-      }>;
-      // Ordered ability-point investments; we flatten it to the build's skill order.
-      ability_order?: {
-        currency_changes?: Array<{ ability_id?: number }>;
-      };
-    };
-  };
-}
+    return [...byDay.values()].sort((a, b) => b.ts - a.ts);
+  },
+  staleTime: ASSET_STALE_MS,
+  gcTime: ASSET_GC_MS,
+});
 
 // --- Single-match metadata (match analysis) ---
 //
@@ -887,7 +837,8 @@ interface RawBuildEnvelope {
 // send ratelimit headers; the match endpoints are far tighter and header-less — when a match isn't
 // in the API's database, fetching it spends a Steam call from a budget of roughly THREE PER HOUR
 // per IP, and a 429 gives no reset hint. So this client:
-//   - never retries (a retry loop would silently drain an hour of budget),
+//   - never retries (a retry loop would silently drain an hour of budget — `retry: false` is
+//     pinned on the query and it goes through raw fetch, not getJson's backoff loop),
 //   - asks cached-first (`disable_steam=true` — free at any rate, fails fast if not ingested),
 //   - gates the explicit Steam fallback behind a self-paced cooldown.
 // Most matches ARE ingested: the API crawls continuously and uploader users submit their own
@@ -911,58 +862,61 @@ export function steamFetchAvailableAt(): number {
   return steamFetchLastAttempt + STEAM_FETCH_COOLDOWN_MS;
 }
 
-const matchCache = new Map<number, Promise<MatchInfo>>();
-
 /**
  * One match's full metadata. Cached-first: with `allowSteam` unset this can't spend any scarce
  * budget — it 404s fast when the match isn't ingested (thrown as {@link MatchNotIngestedError}).
  * With `allowSteam` the server may fetch from Steam; the attempt is stamped against the cooldown
  * whether or not it succeeds, because the budget is spent server-side either way.
+ *
+ * Cached per match id regardless of how it was fetched; a failure isn't cached (the errored
+ * query holds no data, so the next ask fetches again).
  */
 export function getMatchMetadata(
   matchId: number,
   opts?: { allowSteam?: boolean },
 ): Promise<MatchInfo> {
-  const hit = matchCache.get(matchId);
-  if (hit) return hit;
   const allowSteam = opts?.allowSteam ?? false;
   if (allowSteam) steamFetchLastAttempt = Date.now();
   const url = `${BASE}/v1/matches/${matchId}/metadata${allowSteam ? "" : "?disable_steam=true"}`;
-  const p = (async () => {
-    const res = await fetch(url); // deliberately NOT getJson: no retries in this rate family
-    if (res.status === 404 && !allowSteam)
-      throw new MatchNotIngestedError(matchId);
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${url}`);
-    const body = (await res.json()) as { match_info: MatchInfo };
-    return body.match_info;
-  })();
-  matchCache.set(matchId, p);
-  p.catch(() => matchCache.delete(matchId)); // a failure shouldn't poison later attempts
-  return p;
+  return queryClient.fetchQuery({
+    queryKey: ["match", matchId],
+    retry: false, // never retry in this rate family
+    queryFn: async () => {
+      const res = await fetch(url); // deliberately NOT getJson: no retry loop either
+      if (res.status === 404 && !allowSteam)
+        throw new MatchNotIngestedError(matchId);
+      if (!res.ok)
+        throw new Error(`${res.status} ${res.statusText} for ${url}`);
+      return parseAs(MatchMetadataResponseSchema, await res.json(), url)
+        .match_info;
+    },
+  });
 }
+
+const MatchHistoryRowsSchema = v.array(MatchHistoryRowSchema);
 
 /**
  * The player's recent matches, newest first. Steam-sourced, so it can lag the ingested DB by
  * hours; `forceRefetch` asks the server to re-pull from Steam (propagates asynchronously — the
  * next call sees the update, not this one, and bypasses the cache).
  *
- * Session-cached per account: both the match modal and the build page's fundamentals card read it
+ * Cached per account: both the match modal and the build page's fundamentals card read it
  * (the latter to turn "my last N games on this hero" into a timestamp window), so it shouldn't cost
  * a round trip per consumer.
  */
-const historyCache = new Map<number, Promise<MatchHistoryRow[]>>();
-
 export function getPlayerMatchHistory(
   accountId: number,
   opts?: { forceRefetch?: boolean },
 ): Promise<MatchHistoryRow[]> {
   const force = opts?.forceRefetch ?? false;
-  const hit = !force && historyCache.get(accountId);
-  if (hit) return hit;
-  const p = getJson<MatchHistoryRow[]>(
-    `${BASE}/v1/players/${accountId}/match-history${force ? "?force_refetch=true" : ""}`,
-  ).then((rows) => [...rows].sort((a, b) => b.start_time - a.start_time));
-  historyCache.set(accountId, p);
-  p.catch(() => historyCache.delete(accountId));
-  return p;
+  return queryClient.fetchQuery({
+    queryKey: ["matchHistory", accountId],
+    // force ⇒ treat whatever is cached as stale so fetchQuery goes to the network.
+    staleTime: force ? 0 : Infinity,
+    queryFn: () =>
+      getJson(
+        `${BASE}/v1/players/${accountId}/match-history${force ? "?force_refetch=true" : ""}`,
+        MatchHistoryRowsSchema,
+      ).then((rows) => [...rows].sort((a, b) => b.start_time - a.start_time)),
+  });
 }

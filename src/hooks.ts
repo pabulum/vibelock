@@ -1,7 +1,7 @@
-// App-level React hooks: the shared async-fetch scaffolding and the "developing" veil.
+// App-level React hooks: the "developing" veil. (Data fetching lives in TanStack Query —
+// useSettle is driven from a query's `isFetching`.)
 
-import { useEffect, useRef, useState, type DependencyList } from "react";
-import { friendlyError } from "./lib/errors";
+import { useEffect, useRef } from "react";
 
 const REDUCED =
   typeof matchMedia !== "undefined" &&
@@ -96,7 +96,10 @@ export function useSettle<T extends HTMLElement>(loading: boolean) {
         const tick = () => {
           const k = Math.min((performance.now() - t0) / DUR, 1);
           setVar("--settle", from * (1 - k) ** 2); // ease-out to crisp
-          setVar("--flash", k < 0.3 ? k / 0.3 : Math.max(0, 1 - (k - 0.3) / 0.7));
+          setVar(
+            "--flash",
+            k < 0.3 ? k / 0.3 : Math.max(0, 1 - (k - 0.3) / 0.7),
+          );
           if (k < 1) raf.current = requestAnimationFrame(tick);
           else {
             setVar("--settle", 0);
@@ -114,37 +117,4 @@ export function useSettle<T extends HTMLElement>(loading: boolean) {
   }, [loading]);
 
   return ref;
-}
-
-/**
- * Runs an abortable async task whenever `deps` change and reports whether it's in flight — the shared
- * scaffolding behind every data fetch here: abort the previous run on change/unmount, flip a loading
- * flag, and funnel failures to one error sink. Pass `null`/`false` as `run` to stand down (no fetch, not
- * loading) when a precondition isn't met. The task gets the AbortSignal; guard your setState calls with
- * `!signal.aborted` so a superseded fetch can't clobber the current selection.
- *
- * Lifting the fetch bodies out of `useEffect` and into a task argument is also what keeps the
- * set-state-in-effect rule satisfied: their setState calls no longer sit lexically inside an effect. The
- * single remaining in-effect transition is `setLoading(true)` below — and that render is exactly what we
- * want (it shows the panel's veil), so it's deliberately exempted.
- */
-export function useAsyncTask(
-  run: ((signal: AbortSignal) => Promise<void>) | null | false,
-  deps: DependencyList,
-  onError: (message: string) => void,
-): boolean {
-  const [loading, setLoading] = useState(false);
-  useEffect(() => {
-    if (!run) return;
-    const ctrl = new AbortController();
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: render the loading veil
-    setLoading(true);
-    run(ctrl.signal)
-      .catch((e) => !ctrl.signal.aborted && onError(friendlyError(e)))
-      .finally(() => !ctrl.signal.aborted && setLoading(false));
-    return () => ctrl.abort();
-    // deps are forwarded by the caller; exhaustive-deps validates them at the call site (additionalHooks).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
-  return loading && !!run;
 }

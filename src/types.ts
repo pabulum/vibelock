@@ -1,5 +1,32 @@
 // Shared types for the Deadlock build tool.
-// These mirror the shapes returned by api.deadlock-api.com (only the fields we use).
+//
+// Wire types (shapes returned by api.deadlock-api.com) derive from the Valibot schemas that
+// validate them at the API boundary — see api/schemas.ts — and are re-exported here so consumers
+// keep importing everything from one place. What remains below are the client-side shapes: assets
+// processed from raw payloads (Hero/Item/Ability/Patch) and everything the generator produces.
+
+export type {
+  AbilityOrderRow,
+  FlowNode,
+  FlowEdge,
+  FlowSummary,
+  ItemFlowStats,
+  HeroBuildStatRow,
+  PlayerHeroStat,
+  HeroLadderStat,
+  MetricDistribution,
+  PlayerMetrics,
+  ItemStat,
+  ItemPermutationStats,
+  HeroCounterRow,
+  MatchGoldSource,
+  MatchStatSample,
+  MatchItemEvent,
+  MatchDeath,
+  MatchPlayer,
+  MatchInfo,
+  MatchHistoryRow,
+} from "./api/schemas";
 
 export interface Hero {
   id: number;
@@ -32,16 +59,6 @@ export interface Ability {
   name: string;
   className: string;
   image?: string;
-}
-
-/** One row from /v1/analytics/ability-order-stats — a full upgrade order with outcomes. */
-export interface AbilityOrderRow {
-  /** Ability ids in the order points were invested (length ~16). */
-  abilities: number[];
-  wins: number;
-  losses: number;
-  matches: number;
-  players: number;
 }
 
 /** The recommended skill (ability) build — shown descriptively (no win rate; see lib/skills.ts). */
@@ -102,49 +119,6 @@ export interface ItemCard {
   sections: CardSection[];
 }
 
-/** One node from /v1/analytics/item-flow-stats — an item bought within a phase column. */
-export interface FlowNode {
-  column: number;
-  item_id: number;
-  wins: number;
-  losses: number;
-  players: number;
-  matches: number;
-  adjusted_win_rate: number;
-  avg_net_worth_at_buy: number;
-  total_kills: number;
-  total_deaths: number;
-  total_assists: number;
-}
-
-/** A phase→next-phase transition (player bought from_item, then to_item). */
-export interface FlowEdge {
-  from_column: number;
-  from_item_id: number;
-  to_item_id: number;
-  wins: number;
-  losses: number;
-  matches: number;
-}
-
-export interface FlowSummary {
-  matches: number;
-  players: number;
-  wins: number;
-  losses: number;
-  avg_duration_s: number;
-  avg_net_worth: number;
-}
-
-export interface ItemFlowStats {
-  nodes: FlowNode[];
-  edges: FlowEdge[];
-  summary: FlowSummary;
-  baseline: FlowSummary;
-  /** Distinct baseline games that bought any upgrade in each stage column. */
-  reached_per_column: number[];
-}
-
 // ---- Generated build shapes (our own, produced by buildGenerator) ----
 
 /** A lightweight pointer to another item, for relationship clues on a row. */
@@ -158,7 +132,11 @@ export interface ItemRef {
  * guaranteed a slot because it's the plurality answer to a near-universal need (see
  * {@link NeedKind}), not because its own pick rate or win rate cleared a gate. */
 export type BuildRole =
-  "universal" | "value" | "situational" | "filler" | "need";
+  | "universal"
+  | "value"
+  | "situational"
+  | "filler"
+  | "need";
 
 export interface BuildItem {
   item: Item;
@@ -329,14 +307,6 @@ export interface ArchetypeSet {
   archetypes: Archetype[];
 }
 
-/** One row from /v1/analytics/hero-build-stats — a community build's outcomes at a rank. */
-export interface HeroBuildStatRow {
-  hero_build_id: number;
-  wins: number;
-  losses: number;
-  matches: number;
-}
-
 /** A player-authored build from /v1/builds, reduced to the items it recommends. */
 export interface CommunityBuild {
   id: number;
@@ -414,77 +384,6 @@ export interface Patch {
   ts: number;
 }
 
-/** One row from /v1/players/{account_id}/hero-stats — the player's own record on one hero. */
-export interface PlayerHeroStat {
-  hero_id: number;
-  matches_played: number;
-  wins: number;
-  /** Unix seconds of the player's last game on this hero. */
-  last_played: number;
-}
-
-/** One row from /v1/analytics/hero-stats — a hero's ladder record in the queried window/rank. */
-export interface HeroLadderStat {
-  hero_id: number;
-  wins: number;
-  losses: number;
-  matches: number;
-}
-
-/** One metric's distribution from /v1/analytics/player-stats/metrics — average plus a fixed
- * percentile grid. Fetched for a ladder slice (hero+rank) or a single account. */
-export interface MetricDistribution {
-  avg: number;
-  std: number;
-  percentile1: number;
-  percentile5: number;
-  percentile10: number;
-  percentile25: number;
-  percentile50: number;
-  percentile75: number;
-  percentile90: number;
-  percentile95: number;
-  percentile99: number;
-}
-
-/** The metrics endpoint's response: metric name (e.g. "net_worth_per_min") → its distribution. */
-export type PlayerMetrics = Record<string, MetricDistribution | undefined>;
-
-/** One row from /v1/analytics/item-stats (raw, un-adjusted win rate). */
-export interface ItemStat {
-  item_id: number;
-  wins: number;
-  losses: number;
-  matches: number;
-  players: number;
-  avg_buy_time_s: number;
-  /** Average sell time in seconds among players who sold it (0 if rarely sold). */
-  avg_sell_time_s: number;
-}
-
-/**
- * One row from /v1/analytics/item-permutation-stats — a specific *ordered* item permutation (the items
- * bought in this order) and its record. The endpoint is order-sensitive, so an unordered pair shows up as
- * up to two rows; synergy.ts sums a set's orderings into one unordered joint. Fetched with `comb_size`
- * (all permutations of that size for the hero); `item_ids` mode is mutually exclusive and unused here.
- */
-export interface ItemPermutationStats {
-  item_ids: number[];
-  wins: number;
-  losses: number;
-  matches: number;
-}
-
-/** One cell of the hero-vs-hero counter matrix (from /v1/analytics/hero-counter-stats). */
-export interface HeroCounterRow {
-  hero_id: number;
-  enemy_hero_id: number;
-  wins: number;
-  matches_played: number;
-  last_hits: number;
-  enemy_last_hits: number;
-}
-
 /** A notable matchup for the selected hero. */
 export interface Matchup {
   enemyHeroId: number;
@@ -526,104 +425,4 @@ export interface ItemCounters {
   marks: CounterMark[];
   /** Best single-enemy delta — used for ranking and the headline number. */
   topDelta: number;
-}
-
-// --- Single-match metadata (match analysis) ---
-// The slice of /v1/matches/{id}/metadata the analyzer reads. The full payload is ~1MB with dozens
-// more fields per player; only what's typed here is consumed, and TypeScript ignores the rest.
-
-/** One entry of a player's per-source soul ledger. Sources are the EGoldSource enum, verified
- * numerically against the flat `gold_*` fields: 1 kills, 2 lane creeps, 3 neutral camps, 4 bosses,
- * 5 treasure (urn), 6 assists, 7 denies, 8 team bonus, 10/11 item-generated, 12 breakables. */
-export interface MatchGoldSource {
-  source: number;
-  gold?: number;
-  gold_orbs?: number;
-  kills?: number;
-}
-
-/** A sampled snapshot of one player's stats at `time_stamp_s` (~every 3–4 min plus game end). */
-export interface MatchStatSample {
-  time_stamp_s: number;
-  net_worth: number;
-  kills: number;
-  deaths: number;
-  assists: number;
-  last_hits?: number;
-  denies: number;
-  creep_kills?: number;
-  neutral_kills?: number;
-  shots_hit?: number;
-  shots_missed?: number;
-  player_damage?: number;
-  player_healing?: number;
-  player_damage_taken?: number;
-  gold_death_loss?: number;
-  gold_sources?: MatchGoldSource[];
-}
-
-export interface MatchItemEvent {
-  game_time_s: number;
-  item_id: number;
-  sold_time_s?: number;
-  /** Non-zero when this purchase event upgraded into that item id. */
-  upgrade_id?: number;
-  imbued_ability_id?: number;
-}
-
-export interface MatchDeath {
-  game_time_s: number;
-  /** Slot of the killer, resolvable to a player via `player_slot`. */
-  killer_player_slot?: number;
-  /** How long the engagement that killed you lasted. `-1` is the API's "unknown" sentinel — always
-   * guard for it. Measured distribution across a real match: p25 ≈ 7s, median ≈ 13s, p75 ≈ 19s, so a
-   * sub-5s death is genuinely a burst, not just the low end of normal. */
-  time_to_kill_s?: number;
-}
-
-export interface MatchPlayer {
-  account_id: number;
-  player_slot: number;
-  /** "Team0" | "Team1" (proto enum names, not numbers). */
-  team: string;
-  hero_id: number;
-  kills: number;
-  deaths: number;
-  assists: number;
-  net_worth: number;
-  last_hits?: number;
-  denies?: number;
-  assigned_lane?: number;
-  abandon_match_time_s?: number;
-  items?: MatchItemEvent[];
-  stats?: MatchStatSample[];
-  death_details?: MatchDeath[];
-}
-
-export interface MatchInfo {
-  match_id: number;
-  start_time: number;
-  duration_s: number;
-  /** "Team0" | "Team1". */
-  winning_team: string;
-  average_badge_team0?: number;
-  average_badge_team1?: number;
-  players: MatchPlayer[];
-}
-
-/** One row of /v1/players/{id}/match-history (Steam-sourced; can lag the ingested DB). */
-export interface MatchHistoryRow {
-  match_id: number;
-  hero_id: number;
-  start_time: number;
-  match_duration_s: number;
-  /** The WINNING TEAM's number (0/1), not a won/lost flag — verified against match metadata on
-   * matches with known outcomes. The player won iff `match_result === player_team`. */
-  match_result: number;
-  /** Which team (0/1) this player was on. */
-  player_team: number;
-  player_kills: number;
-  player_deaths: number;
-  player_assists: number;
-  net_worth: number;
 }

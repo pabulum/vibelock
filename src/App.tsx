@@ -1,23 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import "./App.css";
+import { persistOptions, queryClient } from "./queryClient";
 import {
-  getAbilities,
+  abilityListQueryOptions,
   getAbilityOrder,
   getCommunityBuilds,
   getHeroBuildStats,
   getHeroCounters,
-  getHeroes,
+  getHeroLadderStats,
   getItemFlowStats,
   getItemPermutationStats,
-  getItems,
-  getHeroLadderStats,
   getItemStats,
   getMatchMetadata,
-  getPatches,
   getPlayerHeroStats,
   getPlayerMatchHistory,
   getPlayerMetrics,
   getPlayerRankTier,
+  heroesQueryOptions,
+  itemListQueryOptions,
+  patchesQueryOptions,
   searchSteamPlayers,
   type SteamPlayerMatch,
   type TimeWindow,
@@ -25,7 +28,7 @@ import {
 import { assembleArchetypes, pickSignatures } from "./lib/archetypes";
 import { phaseTempo, rerankBuildForComp, SLOT_CAP } from "./lib/buildGenerator";
 import { matchCommunityBuilds } from "./lib/communityBuilds";
-import { computeItemCounters, type CompEdge } from "./lib/counters";
+import { computeItemCounters } from "./lib/counters";
 import { friendlyError } from "./lib/errors";
 import {
   decodeUrlState,
@@ -38,16 +41,12 @@ import {
   findAdoptionMovers,
   findPatchMovers,
   foldTrendingBreakouts,
-  type AdoptionMover,
-  type PatchMover,
 } from "./lib/patchMovers";
 import {
   climbAdvice,
   fundamentalsRows,
   recentWindow,
   RECENT_GAMES_DEFAULT,
-  type FundamentalRow,
-  type RecentWindow,
 } from "./lib/fundamentals";
 import { buildJointGamesLookup } from "./lib/pairs";
 import { buildSynergyLookup, singleRecordsFromFlow } from "./lib/synergy";
@@ -73,14 +72,14 @@ import {
 } from "./lib/ranks";
 import { bestSkillBuild } from "./lib/skills";
 import { parseSteamInput, parseVanityName } from "./lib/steamId";
-import { useAsyncTask, useSettle } from "./hooks";
+import { useSettle } from "./hooks";
 import { CommunityRow } from "./components/CommunityRow";
 import { ExportPanel } from "./components/ExportPanel";
 import { EconomyPanel, type LastGameFarm } from "./components/EconomyPanel";
 import { GuideModal } from "./components/GuideModal";
 import { LabModal } from "./components/LabModal";
 import { MatchModal } from "./components/MatchModal";
-import { getWpStats, type WpStats } from "./api/wpStats";
+import { wpStatsQueryOptions, type WpStats } from "./api/wpStats";
 import { CounterAddRow, ItemRow } from "./components/ItemRow";
 import { CAN_HOVER } from "./components/usePinnablePopover";
 import {
@@ -95,25 +94,18 @@ import {
   SkillOrder,
 } from "./components/panels";
 import type {
-  Ability,
   ArchetypeKey,
-  ArchetypeSet,
   BuildItem,
   BuildPhase,
-  CommunityBuild,
   ItemCounters,
   ItemRef,
   Hero,
-  HeroBuildStatRow,
-  HeroCounterRow,
   HeroLadderStat,
   ImbueTarget,
   ItemStat,
   Patch,
   PlayerHeroStat,
-  Item,
   MatchHistoryRow,
-  SkillBuild,
 } from "./types";
 
 const COUNTER_ADDS_PER_PHASE = 3; // cap on counter-only picks folded into a phase's swaps
@@ -122,6 +114,11 @@ const COUNTER_ADDS_PER_PHASE = 3; // cap on counter-only picks folded into a pha
  * Economy panel (souls/min as its headline; last hits / jungle / denies replaced by the real
  * per-source breakdown), so what's left here is staying alive and what you do in a fight. */
 const COMBAT_KEYS = new Set(["deaths", "player_damage_per_min", "accuracy"]);
+
+// Stable empty fallbacks for asset queries that haven't resolved — fresh [] per render would
+// re-fire every effect and memo that lists them as a dep.
+const NO_HEROES: Hero[] = [];
+const NO_PATCHES: Patch[] = [];
 
 /** The core pick a counter item should swap in for: the weakest same-slot core item for this
  * comp (lowest comp-aware score) — the one to drop to make room. */
@@ -211,11 +208,11 @@ function priorWindowFor(patches: Patch[], idx: number): TimeWindow {
   };
 }
 
-export default function App() {
+function AppInner() {
   // Selection parsed once from the URL on first load (a deep link), via a lazy initializer so it's
-  // computed a single time and stays stable. Consumed by the asset-load and build effects below as
-  // the data each field needs arrives, then the URL flips to a write-only mirror of state (see the
-  // replaceState effect).
+  // computed a single time and stays stable. Consumed by the deep-link effect and the first build
+  // as the data each field needs arrives, then the URL flips to a write-only mirror of state (see
+  // the replaceState effect).
   const [url0] = useState<UrlState>(() =>
     decodeUrlState(window.location.search),
   );
@@ -223,9 +220,27 @@ export default function App() {
   // after that, switching hero falls back to the best-win-rate archetype as usual.
   const urlArchApplied = useRef(false);
 
-  const [heroes, setHeroes] = useState<Hero[]>([]);
-  const [items, setItems] = useState<Map<number, Item> | null>(null);
-  const [patches, setPatches] = useState<Patch[]>([]);
+  // ---- Assets (persisted queries; see api/deadlock.ts + queryClient.ts) ----
+  const heroesQ = useQuery(heroesQueryOptions);
+  const itemListQ = useQuery(itemListQueryOptions);
+  const patchesQ = useQuery(patchesQueryOptions);
+  const abilitiesQ = useQuery(abilityListQueryOptions);
+  const heroes = heroesQ.data ?? NO_HEROES;
+  const patches = patchesQ.data ?? NO_PATCHES;
+  const items = useMemo(
+    () =>
+      itemListQ.data ? new Map(itemListQ.data.map((i) => [i.id, i])) : null,
+    [itemListQ.data],
+  );
+  const abilities = useMemo(
+    () =>
+      abilitiesQ.data ? new Map(abilitiesQ.data.map((a) => [a.id, a])) : null,
+    [abilitiesQ.data],
+  );
+  // Restored-from-storage patches count as ready; only a truly cold load holds the
+  // patch-windowed queries below until the feed answers (or degrades to []).
+  const patchesReady = !patchesQ.isPending;
+
   const [heroId, setHeroId] = useState<number | null>(null);
   // Whether the player chose a hero deliberately (deep link or any click). Until then the
   // profile's most-played hero makes a better default than the alphabetical first (Abrams) —
@@ -246,22 +261,7 @@ export default function App() {
   const [backfillOn, setBackfillOn] = useState<boolean>(url0.backfill ?? true);
   const [enemies, setEnemies] = useState<number[]>([]);
 
-  const [archetypeSet, setArchetypeSet] = useState<ArchetypeSet | null>(null);
   const [archKey, setArchKey] = useState<ArchetypeKey>("all");
-  const [counterMatrix, setCounterMatrix] = useState<HeroCounterRow[] | null>(
-    null,
-  );
-  const [abilities, setAbilities] = useState<Map<number, Ability> | null>(null);
-  const [skillBuild, setSkillBuild] = useState<SkillBuild | null>(null);
-  const [counters, setCounters] = useState<ItemCounters[] | null>(null);
-  const [compEdges, setCompEdges] = useState<Map<number, CompEdge> | null>(
-    null,
-  );
-  const [community, setCommunity] = useState<{
-    builds: CommunityBuild[];
-    stats: HeroBuildStatRow[];
-  } | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
   const [showLab, setShowLab] = useState(false);
   const [showMatch, setShowMatch] = useState(false);
@@ -270,19 +270,9 @@ export default function App() {
   const [matchAutoLatest, setMatchAutoLatest] = useState(false);
   // The nightly wp-stats bake (18KB, static): roster-wide purchase context per item (backs the
   // win-more/comeback tags), per-hero closing power (annotates the your-heroes chips), and the
-  // WP-vs-lead surface (the "typical lead ≈ X% win" note on each phase). Fail-soft: without it
-  // the page renders exactly as before.
-  const [wpStats, setWpStats] = useState<WpStats | null>(null);
-  useEffect(() => {
-    let live = true;
-    getWpStats().then(
-      (s) => live && setWpStats(s),
-      () => {},
-    );
-    return () => {
-      live = false;
-    };
-  }, []);
+  // WP-vs-lead surface (the "typical lead ≈ X% win" note on each phase). Fail-soft: its query
+  // error is deliberately not surfaced — without it the page renders exactly as before.
+  const wpStats = useQuery(wpStatsQueryOptions).data ?? null;
   const labItems = useMemo(
     () =>
       wpStats &&
@@ -309,17 +299,6 @@ export default function App() {
     [wpStats],
   );
   const [showExport, setShowExport] = useState(false);
-  // Share of the build's win-rate evidence borrowed from the pre-patch window (see lib/patchBlend):
-  // ~0.85 the day after a patch, fading to ~0 as the patch matures. Surfaced in the meta line so
-  // "is this build trustworthy yet?" is a number, not a vibe.
-  const [backfill, setBackfill] = useState<number | null>(null);
-  // "What changed this patch" — FDR-gated movers from the two item-stats windows the backfill
-  // already fetches (needs both, so only computed while backfill is on).
-  const [movers, setMovers] = useState<PatchMover[] | null>(null);
-  // "Emerging meta" — items the player base is moving toward this patch (rising pick rate), split
-  // into breakouts (rising *and* winning) and hype (rising but not paying off). Same two windows as
-  // the WR movers, so no extra queries.
-  const [adoption, setAdoption] = useState<AdoptionMover[] | null>(null);
 
   // Steam identity — the single source shared by the header profile control and the export panel
   // (author stamp), persisted locally. Accepts an account id, a steamID64, or a profile URL
@@ -332,39 +311,6 @@ export default function App() {
   const [steamMatches, setSteamMatches] = useState<SteamPlayerMatch[] | null>(
     null,
   );
-  // The profile's most-played-hero pool (recency-gated in the fetch effect, where wall-clock time
-  // is legal), joined with ladder meta in a memo below.
-  const [heroPool, setHeroPool] = useState<Array<{
-    hero: Hero;
-    matches: number;
-    wins: number;
-  }> | null>(null);
-  // Heroes the profile already plays meaningfully — the exclusion set for "worth picking up".
-  const [playedHeroIds, setPlayedHeroIds] = useState<Set<number> | null>(null);
-  // Every hero's blended ladder win rate at the selected rank/patch — the "meta strength" half of
-  // the what-to-queue ordering on the your-heroes row. Only fetched when a profile is set.
-  const [heroMeta, setHeroMeta] = useState<Map<
-    number,
-    { winRate: number; decided: number }
-  > | null>(null);
-  // "Your fundamentals" benchmark rows (lib/fundamentals) — your recent games on this hero placed
-  // on the selected ladder's percentile distributions. heroScoped=false ⇒ too few recent games on
-  // this hero, so the account's all-hero history stands in (still your fundamentals, less specific).
-  // `window` records what was actually measured, so the card can say so.
-  const [fundamentals, setFundamentals] = useState<{
-    rows: FundamentalRow[];
-    heroScoped: boolean;
-    window: RecentWindow | null;
-    /** The rank being benchmarked against — the climb target, one tier up. */
-    benchmarkLabel: string;
-  } | null>(null);
-  // Your last game on this hero, overlaid on the Economy card as a per-source rate. Null unless
-  // you're linked and that game is ingested — the card is population-only otherwise.
-  const [lastGameFarm, setLastGameFarm] = useState<LastGameFarm | null>(null);
-  // The match id of your most recent game on the SELECTED hero, or null if you've never played it.
-  // Separate from lastGameFarm: that one also needs the match to be ingested and the rank baked,
-  // whereas this only needs the game to exist — it's what "analyze your last <hero> game" opens.
-  const [lastHeroMatchId, setLastHeroMatchId] = useState<number | null>(null);
   // How many recent games the fundamentals card reads. Scoping by *games* (not days) is what keeps a
   // long break out of the average — see lib/fundamentals.recentWindow. Default small: right after a
   // session you want your *current* form, not an average dragged back weeks.
@@ -374,8 +320,6 @@ export default function App() {
   const tierTouched = useRef(
     url0.tier !== undefined || url0.band !== undefined,
   );
-  // The profile's current tier, kept so the dropdown can offer its "around my rank" band option.
-  const [profileTier, setProfileTier] = useState<number | null>(null);
   // One-time cue when a Steam profile silently re-slices the data: the auto-selected band's label,
   // shown as a note under the Rank control (friend feedback: the rank flip read as "Steam ID changes
   // the items"). Cleared on a deliberate rank pick or a profile change; also fades out via CSS.
@@ -399,35 +343,45 @@ export default function App() {
     return () => clearTimeout(t);
   }, [steamId]);
 
-  // Load assets once, then apply any deep-link selection now that we can resolve slugs/timestamps.
+  // Apply any deep-link selection once the assets can resolve slugs/timestamps. (The queries
+  // themselves need no kickoff — mounting them starts the fetches, cached-first.)
+  const deepLinkApplied = useRef(false);
   useEffect(() => {
-    Promise.all([getHeroes(), getItems(), getPatches(), getAbilities()])
-      .then(([h, i, p, a]) => {
-        setHeroes(h);
-        setItems(i);
-        setPatches(p);
-        setAbilities(a);
-        if (h.length) {
-          const idBySlug = new Map(h.map((x) => [slugify(x.name), x.id]));
-          const linked = url0.hero ? idBySlug.get(url0.hero) : undefined;
-          if (linked) heroTouched.current = true; // a deep-linked hero is a deliberate choice
-          setHeroId(linked || h[0].id);
-          if (url0.enemies?.length) {
-            const ids = url0.enemies
-              .map((s) => idBySlug.get(s))
-              .filter((id): id is number => id !== undefined);
-            if (ids.length) setEnemies(ids);
-          }
-        }
-        if (url0.patchTs !== undefined) {
-          const idx = p.findIndex((pt) => pt.ts === url0.patchTs);
-          if (idx >= 0) setPatchIdx(idx);
-        }
-      })
-      .catch((e) => setError(friendlyError(e)));
-    // url0 is a stable ref value, read once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (deepLinkApplied.current) return;
+    if (!heroesQ.data || !itemListQ.data || !patchesQ.data || !abilitiesQ.data)
+      return;
+    // A restored-but-stale patch list may still be refreshing; resolving a deep link's patchTs
+    // against it could land on an index the fresh list is about to shift. Wait it out.
+    if (url0.patchTs !== undefined && patchesQ.isFetching) return;
+    deepLinkApplied.current = true;
+    const h = heroesQ.data;
+    if (h.length) {
+      const idBySlug = new Map(h.map((x) => [slugify(x.name), x.id]));
+      const linked = url0.hero ? idBySlug.get(url0.hero) : undefined;
+      if (linked) heroTouched.current = true; // a deep-linked hero is a deliberate choice
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing the resolved deep link into selection state
+      setHeroId(linked || h[0].id);
+      if (url0.enemies?.length) {
+        const ids = url0.enemies
+          .map((s) => idBySlug.get(s))
+          .filter((id): id is number => id !== undefined);
+
+        if (ids.length) setEnemies(ids);
+      }
+    }
+    if (url0.patchTs !== undefined) {
+      const idx = patchesQ.data.findIndex((pt) => pt.ts === url0.patchTs);
+
+      if (idx >= 0) setPatchIdx(idx);
+    }
+  }, [
+    heroesQ.data,
+    itemListQ.data,
+    patchesQ.data,
+    abilitiesQ.data,
+    patchesQ.isFetching,
+    url0,
+  ]);
 
   const hero = useMemo(
     () => heroes.find((h) => h.id === heroId) ?? null,
@@ -444,18 +398,82 @@ export default function App() {
         : null,
     [hero, wpStats, rankSel],
   );
-  // The Economy panel owns the soul story now, so souls/min is its headline rather than a combat row.
-  // last_hits / neutral_damage / denies aren't displayed anywhere any more — the per-source breakdown
-  // says the same thing with real soul numbers instead of the metrics endpoint's damage proxies — but
-  // they stay in `fundamentals.rows` so climbAdvice can still raise farm tips from them.
-  const soulsPerMinRow =
-    fundamentals?.rows.find((r) => r.key === "net_worth_per_min") ?? null;
-  const combatRows =
-    fundamentals?.rows.filter((r) => COMBAT_KEYS.has(r.key)) ?? [];
   // Numeric anchor for rank-scaled heuristics (the new-hero learning tax): the floor tier, or a
   // band's midpoint.
   const tierAnchor =
     typeof rankSel === "number" ? rankSel : (rankSel.lo + rankSel.hi) / 2;
+
+  // The selected patch window and its pre-patch prior — the two time slices every windowed query
+  // below keys on. Memoized so query keys stay referentially honest across renders.
+  const dataWindow = useMemo(
+    () => windowFor(patches, patchIdx),
+    [patches, patchIdx],
+  );
+  const priorWin = useMemo(
+    () => priorWindowFor(patches, patchIdx),
+    [patches, patchIdx],
+  );
+  // Backfill needs a patch boundary to blend across; when the patch feed is down (empty list,
+  // see patchesQueryOptions) we degrade to the plain window instead of dead-ending queries.
+  const canBackfill = backfillOn && patches.length > 0;
+  // The prior window's contribution to query keys: null when backfill is off, so toggling it
+  // re-keys (and re-fetches) exactly the queries whose results it changes.
+  const priorKey = canBackfill ? priorWin : null;
+
+  // Player profile: top heroes for the quick-pick row, and their current rank to pre-select the
+  // floor. Both fetches fail soft (bad/empty account ⇒ no row, no rank) so a typo in the id never
+  // trips the main error banner.
+  const profileQ = useQuery({
+    queryKey: ["profile", accountId],
+    enabled: accountId !== null,
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const [stats, rankTier] = await Promise.all([
+        getPlayerHeroStats(accountId!).catch(() => [] as PlayerHeroStat[]),
+        getPlayerRankTier(accountId!).catch(() => null),
+      ]);
+      // Wall-clock is only legal here (render must stay pure) — the recency gate below anchors
+      // to when the profile was fetched, which is also the more honest "now" for it.
+      return { stats, rankTier, fetchedAtS: Date.now() / 1000 };
+    },
+  });
+  const profile = accountId !== null ? (profileQ.data ?? null) : null;
+
+  // Most-played pool, gated to the last 90 days when possible — meta and rust make all-time
+  // mains a worse default; fall back to all-time when the account's been away.
+  const heroPool = useMemo(() => {
+    if (!profile || heroes.length === 0) return null;
+    const RECENT_S = 90 * 86400;
+    const nowS = profile.fetchedAtS;
+    const withHero = profile.stats
+      .map((s) => ({ s, hero: heroes.find((h) => h.id === s.hero_id) }))
+      .filter(
+        (x): x is { s: PlayerHeroStat; hero: Hero } => x.hero !== undefined,
+      );
+    const recent = withHero.filter((x) => nowS - x.s.last_played < RECENT_S);
+    return (recent.length >= 3 ? recent : withHero)
+      .sort((a, b) => b.s.matches_played - a.s.matches_played)
+      .slice(0, 6)
+      .map((x) => ({
+        hero: x.hero,
+        matches: x.s.matches_played,
+        wins: x.s.wins,
+      }));
+  }, [profile, heroes]);
+  // Heroes the profile already plays meaningfully — the exclusion set for "worth picking up".
+  const playedHeroIds = useMemo(
+    () =>
+      profile
+        ? new Set(
+            profile.stats
+              .filter((s) => s.matches_played >= 10)
+              .map((s) => s.hero_id),
+          )
+        : null,
+    [profile],
+  );
+  // The profile's current tier, kept so the dropdown can offer its "around my rank" band option.
+  const profileTier = profile?.rankTier ?? null;
   // The band the Rank dropdown offers: the active one (a shared link's band survives even without
   // a matching profile), else the profile's own. No profile and no band ⇒ the option is hidden.
   const bandChoice =
@@ -465,86 +483,44 @@ export default function App() {
         ? bandForTier(profileTier)
         : null;
 
-  // Player profile: top heroes for the quick-pick row, and their current rank to pre-select the
-  // floor. Both fetches fail soft (bad/empty account ⇒ no row, no rank) so a typo in the id never
-  // trips the main error banner.
-  const profileLoading = useAsyncTask(
-    async (signal) => {
-      if (!accountId || heroes.length === 0) {
-        setHeroPool(null);
-        setPlayedHeroIds(null);
-        setRankAutoSet(null);
-        return;
-      }
-      const [stats, rankTier] = await Promise.all([
-        getPlayerHeroStats(accountId).catch(() => []),
-        getPlayerRankTier(accountId).catch(() => null),
-      ]);
-      if (signal.aborted) return;
-      // Most-played pool, gated to the last 90 days when possible — meta and rust make all-time
-      // mains a worse default; fall back to all-time when the account's been away.
-      const RECENT_S = 90 * 86400;
-      const nowS = Date.now() / 1000;
-      const withHero = stats
-        .map((s) => ({ s, hero: heroes.find((h) => h.id === s.hero_id) }))
-        .filter(
-          (x): x is { s: PlayerHeroStat; hero: Hero } => x.hero !== undefined,
-        );
-      const recent = withHero.filter((x) => nowS - x.s.last_played < RECENT_S);
-      const pool = (recent.length >= 3 ? recent : withHero)
-        .sort((a, b) => b.s.matches_played - a.s.matches_played)
-        .slice(0, 6)
-        .map((x) => ({
-          hero: x.hero,
-          matches: x.s.matches_played,
-          wins: x.s.wins,
-        }));
-      setHeroPool(pool);
-      // Until the player picks a hero deliberately, their most-played hero is the honest default —
-      // nobody wants to realize mid-match they've been reading Abrams numbers on another hero.
-      if (!heroTouched.current && pool[0]) setHeroId(pool[0].hero.id);
-      setPlayedHeroIds(
-        new Set(
-          stats.filter((s) => s.matches_played >= 10).map((s) => s.hero_id),
-        ),
-      );
-      setProfileTier(rankTier);
-      // Pre-select the profile's band, not a floor: match volume piles up at high-mid ranks, so a
-      // below-the-mode floor is dominated by games well above the player — the capped band is
-      // their actual neighborhood, tilted one rank into the climb.
-      if (!tierTouched.current && rankTier !== null) {
-        const band = bandForTier(rankTier);
-        setRankSel(band);
-        setRankAutoSet(rankSelLabel(band));
-      } else setRankAutoSet(null);
-    },
-    [accountId, heroes],
-    setError,
-  );
+  // Sync the profile's defaults into the selection — most-played hero until one is picked
+  // deliberately, and the profile's band, not a floor: match volume piles up at high-mid ranks,
+  // so a below-the-mode floor is dominated by games well above the player — the capped band is
+  // their actual neighborhood, tilted one rank into the climb.
+  useEffect(() => {
+    if (!profile) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- profile cleared; drop its cue
+      setRankAutoSet(null);
+      return;
+    }
+    if (!heroTouched.current && heroPool?.[0]) {
+      setHeroId(heroPool[0].hero.id);
+    }
+    if (!tierTouched.current && profile.rankTier !== null) {
+      const band = bandForTier(profile.rankTier);
+
+      setRankSel(band);
+
+      setRankAutoSet(rankSelLabel(band));
+    } else {
+      setRankAutoSet(null);
+    }
+  }, [profile, heroPool]);
 
   // Ladder-wide hero win rates for the selected rank/patch, backfilled on a young patch exactly
   // like items are — hero rows quack enough like ItemStat that the same power-prior blend applies.
-  const heroMetaLoading = useAsyncTask(
-    async (signal) => {
-      if (!accountId || !items) {
-        // `items` is just the assets-resolved marker here — by then the patch feed has loaded or
-        // degraded to [], so the query below runs windowed or patch-less, never twice.
-        setHeroMeta(null);
-        return;
-      }
-      const canBackfill = backfillOn && patches.length > 0;
-      const window = windowFor(patches, patchIdx);
+  const heroMetaQ = useQuery({
+    queryKey: ["heroMeta", { minBadge, maxBadge }, dataWindow, priorKey],
+    // Only wanted once a profile is set — but keyed rank/patch-only, so it's shared across accounts.
+    enabled: accountId !== null && !!items && patchesReady,
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
       const [f, q] = await Promise.all([
-        getHeroLadderStats({ minBadge, maxBadge, ...window }),
+        getHeroLadderStats({ minBadge, maxBadge, ...dataWindow }),
         canBackfill
-          ? getHeroLadderStats({
-              minBadge,
-              maxBadge,
-              ...priorWindowFor(patches, patchIdx),
-            })
-          : Promise.resolve([]),
+          ? getHeroLadderStats({ minBadge, maxBadge, ...priorWin })
+          : Promise.resolve([] as HeroLadderStat[]),
       ]);
-      if (signal.aborted) return;
       const toItemStat = (r: HeroLadderStat): ItemStat => ({
         item_id: r.hero_id,
         wins: r.wins,
@@ -558,21 +534,18 @@ export default function App() {
         q.length > 0
           ? blendItemStats(f.map(toItemStat), q.map(toItemStat)).stats
           : f.map(toItemStat);
-      setHeroMeta(
-        new Map(
-          rows.map((r) => {
-            const n = r.wins + r.losses;
-            return [
-              r.item_id,
-              { winRate: n > 0 ? r.wins / n : 0.5, decided: n },
-            ];
-          }),
-        ),
+      return new Map(
+        rows.map((r) => {
+          const n = r.wins + r.losses;
+          return [
+            r.item_id,
+            { winRate: n > 0 ? r.wins / n : 0.5, decided: n },
+          ] as const;
+        }),
       );
     },
-    [accountId, items, minBadge, maxBadge, patchIdx, patches, backfillOn],
-    setError,
-  );
+  });
+  const heroMeta = accountId !== null ? (heroMetaQ.data ?? null) : null;
 
   // The your-heroes row, what-to-queue ordered. Pool = your most-played heroes, gated to the last
   // 90 days when possible (meta and rust make all-time mains a worse default). Each gets an
@@ -629,29 +602,32 @@ export default function App() {
   // actually separate ranks are farm and deaths (see lib/fundamentals), so this is the "what do I
   // fix to climb" card. The ladder slice spans the pre-patch month too when backfill is on — the
   // distributions drift slowly and a day-one window alone is too thin to grid percentiles from.
-  const fundamentalsLoading = useAsyncTask(
-    async (signal) => {
-      if (!accountId || !hero) {
-        setFundamentals(null);
-        return;
-      }
-      const window = windowFor(patches, patchIdx);
-      const ladderWindow =
-        backfillOn && patches.length > 0
-          ? {
-              minUnixTimestamp: priorWindowFor(patches, patchIdx)
-                .minUnixTimestamp,
-              maxUnixTimestamp: window.maxUnixTimestamp,
-            }
-          : window;
+  const fundamentalsQ = useQuery({
+    queryKey: [
+      "fundamentals",
+      accountId,
+      heroId,
+      rankSel,
+      dataWindow,
+      priorKey,
+      recentGames,
+    ],
+    enabled: accountId !== null && !!hero,
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const ladderWindow = canBackfill
+        ? {
+            minUnixTimestamp: priorWin.minUnixTimestamp,
+            maxUnixTimestamp: dataWindow.maxUnixTimestamp,
+          }
+        : dataWindow;
       // Scope MY side to my last N games on this hero. Without this the metrics endpoint applies its
       // own default (last 30 days), which on an occasionally-played hero is two or three games — and
       // for a player returning from a break it would happily average in a year-old version of them.
-      const history = await getPlayerMatchHistory(accountId).catch(
+      const history = await getPlayerMatchHistory(accountId!).catch(
         () => [] as MatchHistoryRow[],
       );
-      if (signal.aborted) return;
-      const heroWin = recentWindow(history, hero.id, recentGames);
+      const heroWin = recentWindow(history, hero!.id, recentGames);
 
       // Benchmark against the rank you're CLIMBING TO (one tier up), not your own peers — the card
       // answers "how do I rank up", and your own-rank players are where you already are.
@@ -664,17 +640,16 @@ export default function App() {
 
       const [me, ladder] = await Promise.all([
         getPlayerMetrics({
-          accountIds: [accountId],
-          heroId: hero.id,
+          accountIds: [accountId!],
+          heroId: hero!.id,
           ...(heroWin ? { minUnixTimestamp: heroWin.minUnixTimestamp } : {}),
         }).catch(() => ({})),
         getPlayerMetrics({
-          heroId: hero.id,
+          heroId: hero!.id,
           ...climbBadges,
           ...ladderWindow,
         }).catch(() => ({})),
       ]);
-      if (signal.aborted) return;
       let rows = heroWin ? fundamentalsRows(me, ladder) : [];
       let heroScoped = true;
       let usedWindow = heroWin;
@@ -682,84 +657,108 @@ export default function App() {
         // Too few recent games on this hero — benchmark the account's recent all-hero play instead.
         const allWin = recentWindow(history, null, recentGames);
         const meAll = await getPlayerMetrics({
-          accountIds: [accountId],
+          accountIds: [accountId!],
           ...(allWin ? { minUnixTimestamp: allWin.minUnixTimestamp } : {}),
         }).catch(() => ({}));
-        if (signal.aborted) return;
         rows = fundamentalsRows(meAll, ladder);
         heroScoped = false;
         usedWindow = allWin;
       }
-      setFundamentals(
-        rows.length
-          ? { rows, heroScoped, window: usedWindow, benchmarkLabel }
-          : null,
-      );
+      // "Your fundamentals" benchmark rows (lib/fundamentals) — your recent games on this hero
+      // placed on the selected ladder's percentile distributions. heroScoped=false ⇒ too few recent
+      // games on this hero, so the account's all-hero history stands in. `window` records what was
+      // actually measured, so the card can say so; `benchmarkLabel` is the climb target, one tier up.
+      return rows.length
+        ? { rows, heroScoped, window: usedWindow, benchmarkLabel }
+        : null;
     },
-    [accountId, hero, rankSel, patchIdx, patches, backfillOn, recentGames],
-    setError,
-  );
+  });
+  const fundamentals =
+    accountId !== null && hero ? (fundamentalsQ.data ?? null) : null;
+
+  // The Economy panel owns the soul story now, so souls/min is its headline rather than a combat row.
+  // last_hits / neutral_damage / denies aren't displayed anywhere any more — the per-source breakdown
+  // says the same thing with real soul numbers instead of the metrics endpoint's damage proxies — but
+  // they stay in `fundamentals.rows` so climbAdvice can still raise farm tips from them.
+  const soulsPerMinRow =
+    fundamentals?.rows.find((r) => r.key === "net_worth_per_min") ?? null;
+  const combatRows =
+    fundamentals?.rows.filter((r) => COMBAT_KEYS.has(r.key)) ?? [];
 
   // Last-game overlay for the Soul income card: your most recent game on this hero, its per-source
   // souls placed on the same population grid the card shows. Cached-first (getMatchMetadata never
   // spends Steam budget here) and fully best-effort — a not-yet-ingested game, a missing account, or
   // a hero/rank without baked norms all just leave the card population-only.
-  useAsyncTask(
-    async (signal) => {
-      if (!accountId || !hero) {
-        setLastGameFarm(null);
-        setLastHeroMatchId(null);
-        return;
-      }
-      const history = await getPlayerMatchHistory(accountId).catch(
+  const lastGameQ = useQuery({
+    queryKey: [
+      "lastGame",
+      accountId,
+      heroId,
+      tierOf(rankSel),
+      wpStats?.generatedAt ?? null,
+    ],
+    enabled: accountId !== null && !!hero,
+    placeholderData: keepPreviousData,
+    queryFn: async (): Promise<{
+      farm: LastGameFarm | null;
+      matchId: number | null;
+    }> => {
+      const history = await getPlayerMatchHistory(accountId!).catch(
         () => [] as MatchHistoryRow[],
       );
-      if (signal.aborted) return;
       // History is newest-first, so the first match on this hero is the latest one.
-      const last = history.find((r) => r.hero_id === hero.id);
-      setLastHeroMatchId(last?.match_id ?? null);
-      if (!last || !wpStats) {
-        setLastGameFarm(null);
-        return;
-      }
+      const last = history.find((r) => r.hero_id === hero!.id);
+      const matchId = last?.match_id ?? null;
+      if (!last || !wpStats) return { farm: null, matchId };
       // Cached-first: 404 (not ingested yet) throws and we simply show no overlay.
       const match = await getMatchMetadata(last.match_id).catch(() => null);
-      if (signal.aborted) return;
       const focus = match?.players.find((p) => p.account_id === accountId);
-      if (!match || !focus) {
-        setLastGameFarm(null);
-        return;
-      }
+      if (!match || !focus) return { farm: null, matchId };
       const rows = benchmarkEconomy(
         economyRows(focus, match.duration_s),
-        hero.id,
+        hero!.id,
         tierOf(rankSel),
         wpStats,
       );
-      setLastGameFarm({
-        won: match.winning_team === focus.team,
-        bySrc: new Map(
-          rows.map((r) => [
-            r.key,
-            { perMin: r.perMin, percentile: r.percentile },
-          ]),
-        ),
-      });
+      return {
+        farm: {
+          won: match.winning_team === focus.team,
+          bySrc: new Map(
+            rows.map((r) => [
+              r.key,
+              { perMin: r.perMin, percentile: r.percentile },
+            ]),
+          ),
+        },
+        matchId,
+      };
     },
-    [accountId, hero, rankSel, wpStats],
-    setError,
-  );
+  });
+  // Your last game on this hero, overlaid on the Economy card as a per-source rate. Null unless
+  // you're linked and that game is ingested — the card is population-only otherwise.
+  const lastGameFarm =
+    accountId !== null && hero ? (lastGameQ.data?.farm ?? null) : null;
+  // The match id of your most recent game on the SELECTED hero, or null if you've never played it.
+  // Separate from lastGameFarm: that one also needs the match to be ingested and the rank baked,
+  // whereas this only needs the game to exist — it's what "analyze your last <hero> game" opens.
+  const lastHeroMatchId =
+    accountId !== null && hero ? (lastGameQ.data?.matchId ?? null) : null;
 
   // Generate builds, split by archetype for flex heroes.
-  const loading = useAsyncTask(
-    async (signal) => {
-      if (!hero || !items) return;
-      setError(null);
-      const window = windowFor(patches, patchIdx);
-      const priorWindow = priorWindowFor(patches, patchIdx);
-      // Backfill needs a patch boundary to blend across; when the patch feed is down (empty list,
-      // see getPatches) we degrade to the plain window instead of dead-ending the whole build.
-      const canBackfill = backfillOn && patches.length > 0;
+  const buildQ = useQuery({
+    queryKey: [
+      "build",
+      heroId,
+      { minBadge, maxBadge },
+      rankLabel,
+      dataWindow,
+      priorKey,
+    ],
+    enabled: !!hero && !!items,
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const h = hero!;
+      const itemMap = items!;
       // With backfill on (default), every flow is fetched twice — the selected patch and the month
       // before it — and blended (lib/patchBlend): the pre-patch window backfills a young patch as a
       // capped, drift-discounted prior, so a day-one build is complete instead of starved by the
@@ -771,26 +770,26 @@ export default function App() {
         canBackfill
           ? Promise.all([
               getItemFlowStats({
-                heroId: hero.id,
+                heroId: h.id,
                 minBadge,
                 maxBadge,
-                ...window,
+                ...dataWindow,
                 minMatches: 10,
                 includeItemIds,
               }),
               getItemFlowStats({
-                heroId: hero.id,
+                heroId: h.id,
                 minBadge,
                 maxBadge,
-                ...priorWindow,
+                ...priorWin,
                 includeItemIds,
               }),
             ]).then(([f, q]) => blendFlow(f, q))
           : getItemFlowStats({
-              heroId: hero.id,
+              heroId: h.id,
               minBadge,
               maxBadge,
-              ...window,
+              ...dataWindow,
               includeItemIds,
             }).then((f) => ({
               flow: f,
@@ -810,37 +809,37 @@ export default function App() {
       const [baseBlend, statsFresh, statsPrior, permRows] = await Promise.all([
         flowFor(),
         getItemStats({
-          heroId: hero.id,
+          heroId: h.id,
           minBadge,
           maxBadge,
-          ...window,
+          ...dataWindow,
           ...(canBackfill ? { minMatches: 5 } : {}),
         }),
         canBackfill
           ? getItemStats({
-              heroId: hero.id,
+              heroId: h.id,
               minBadge,
               maxBadge,
-              ...priorWindow,
+              ...priorWin,
             })
-          : Promise.resolve([]),
+          : Promise.resolve([] as ItemStat[]),
         getItemPermutationStats({
-          heroId: hero.id,
+          heroId: h.id,
           minBadge,
           maxBadge,
           ...(canBackfill
             ? {
-                minUnixTimestamp: priorWindow.minUnixTimestamp,
-                maxUnixTimestamp: window.maxUnixTimestamp,
+                minUnixTimestamp: priorWin.minUnixTimestamp,
+                maxUnixTimestamp: dataWindow.maxUnixTimestamp,
               }
-            : window),
+            : dataWindow),
         }).catch(() => null),
       ]);
       const base = baseBlend.flow;
       // Movers compare the RAW windows (blending them first would test the prior against itself).
-      setMovers(
-        canBackfill ? findPatchMovers(statsFresh, statsPrior, items) : null,
-      );
+      const movers = canBackfill
+        ? findPatchMovers(statsFresh, statsPrior, itemMap)
+        : null;
       const BUY_TIME_MIN_MATCHES = 40;
       const timeStats = new Map(statsPrior.map((s) => [s.item_id, s]));
       for (const s of statsFresh)
@@ -858,19 +857,19 @@ export default function App() {
       // items that reinforce the build; absent pairs ⇒ the build ranks on win rate alone (unchanged).
       const decided = base.baseline.wins + base.baseline.losses;
       const baseline = decided > 0 ? base.baseline.wins / decided : 0.5;
-      // Adoption movers reuse the same raw windows + the honest per-window game totals from the blend.
-      setAdoption(
-        canBackfill
-          ? findAdoptionMovers(
-              statsFresh,
-              statsPrior,
-              baseBlend.freshGames,
-              baseBlend.priorGames,
-              baseline,
-              items,
-            )
-          : null,
-      );
+      // Adoption movers reuse the same raw windows + the honest per-window game totals from the blend:
+      // items the player base is moving toward this patch (rising pick rate), split into breakouts
+      // (rising *and* winning) and hype (rising but not paying off).
+      const adoption = canBackfill
+        ? findAdoptionMovers(
+            statsFresh,
+            statsPrior,
+            baseBlend.freshGames,
+            baseBlend.priorGames,
+            baseline,
+            itemMap,
+          )
+        : null;
       const synergyOf = permRows
         ? buildSynergyLookup(permRows, singleRecordsFromFlow(base), baseline)
         : undefined;
@@ -882,53 +881,59 @@ export default function App() {
 
       // Condition on each archetype's signature item. The gun/spirit overlap (for the
       // flex/hybrid decision) is read out of the gun flow itself, so no extra query.
-      const sig = pickSignatures(base, items);
+      const sig = pickSignatures(base, itemMap);
       const [gunBlend, spiritBlend] = await Promise.all([
         sig.gun ? flowFor([sig.gun]) : Promise.resolve(undefined),
         sig.spirit ? flowFor([sig.spirit]) : Promise.resolve(undefined),
       ]);
-      if (signal.aborted) return;
       const gun = gunBlend?.flow;
       const spirit = spiritBlend?.flow;
-      setBackfill(canBackfill ? baseBlend.borrowedShare : null);
 
       const set = assembleArchetypes(
-        hero,
+        h,
         rankLabel,
-        items,
+        itemMap,
         buyTimes,
         sellTimes,
         { all: base, gun, spirit },
         sig,
         { synergyOf, jointGamesOf },
       );
-      setArchetypeSet(set);
-      // Honor a deep-linked archetype on the first build only; otherwise default to best win rate.
-      const linked = url0.build;
-      if (
-        !urlArchApplied.current &&
-        linked &&
-        set.archetypes.some((x) => x.key === linked)
-      ) {
-        setArchKey(linked as ArchetypeKey);
-      } else {
-        setArchKey(set.archetypes[0].key); // best win rate (or "all")
-      }
-      urlArchApplied.current = true;
+      // Share of the build's win-rate evidence borrowed from the pre-patch window (see
+      // lib/patchBlend): ~0.85 the day after a patch, fading to ~0 as the patch matures.
+      // Surfaced in the meta line so "is this build trustworthy yet?" is a number, not a vibe.
+      return {
+        set,
+        movers,
+        adoption,
+        backfillShare: canBackfill ? baseBlend.borrowedShare : null,
+      };
     },
-    [
-      hero,
-      items,
-      minBadge,
-      maxBadge,
-      rankLabel,
-      patchIdx,
-      patches,
-      backfillOn,
-      url0.build,
-    ],
-    setError,
-  );
+  });
+  const archetypeSet = buildQ.data?.set ?? null;
+  // "What changed this patch" — FDR-gated movers from the two item-stats windows the backfill
+  // already fetches (needs both, so only computed while backfill is on).
+  const movers = buildQ.data?.movers ?? null;
+  const adoption = buildQ.data?.adoption ?? null;
+  const backfill = buildQ.data?.backfillShare ?? null;
+
+  // Pick the shown archetype whenever a new set bakes: the deep-linked one on the first build of
+  // the linked hero, best win rate afterwards.
+  useEffect(() => {
+    const set = buildQ.data?.set;
+    if (!set) return;
+    const linked = url0.build;
+    if (
+      !urlArchApplied.current &&
+      linked &&
+      set.archetypes.some((x) => x.key === linked)
+    ) {
+      setArchKey(linked as ArchetypeKey);
+    } else {
+      setArchKey(set.archetypes[0].key);
+    }
+    urlArchApplied.current = true;
+  }, [buildQ.data, url0.build]);
 
   const activeArchetype =
     archetypeSet?.archetypes.find((a) => a.key === archKey) ??
@@ -938,7 +943,7 @@ export default function App() {
 
   // Mirror the live selection into the URL (replaceState, so links stay shareable without spamming
   // history). Gated on a resolved hero so it can't overwrite the deep-link params before the
-  // asset-load effect above has consumed them.
+  // deep-link effect above has consumed them.
   useEffect(() => {
     if (!hero) return;
     const state: UrlState = {
@@ -966,17 +971,19 @@ export default function App() {
   }, [hero]);
 
   // Compute counters vs the chosen enemies.
-  const countersLoading = useAsyncTask(
-    async (signal) => {
-      if (!hero || !items || enemies.length === 0) {
-        setCounters(null);
-        setCompEdges(null);
-        return;
-      }
-      const canBackfill = backfillOn && patches.length > 0;
-      const window = windowFor(patches, patchIdx);
-      const priorWindow = priorWindowFor(patches, patchIdx);
-      const base = { heroId: hero.id, minBadge, maxBadge };
+  const countersQ = useQuery({
+    queryKey: [
+      "counters",
+      heroId,
+      enemies,
+      { minBadge, maxBadge },
+      dataWindow,
+      priorKey,
+    ],
+    enabled: !!hero && !!items && enemies.length > 0,
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const base = { heroId: hero!.id, minBadge, maxBadge };
 
       // One query per enemy (not a combined `any-of` query) so each item keeps a per-enemy
       // delta — that's what lets a row carry the portrait of the specific hero it answers.
@@ -989,18 +996,22 @@ export default function App() {
       const slice = (enemyHeroIds?: number[]) =>
         canBackfill
           ? Promise.all([
-              getItemStats({ ...base, ...window, minMatches: 5, enemyHeroIds }),
-              getItemStats({ ...base, ...priorWindow, enemyHeroIds }),
+              getItemStats({
+                ...base,
+                ...dataWindow,
+                minMatches: 5,
+                enemyHeroIds,
+              }),
+              getItemStats({ ...base, ...priorWin, enemyHeroIds }),
             ])
           : Promise.all([
-              getItemStats({ ...base, ...window, enemyHeroIds }),
-              Promise.resolve([]),
+              getItemStats({ ...base, ...dataWindow, enemyHeroIds }),
+              Promise.resolve([] as ItemStat[]),
             ]);
       const [basePair, ...enemyPairs] = await Promise.all([
         slice(),
         ...enemies.map((id) => slice([id])),
       ]);
-      if (signal.aborted) return;
 
       let baseStats = basePair[0];
       let perEnemy = enemyPairs.map((pair, i) => ({
@@ -1015,32 +1026,22 @@ export default function App() {
           stats: blendItemStats(pair[0], pair[1], baseBlend).stats,
         }));
       }
-      const { counters: cs, edgeByItem } = computeItemCounters(
-        baseStats,
-        perEnemy,
-        items,
-      );
-      setCounters(cs);
-      setCompEdges(edgeByItem);
+      return computeItemCounters(baseStats, perEnemy, items!);
     },
-    [hero, items, enemies, minBadge, maxBadge, patchIdx, patches, backfillOn],
-    setError,
-  );
+  });
+  const counters =
+    enemies.length > 0 ? (countersQ.data?.counters ?? null) : null;
+  const compEdges =
+    enemies.length > 0 ? (countersQ.data?.edgeByItem ?? null) : null;
 
   // The counter matrix is hero-independent, so fetch once per rank/patch and filter by hero.
-  const matrixLoading = useAsyncTask(
-    async (signal) => {
-      if (!items) return;
-      const m = await getHeroCounters({
-        minBadge,
-        maxBadge,
-        ...windowFor(patches, patchIdx),
-      });
-      if (!signal.aborted) setCounterMatrix(m);
-    },
-    [items, minBadge, maxBadge, patchIdx, patches],
-    setError,
-  );
+  const matrixQ = useQuery({
+    queryKey: ["counterMatrix", { minBadge, maxBadge }, dataWindow],
+    enabled: !!items && patchesReady,
+    placeholderData: keepPreviousData,
+    queryFn: () => getHeroCounters({ minBadge, maxBadge, ...dataWindow }),
+  });
+  const counterMatrix = matrixQ.data ?? null;
 
   const matchups = useMemo(
     () => (counterMatrix && hero ? heroMatchups(counterMatrix, hero.id) : null),
@@ -1060,14 +1061,23 @@ export default function App() {
   // Skill (ability upgrade) build, conditioned on the active archetype so gun/spirit
   // builds get their own order (they differ — and the spirit order often wins more).
   const activeSignatureId = activeArchetype?.signature?.id;
-  const skillLoading = useAsyncTask(
-    async (signal) => {
-      if (!hero) return;
+  const skillQ = useQuery({
+    queryKey: [
+      "skill",
+      heroId,
+      { minBadge, maxBadge },
+      dataWindow,
+      priorKey,
+      activeSignatureId ?? null,
+    ],
+    enabled: !!hero,
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
       const base = {
-        heroId: hero.id,
+        heroId: hero!.id,
         minBadge,
         maxBadge,
-        ...windowFor(patches, patchIdx),
+        ...dataWindow,
       };
       // Prefer the order players ran *with* this archetype's signature item — but that
       // slice is narrow, so at a high rank floor on one patch it can come back empty.
@@ -1078,54 +1088,46 @@ export default function App() {
         ...base,
         includeItemIds: activeSignatureId ? [activeSignatureId] : undefined,
       });
-      let build = bestSkillBuild(conditioned);
-      if (!build && activeSignatureId) {
-        build = bestSkillBuild(await getAbilityOrder(base));
+      let skill = bestSkillBuild(conditioned);
+      if (!skill && activeSignatureId) {
+        skill = bestSkillBuild(await getAbilityOrder(base));
       }
-      if (!build && backfillOn && patches.length > 0) {
-        build = bestSkillBuild(
+      if (!skill && canBackfill) {
+        skill = bestSkillBuild(
           await getAbilityOrder({
-            heroId: hero.id,
+            heroId: hero!.id,
             minBadge,
             maxBadge,
-            ...priorWindowFor(patches, patchIdx),
+            ...priorWin,
           }),
         );
       }
-      if (!signal.aborted) setSkillBuild(build);
+      return skill;
     },
-    [
-      hero,
-      minBadge,
-      maxBadge,
-      patchIdx,
-      patches,
-      backfillOn,
-      activeSignatureId,
-    ],
-    setError,
-  );
+  });
+  const skillBuild = skillQ.data ?? null;
 
   // Community builds + their win rate at this rank/patch. Joined and scored against the
   // generated build in a memo below, so changing the active archetype re-scores without
   // refetching.
-  const communityLoading = useAsyncTask(
-    async (signal) => {
-      if (!hero) return;
+  const communityQ = useQuery({
+    queryKey: ["community", heroId, { minBadge, maxBadge }, dataWindow],
+    enabled: !!hero,
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
       const [builds, stats] = await Promise.all([
-        getCommunityBuilds(hero.id),
+        getCommunityBuilds(hero!.id),
         getHeroBuildStats({
-          heroId: hero.id,
+          heroId: hero!.id,
           minBadge,
           maxBadge,
-          ...windowFor(patches, patchIdx),
+          ...dataWindow,
         }),
       ]);
-      if (!signal.aborted) setCommunity({ builds, stats });
+      return { builds, stats };
     },
-    [hero, minBadge, maxBadge, patchIdx, patches],
-    setError,
-  );
+  });
+  const community = communityQ.data ?? null;
 
   // Items the generated build recommends (core picks across phases) — the set we match
   // community builds against.
@@ -1187,8 +1189,8 @@ export default function App() {
       e.includes(id) ? e.filter((x) => x !== id) : [...e, id],
     );
 
-  // Empty patch list = the feed failed and getPatches degraded (see api/deadlock) — windowless
-  // queries fall back to the API's default last-30-days, so label it that way.
+  // Empty patch list = the feed failed and the patches query degraded (see api/deadlock) —
+  // windowless queries fall back to the API's default last-30-days, so label it that way.
   const patchLabel =
     patches[patchIdx]?.title ?? (patches.length ? "…" : "last 30 days");
   // "leans N% on pre-patch data" — only worth saying when the borrow is real (≥ 1%).
@@ -1273,8 +1275,38 @@ export default function App() {
     [shownBuild],
   );
   const lowPopulation = build !== null && build.population.matches < 400;
+
+  // The one error banner: the first query with a live error wins, mapped to a friendly line.
+  // Asset failures are fatal (nothing to render); the rest surface while their panels keep
+  // showing the previous data. wp-stats and the last-game overlay stay silent by design.
+  const queryError =
+    heroesQ.error ??
+    itemListQ.error ??
+    abilitiesQ.error ??
+    patchesQ.error ??
+    buildQ.error ??
+    countersQ.error ??
+    matrixQ.error ??
+    skillQ.error ??
+    communityQ.error ??
+    profileQ.error ??
+    heroMetaQ.error ??
+    fundamentalsQ.error ??
+    null;
+  const error = queryError ? friendlyError(queryError) : null;
+
+  // Loading flags for the settle veils and the header strip — straight off each query's
+  // fetching state, so a veil can't clear before its data actually lands.
+  const loading = buildQ.isFetching;
+  const countersLoading = countersQ.isFetching;
+  const skillLoading = skillQ.isFetching;
+  const communityLoading = communityQ.isFetching;
+  const matrixLoading = matrixQ.isFetching;
+  const profileLoading = profileQ.isFetching;
+  const heroMetaLoading = heroMetaQ.isFetching;
+  const fundamentalsLoading = fundamentalsQ.isFetching;
   // Any data in flight — drives the single loading strip under the header. `!items`
-  // covers the very first paint, before the assets effect has resolved.
+  // covers the very first paint, before the asset queries have resolved.
   const busy =
     loading ||
     countersLoading ||
@@ -1289,8 +1321,8 @@ export default function App() {
   // item on each action (hero/rank/patch/build-style/enemy change) and is otherwise still.
   const shuffleSeed = `${heroId}|${rankLabel}|${patchIdx}|${archKey}|${enemies.join(",")}`;
 
-  // Per-piece "developing" veils — each tracks its own query so panels settle as their
-  // data actually lands, independently of the single strip in the header. The build wears
+  // Per-piece "developing" veils — each tracks its own query's fetching state so panels settle as
+  // their data actually lands, independently of the single strip in the header. The build wears
   // the veil for its own archetype query *and* for a counters re-rank: picking an enemy
   // re-orders the build in place, so it should visibly develop into the answer too.
   const buildRef = useSettle<HTMLElement>(loading || countersLoading);
@@ -1307,7 +1339,6 @@ export default function App() {
   // scrim, developing the new numbers under the frost rather than showing a truthful face over
   // stale figures with no cue that anything is loading.
   const metaRef = useSettle<HTMLDivElement>(loading);
-
   return (
     <div className="app">
       <header className="topbar">
@@ -2089,5 +2120,20 @@ export default function App() {
         />
       )}
     </div>
+  );
+}
+
+/** Root component: the query provider around the page. PersistQueryClientProvider (rather than a
+ * plain QueryClientProvider) restores the persisted asset cache before any query fires, so a warm
+ * session paints heroes/items without a network round trip (see queryClient.ts). Wrapping here —
+ * not in main.tsx — keeps the provider with the app itself, so tests render <App /> unchanged. */
+export default function App() {
+  return (
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={persistOptions}
+    >
+      <AppInner />
+    </PersistQueryClientProvider>
   );
 }
