@@ -24,6 +24,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # The browser smoke tests (src/test/) run the real app in headless Chromium.
+      - run: npx playwright install --with-deps chromium
       - run: npm run lint
       - run: npm test
       # `npm run build` is `tsc -b && vite build`, so this also typechecks.

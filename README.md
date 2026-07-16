@@ -37,7 +37,7 @@ npm run dev      # http://localhost:5173/vibelock/
 ```
 
 ```bash
-npm test         # unit tests
+npm test         # unit + browser smoke tests (once: npx playwright install chromium)
 npm run lint
 npm run build    # also typechecks
 ```

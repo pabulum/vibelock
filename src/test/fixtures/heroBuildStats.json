@@ -1,0 +1,474 @@
+[
+  {
+    "hero_id": 1,
+    "hero_build_id": 256053,
+    "wins": 7020,
+    "losses": 7342,
+    "matches": 14362,
+    "players": 9723
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 252284,
+    "wins": 3655,
+    "losses": 4216,
+    "matches": 7871,
+    "players": 5412
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 393668,
+    "wins": 2230,
+    "losses": 2060,
+    "matches": 4290,
+    "players": 3047
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 317821,
+    "wins": 1600,
+    "losses": 1814,
+    "matches": 3414,
+    "players": 2610
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 656671,
+    "wins": 1534,
+    "losses": 1433,
+    "matches": 2967,
+    "players": 1994
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 407305,
+    "wins": 1395,
+    "losses": 1325,
+    "matches": 2720,
+    "players": 2032
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 642595,
+    "wins": 1209,
+    "losses": 1361,
+    "matches": 2570,
+    "players": 1897
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 272496,
+    "wins": 781,
+    "losses": 909,
+    "matches": 1690,
+    "players": 1211
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 376685,
+    "wins": 636,
+    "losses": 724,
+    "matches": 1360,
+    "players": 1121
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 278481,
+    "wins": 475,
+    "losses": 459,
+    "matches": 934,
+    "players": 743
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 276107,
+    "wins": 342,
+    "losses": 380,
+    "matches": 722,
+    "players": 608
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 304388,
+    "wins": 336,
+    "losses": 321,
+    "matches": 657,
+    "players": 572
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 383604,
+    "wins": 181,
+    "losses": 196,
+    "matches": 377,
+    "players": 315
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 277980,
+    "wins": 184,
+    "losses": 173,
+    "matches": 357,
+    "players": 267
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 650217,
+    "wins": 175,
+    "losses": 171,
+    "matches": 346,
+    "players": 287
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 392325,
+    "wins": 76,
+    "losses": 101,
+    "matches": 177,
+    "players": 152
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 640478,
+    "wins": 83,
+    "losses": 80,
+    "matches": 163,
+    "players": 129
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 642273,
+    "wins": 64,
+    "losses": 89,
+    "matches": 153,
+    "players": 130
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 591182,
+    "wins": 75,
+    "losses": 75,
+    "matches": 150,
+    "players": 108
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 649775,
+    "wins": 80,
+    "losses": 42,
+    "matches": 122,
+    "players": 75
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 532976,
+    "wins": 35,
+    "losses": 45,
+    "matches": 80,
+    "players": 64
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 340307,
+    "wins": 31,
+    "losses": 47,
+    "matches": 78,
+    "players": 56
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 320228,
+    "wins": 35,
+    "losses": 37,
+    "matches": 72,
+    "players": 64
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 596487,
+    "wins": 37,
+    "losses": 33,
+    "matches": 70,
+    "players": 46
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 676069,
+    "wins": 40,
+    "losses": 30,
+    "matches": 70,
+    "players": 38
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 540184,
+    "wins": 33,
+    "losses": 36,
+    "matches": 69,
+    "players": 54
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 556438,
+    "wins": 30,
+    "losses": 36,
+    "matches": 66,
+    "players": 59
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 390439,
+    "wins": 34,
+    "losses": 31,
+    "matches": 65,
+    "players": 42
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 1013,
+    "wins": 30,
+    "losses": 29,
+    "matches": 59,
+    "players": 52
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 697218,
+    "wins": 20,
+    "losses": 38,
+    "matches": 58,
+    "players": 55
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 631491,
+    "wins": 26,
+    "losses": 32,
+    "matches": 58,
+    "players": 45
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 693231,
+    "wins": 27,
+    "losses": 25,
+    "matches": 52,
+    "players": 30
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 606574,
+    "wins": 26,
+    "losses": 21,
+    "matches": 47,
+    "players": 37
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 574116,
+    "wins": 18,
+    "losses": 27,
+    "matches": 45,
+    "players": 34
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 104839,
+    "wins": 21,
+    "losses": 24,
+    "matches": 45,
+    "players": 40
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 584026,
+    "wins": 25,
+    "losses": 19,
+    "matches": 44,
+    "players": 30
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 510909,
+    "wins": 14,
+    "losses": 29,
+    "matches": 43,
+    "players": 32
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 444942,
+    "wins": 21,
+    "losses": 22,
+    "matches": 43,
+    "players": 31
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 617430,
+    "wins": 19,
+    "losses": 22,
+    "matches": 41,
+    "players": 40
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 570657,
+    "wins": 23,
+    "losses": 17,
+    "matches": 40,
+    "players": 33
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 15306,
+    "wins": 15,
+    "losses": 24,
+    "matches": 39,
+    "players": 32
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 665652,
+    "wins": 23,
+    "losses": 13,
+    "matches": 36,
+    "players": 16
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 590283,
+    "wins": 15,
+    "losses": 20,
+    "matches": 35,
+    "players": 26
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 634534,
+    "wins": 21,
+    "losses": 13,
+    "matches": 34,
+    "players": 23
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 257242,
+    "wins": 15,
+    "losses": 18,
+    "matches": 33,
+    "players": 22
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 673872,
+    "wins": 18,
+    "losses": 14,
+    "matches": 32,
+    "players": 19
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 600988,
+    "wins": 21,
+    "losses": 11,
+    "matches": 32,
+    "players": 25
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 695172,
+    "wins": 14,
+    "losses": 14,
+    "matches": 28,
+    "players": 16
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 653623,
+    "wins": 15,
+    "losses": 12,
+    "matches": 27,
+    "players": 13
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 531609,
+    "wins": 13,
+    "losses": 13,
+    "matches": 26,
+    "players": 23
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 637325,
+    "wins": 12,
+    "losses": 14,
+    "matches": 26,
+    "players": 15
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 659337,
+    "wins": 12,
+    "losses": 12,
+    "matches": 24,
+    "players": 13
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 682126,
+    "wins": 15,
+    "losses": 8,
+    "matches": 23,
+    "players": 13
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 588927,
+    "wins": 11,
+    "losses": 11,
+    "matches": 22,
+    "players": 11
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 498375,
+    "wins": 10,
+    "losses": 12,
+    "matches": 22,
+    "players": 20
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 621370,
+    "wins": 14,
+    "losses": 7,
+    "matches": 21,
+    "players": 15
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 679839,
+    "wins": 14,
+    "losses": 7,
+    "matches": 21,
+    "players": 10
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 707557,
+    "wins": 14,
+    "losses": 6,
+    "matches": 20,
+    "players": 1
+  },
+  {
+    "hero_id": 1,
+    "hero_build_id": 394478,
+    "wins": 14,
+    "losses": 6,
+    "matches": 20,
+    "players": 15
+  }
+]

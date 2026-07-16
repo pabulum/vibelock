@@ -1,5 +1,7 @@
-import { defineConfig, type Plugin } from "vite";
-import react from "@vitejs/plugin-react";
+import { defineConfig, type Plugin } from "vitest/config";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
+import { playwright } from "@vitest/browser-playwright";
 
 // Content-Security-Policy, injected into index.html at *build* time only. We can't ship it as a
 // static <meta> in index.html because Vite's dev server (HMR) relies on inline scripts and eval,
@@ -52,5 +54,42 @@ function cspMeta(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
   base: "/vibelock/",
-  plugins: [react(), cspMeta()],
+  plugins: [
+    react(),
+    // React Compiler: build-time auto-memoization (what useMemo/useCallback/React.memo
+    // do by hand). It bails out per-component on anything it can't prove safe, so it's
+    // additive; the react-hooks lint rules flag code it would reject.
+    babel({ presets: [reactCompilerPreset()] }),
+    cspMeta(),
+  ],
+  test: {
+    projects: [
+      // The lib/ unit suites — pure logic, no DOM, plain node.
+      {
+        extends: true,
+        test: {
+          name: "unit",
+          include: ["src/**/*.test.ts"],
+          environment: "node",
+        },
+      },
+      // Browser smoke tests: the real App in real Chromium against fixture API
+      // responses (src/test/) — the guard the unit suites can't provide, that the
+      // composed page actually boots and renders a build.
+      {
+        extends: true,
+        test: {
+          name: "browser",
+          include: ["src/**/*.browser.test.tsx"],
+          browser: {
+            enabled: true,
+            headless: true,
+            provider: playwright(),
+            instances: [{ browser: "chromium" }],
+            screenshotFailures: false,
+          },
+        },
+      },
+    ],
+  },
 });

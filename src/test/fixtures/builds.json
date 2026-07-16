@@ -1,0 +1,3093 @@
+[
+  {
+    "hero_build": {
+      "hero_build_id": 1013,
+      "name": "Zieth Infernus",
+      "author_account_id": 29436163,
+      "version": 24,
+      "last_updated_timestamp": 1750107163,
+      "publish_timestamp": 1750107163,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "Early Game",
+            "mods": [
+              { "ability_id": 2829638276 },
+              { "ability_id": 1548066885 },
+              { "ability_id": 3970837787 },
+              { "ability_id": 668299740 },
+              { "ability_id": 4104549924 },
+              { "ability_id": 2356412290 }
+            ]
+          },
+          {
+            "name": "",
+            "optional": true,
+            "mods": [{ "ability_id": 1710079648 }]
+          },
+          {
+            "name": "Core",
+            "mods": [
+              { "ability_id": 499683006 },
+              { "ability_id": 876563814 },
+              { "ability_id": 865846625 },
+              { "ability_id": 2566692615 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 3585132399 }
+            ]
+          },
+          {
+            "name": "Big Items",
+            "mods": [
+              { "ability_id": 2480592370 },
+              { "ability_id": 2037039379 },
+              { "ability_id": 2226497419 },
+              { "ability_id": 3884003354 },
+              { "ability_id": 1797283378 },
+              { "ability_id": 343572757 },
+              { "ability_id": 3919289022 },
+              { "ability_id": 2617435668 },
+              { "ability_id": 3812615317 },
+              { "ability_id": 2820116164 },
+              { "ability_id": 3005970438 }
+            ]
+          },
+          {
+            "name": "Defense",
+            "optional": true,
+            "mods": [
+              { "ability_id": 1644605047 },
+              { "ability_id": 3270001687 },
+              { "ability_id": 3731635960 },
+              { "ability_id": 3357231760 },
+              { "ability_id": 1378931225 },
+              { "ability_id": 2163598980 },
+              { "ability_id": 3140772621 },
+              { "ability_id": 112198670 }
+            ]
+          },
+          {
+            "name": "Other Good Items",
+            "optional": true,
+            "mods": [
+              { "ability_id": 1925087134 },
+              { "ability_id": 334300056 },
+              { "ability_id": 1144549437 },
+              { "ability_id": 4075861416 },
+              { "ability_id": 84321454 },
+              { "ability_id": 7409189 },
+              { "ability_id": 2064029594 },
+              { "ability_id": 1976391348 },
+              { "ability_id": 1102081447 },
+              { "ability_id": 1219329868 },
+              { "ability_id": 2717651715 },
+              { "ability_id": 2951612397 },
+              { "ability_id": 2081037738 },
+              { "ability_id": 3977876567 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 1174,
+      "name": "INFERNUUS 80% winrate twitch magven0m",
+      "author_account_id": 909389303,
+      "version": 7,
+      "last_updated_timestamp": 1725176956,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "first 100 % buy items ",
+            "mods": [
+              { "ability_id": 2678489038 },
+              { "ability_id": 1342610602 },
+              { "ability_id": 668299740 }
+            ]
+          },
+          {
+            "name": "100% buy items",
+            "mods": [{ "ability_id": 558396679 }, { "ability_id": 3399065363 }]
+          },
+          {
+            "name": "100% op",
+            "mods": [
+              { "ability_id": 968099481 },
+              { "ability_id": 1998374645 },
+              { "ability_id": 1797283378 },
+              { "ability_id": 3270001687 },
+              { "ability_id": 1144549437 },
+              { "ability_id": 3696726732 }
+            ]
+          },
+          {
+            "name": "MID GAME",
+            "mods": [
+              { "ability_id": 2447176615 },
+              { "ability_id": 2121044373 },
+              { "ability_id": 7409189 },
+              { "ability_id": 2533252781 },
+              { "ability_id": 2971868509 },
+              { "ability_id": 876563814 },
+              { "ability_id": 2081037738 }
+            ]
+          },
+          {
+            "name": "LATE GAME",
+            "mods": [
+              { "ability_id": 3612042342 },
+              { "ability_id": 2820116164 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 630839635 },
+              { "ability_id": 865846625 },
+              { "ability_id": 2480592370 }
+            ]
+          },
+          {
+            "name": "Full build weapon",
+            "mods": [
+              { "ability_id": 3270001687 },
+              { "ability_id": 2095565695 },
+              { "ability_id": 1144549437 },
+              { "ability_id": 2480592370 }
+            ]
+          },
+          {
+            "name": "V7ITALITY",
+            "mods": [
+              { "ability_id": 2447176615 },
+              { "ability_id": 876563814 },
+              { "ability_id": 558396679 },
+              { "ability_id": 865846625 }
+            ]
+          },
+          {
+            "name": "SPIRIT| SP => FLAME DASH",
+            "mods": [
+              { "ability_id": 2121044373 },
+              { "ability_id": 2533252781 },
+              { "ability_id": 1292979587 },
+              { "ability_id": 3696726732 }
+            ]
+          },
+          {
+            "name": "FLEX",
+            "mods": [
+              { "ability_id": 3612042342 },
+              { "ability_id": 2820116164 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 630839635 }
+            ]
+          },
+          { "name": "VS PHYSICAL DMG", "mods": [{ "ability_id": 1378931225 }] },
+          { "name": "VS STUNS,SLOWS", "mods": [{ "ability_id": 3731635960 }] },
+          { "name": "SKill max 3>2>1>2>2", "mods": [] },
+          { "name": "UPD 08.03.24 ", "mods": [{ "ability_id": 1644605047 }] }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 3516947824 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 256053,
+      "name": "SN|P3R : Molten Fury",
+      "author_account_id": 29715818,
+      "version": 288,
+      "last_updated_timestamp": 1783714858,
+      "publish_timestamp": 1783714858,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "1. Early",
+            "mods": [
+              { "ability_id": 668299740 },
+              { "ability_id": 7409189 },
+              { "ability_id": 1548066885 },
+              { "ability_id": 4104549924 },
+              { "ability_id": 2356412290 },
+              { "ability_id": 876563814 },
+              {
+                "ability_id": 2951612397,
+                "imbue_target_ability_id": 1593133799
+              },
+              { "ability_id": 2081037738 },
+              { "ability_id": 1144549437 }
+            ]
+          },
+          {
+            "name": "Early Options",
+            "optional": true,
+            "mods": [{ "ability_id": 787198704 }, { "ability_id": 2603935618 }]
+          },
+          {
+            "name": "2. CORE",
+            "mods": [
+              { "ability_id": 3731635960 },
+              { "ability_id": 2447176615 },
+              { "ability_id": 2717651715 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 2226497419 },
+              { "ability_id": 2480592370 },
+              { "ability_id": 2519598785 },
+              { "ability_id": 865846625 }
+            ]
+          },
+          {
+            "name": "Armors",
+            "optional": true,
+            "mods": [{ "ability_id": 2163598980 }, { "ability_id": 3140772621 }]
+          },
+          {
+            "name": "End Game : Attack",
+            "optional": true,
+            "mods": [
+              { "ability_id": 3884003354 },
+              { "ability_id": 710436191 },
+              { "ability_id": 1113837674 },
+              { "ability_id": 2037039379 },
+              { "ability_id": 3919289022, "imbue_target_ability_id": 491391007 }
+            ]
+          },
+          {
+            "name": "End Game : Defense",
+            "optional": true,
+            "mods": [
+              { "ability_id": 1955841979 },
+              { "ability_id": 3491236900 },
+              { "ability_id": 1250307611 }
+            ]
+          },
+          {
+            "name": "Green : Utilities",
+            "optional": true,
+            "mods": [
+              { "ability_id": 3270001687 },
+              { "ability_id": 1414025773 },
+              { "ability_id": 1378931225 }
+            ]
+          },
+          {
+            "name": "Good Gun Options",
+            "optional": true,
+            "mods": [
+              { "ability_id": 4075861416 },
+              { "ability_id": 811521119 },
+              { "ability_id": 2739107182 },
+              { "ability_id": 989206714 },
+              { "ability_id": 2463960640 }
+            ]
+          },
+          {
+            "name": "Good Green Options",
+            "optional": true,
+            "mods": [
+              { "ability_id": 3970837787 },
+              { "ability_id": 3357231760 },
+              { "ability_id": 951866250 }
+            ]
+          },
+          {
+            "name": "Good Spirit Options",
+            "optional": true,
+            "mods": [
+              { "ability_id": 84321454, "imbue_target_ability_id": 491391007 },
+              { "ability_id": 2533252781 },
+              { "ability_id": 343572757 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 252284,
+      "name": "Renon's Eternus Infernus (Twitch.tv/renonfps)",
+      "author_account_id": 123795813,
+      "version": 144,
+      "last_updated_timestamp": 1783556870,
+      "publish_timestamp": 1783556870,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "#Citadel_HeroBuilds_EarlyGame",
+            "mods": [
+              { "ability_id": 7409189 },
+              { "ability_id": 668299740 },
+              { "ability_id": 1548066885 },
+              { "ability_id": 4104549924 },
+              { "ability_id": 3633614685 },
+              { "ability_id": 876563814 },
+              { "ability_id": 2356412290 },
+              { "ability_id": 787198704 }
+            ]
+          },
+          {
+            "name": "Early Game Options",
+            "optional": true,
+            "mods": [
+              { "ability_id": 2829638276 },
+              { "ability_id": 1710079648 },
+              { "ability_id": 1672893796 }
+            ]
+          },
+          {
+            "name": "Main Path",
+            "mods": [
+              { "ability_id": 3585132399 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 2226497419 },
+              { "ability_id": 2519598785 },
+              { "ability_id": 2717651715 }
+            ]
+          },
+          {
+            "name": "Flex Options",
+            "mods": [
+              { "ability_id": 3731635960 },
+              { "ability_id": 3270001687 },
+              { "ability_id": 2081037738 },
+              { "ability_id": 1925087134 },
+              {
+                "ability_id": 2951612397,
+                "imbue_target_ability_id": 1593133799
+              },
+              { "ability_id": 1144549437 }
+            ]
+          },
+          {
+            "name": "Utility Options",
+            "optional": true,
+            "mods": [
+              { "ability_id": 2480592370 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 4075861416 },
+              { "ability_id": 3357231760 },
+              { "ability_id": 710436191 },
+              { "ability_id": 673001892 },
+              { "ability_id": 3919289022 },
+              { "ability_id": 3884003354 },
+              { "ability_id": 3361811174 }
+            ]
+          },
+          {
+            "name": "Anti-Spirit",
+            "optional": true,
+            "mods": [
+              { "ability_id": 112198670 },
+              { "ability_id": 3970837787 },
+              { "ability_id": 2163598980 },
+              { "ability_id": 1414025773 },
+              { "ability_id": 1644605047 },
+              { "ability_id": 1113837674 },
+              { "ability_id": 951866250 },
+              { "ability_id": 1662311306 },
+              { "ability_id": 1955841979 },
+              { "ability_id": 1047818222 }
+            ]
+          },
+          {
+            "name": "Anti-Gun",
+            "optional": true,
+            "mods": [
+              { "ability_id": 1378931225 },
+              { "ability_id": 2463960640 },
+              { "ability_id": 3491236900 },
+              { "ability_id": 1250307611 },
+              { "ability_id": 3140772621 },
+              { "ability_id": 1235347618 }
+            ]
+          },
+          {
+            "name": "Anti-Heal",
+            "optional": true,
+            "mods": [{ "ability_id": 2037039379 }, { "ability_id": 2603935618 }]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 34235,
+      "name": "B站小魔法师黑星星 永生拖把流火男一键符文",
+      "author_account_id": 316211545,
+      "version": 8,
+      "last_updated_timestamp": 1730616761,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "对线期",
+            "mods": [
+              { "ability_id": 1248737459 },
+              { "ability_id": 668299740 },
+              { "ability_id": 1797283378 },
+              { "ability_id": 968099481 },
+              { "ability_id": 558396679 },
+              { "ability_id": 3399065363 },
+              { "ability_id": 1144549437 }
+            ]
+          },
+          { "name": "压力大出", "mods": [{ "ability_id": 1710079648 }] },
+          {
+            "name": "利用好武器优势赖好线，有大招的那一波基本没有人打得过你",
+            "mods": []
+          },
+          {
+            "name": "顺着出就好",
+            "mods": [
+              { "ability_id": 2081037738 },
+              { "ability_id": 2951612397 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 876563814 },
+              { "ability_id": 2447176615 },
+              { "ability_id": 2566692615 },
+              { "ability_id": 7409189 }
+            ]
+          },
+          {
+            "name": "出到大吸血获得永生",
+            "mods": [
+              { "ability_id": 2480592370 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 2717651715 },
+              { "ability_id": 865846625 },
+              { "ability_id": 3612042342 },
+              { "ability_id": 2226497419 },
+              { "ability_id": 2037039379 },
+              { "ability_id": 1102081447 },
+              { "ability_id": 2533252781 }
+            ]
+          },
+          {
+            "name": "超级大后期替换装",
+            "mods": [
+              { "ability_id": 4003032160 },
+              { "ability_id": 339443430 },
+              { "ability_id": 2617435668 },
+              { "ability_id": 3357231760 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 8975,
+      "name": "YT smeefu Unkillable Infernus Tank/Carry v1.3",
+      "author_account_id": 854531333,
+      "version": 29,
+      "last_updated_timestamp": 1730250042,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "-1- lane ORDERED (healing rite / extra regen anytime IF needed) sell ammo scav later for slots",
+            "mods": [
+              { "ability_id": 968099481 },
+              { "ability_id": 2010028405 },
+              { "ability_id": 1797283378 },
+              { "ability_id": 558396679 },
+              { "ability_id": 3977876567 },
+              { "ability_id": 3399065363 },
+              { "ability_id": 1144549437 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 1710079648 },
+              { "ability_id": 2829638276 }
+            ]
+          },
+          {
+            "name": "-2- ORDERED. QSR OR SUPPRESSOR, NOT BOTH",
+            "mods": [
+              { "ability_id": 84321454 },
+              { "ability_id": 876563814 },
+              { "ability_id": 2951612397 },
+              { "ability_id": 2081037738 },
+              { "ability_id": 1925087134 },
+              { "ability_id": 2566692615 }
+            ]
+          },
+          {
+            "name": "-2b- CHOICE TO MAKE",
+            "mods": [{ "ability_id": 3713423303 }, { "ability_id": 223594321 }]
+          },
+          {
+            "name": "-3- ORDER",
+            "mods": [{ "ability_id": 865846625 }, { "ability_id": 2447176615 }]
+          },
+          {
+            "name": "-4- LATEGAME CHOICE",
+            "mods": [{ "ability_id": 3140772621 }, { "ability_id": 2163598980 }]
+          },
+          {
+            "name": "-5- ORDERED, unstoppable only if a lot of CC, get crippling earlier if need more damage.",
+            "mods": [
+              { "ability_id": 2480592370 },
+              { "ability_id": 2037039379 },
+              { "ability_id": 3357231760 },
+              { "ability_id": 3884003354 }
+            ]
+          },
+          {
+            "name": "OP situationals, can buy metal skin instead of bullet armour. E shift is basically another unstoppable",
+            "mods": [
+              { "ability_id": 1378931225 },
+              { "ability_id": 2533252781 },
+              { "ability_id": 1047818222 },
+              { "ability_id": 3731635960 },
+              { "ability_id": 2463960640 }
+            ]
+          },
+          {
+            "name": "super late upgrades and monster rounds is op if want to try it in lane",
+            "mods": [
+              { "ability_id": 1009965641 },
+              { "ability_id": 2356412290 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 4003032160 },
+              { "ability_id": 1102081447 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 491391007 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 15607,
+      "name": "Linepro Infernus",
+      "author_account_id": 68693421,
+      "version": 27,
+      "last_updated_timestamp": 1746918719,
+      "publish_timestamp": 1746918719,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "Lane Phase",
+            "mods": [
+              { "ability_id": 3077079169 },
+              { "ability_id": 668299740 },
+              { "ability_id": 558396679 },
+              { "ability_id": 3399065363 },
+              { "ability_id": 968099481 },
+              { "ability_id": 3403085434 },
+              { "ability_id": 1144549437 }
+            ]
+          },
+          {
+            "name": "Optional",
+            "mods": [{ "ability_id": 1797283378 }, { "ability_id": 1710079648 }]
+          },
+          {
+            "name": "Early Game",
+            "mods": [
+              { "ability_id": 2447176615 },
+              { "ability_id": 876563814 },
+              { "ability_id": 2566692615 },
+              { "ability_id": 2951612397 },
+              { "ability_id": 2081037738 },
+              { "ability_id": 84321454 },
+              { "ability_id": 1925087134 },
+              { "ability_id": 380806748 },
+              { "ability_id": 2064029594 }
+            ]
+          },
+          {
+            "name": "Mid Game",
+            "mods": [
+              { "ability_id": 3696726732 },
+              { "ability_id": 7409189 },
+              { "ability_id": 1102081447 },
+              { "ability_id": 3261353684 },
+              { "ability_id": 2717651715 },
+              { "ability_id": 1292979587 }
+            ]
+          },
+          {
+            "name": "Mid Optional",
+            "mods": [
+              { "ability_id": 4139877411 },
+              { "ability_id": 334300056 },
+              { "ability_id": 1932939246 }
+            ]
+          },
+          {
+            "name": "Late Game",
+            "mods": [
+              { "ability_id": 865846625 },
+              { "ability_id": 2226497419 },
+              { "ability_id": 2480592370 },
+              { "ability_id": 3612042342 },
+              { "ability_id": 3005970438 }
+            ]
+          },
+          {
+            "name": "Late Game Optional",
+            "mods": [
+              { "ability_id": 1282141666 },
+              { "ability_id": 3357231760 },
+              { "ability_id": 2820116164 },
+              { "ability_id": 4003032160 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 317821,
+      "name": "Infernus - Spirit-Initiator [52% WR] [tracklock.gg]",
+      "author_account_id": 1822792925,
+      "version": 1347,
+      "last_updated_timestamp": 1784161878,
+      "publish_timestamp": 1784161878,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "Core Build",
+            "mods": [
+              { "ability_id": 668299740 },
+              { "ability_id": 968099481 },
+              { "ability_id": 4104549924 },
+              { "ability_id": 7409189 },
+              { "ability_id": 2603935618 },
+              { "ability_id": 1925087134 },
+              { "ability_id": 2081037738 },
+              { "ability_id": 876563814 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 3270001687 },
+              { "ability_id": 2226497419 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 2519598785 },
+              { "ability_id": 2417568017 }
+            ]
+          },
+          {
+            "name": "Early",
+            "optional": true,
+            "mods": [
+              { "ability_id": 3776945997 },
+              { "ability_id": 1548066885 },
+              { "ability_id": 2356412290 },
+              { "ability_id": 2829638276 },
+              {
+                "ability_id": 2951612397,
+                "imbue_target_ability_id": 1593133799
+              },
+              { "ability_id": 3970837787 },
+              { "ability_id": 2010028405 }
+            ]
+          },
+          {
+            "name": "Late",
+            "optional": true,
+            "mods": [
+              { "ability_id": 787198704 },
+              { "ability_id": 2717651715 },
+              { "ability_id": 2480592370 },
+              { "ability_id": 1797283378 }
+            ]
+          },
+          {
+            "name": "Defensives",
+            "optional": true,
+            "mods": [
+              { "ability_id": 3633614685 },
+              { "ability_id": 3731635960 },
+              { "ability_id": 1414025773 },
+              { "ability_id": 2163598980 },
+              { "ability_id": 3585132399 }
+            ]
+          },
+          {
+            "name": "Counter Picks",
+            "optional": true,
+            "mods": [
+              { "ability_id": 3731635960 },
+              { "ability_id": 1414025773 },
+              { "ability_id": 2163598980 },
+              { "ability_id": 1378931225 },
+              { "ability_id": 1047818222 },
+              { "ability_id": 805079544 }
+            ]
+          },
+          {
+            "name": "Actives",
+            "optional": true,
+            "mods": [
+              { "ability_id": 3731635960 },
+              { "ability_id": 1797283378 },
+              { "ability_id": 1672893796 },
+              { "ability_id": 1378931225 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 278481,
+      "name": "Twitch.tv/Averagejonas DASHFERNUS 70%WR",
+      "author_account_id": 74963221,
+      "version": 23,
+      "last_updated_timestamp": 1780910952,
+      "publish_timestamp": 1780910952,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "#Citadel_HeroBuilds_Early",
+            "mods": [
+              { "ability_id": 2829638276 },
+              { "ability_id": 3970837787 },
+              { "ability_id": 2603935618 },
+              { "ability_id": 1644605047 },
+              { "ability_id": 3776945997 },
+              { "ability_id": 787198704 },
+              { "ability_id": 1925087134 },
+              { "ability_id": 2947183272 },
+              { "ability_id": 2566692615 },
+              { "ability_id": 876563814 }
+            ]
+          },
+          {
+            "name": "#Citadel_HeroBuilds_Mid",
+            "mods": [
+              { "ability_id": 2081037738 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 3270001687 },
+              { "ability_id": 1797283378 },
+              { "ability_id": 951866250 }
+            ]
+          },
+          {
+            "name": "Flex slots",
+            "optional": false,
+            "mods": [
+              { "ability_id": 2717651715 },
+              { "ability_id": 3731635960 },
+              {
+                "ability_id": 380806748,
+                "imbue_target_ability_id": 3516947824
+              },
+              { "ability_id": 3261353684 },
+              { "ability_id": 915014646 }
+            ]
+          },
+          {
+            "name": "LATE/LUXURY",
+            "optional": true,
+            "mods": [
+              { "ability_id": 3028234315 },
+              { "ability_id": 2519598785 },
+              { "ability_id": 343572757 },
+              { "ability_id": 1414025773 },
+              { "ability_id": 1427630806 },
+              { "ability_id": 1955841979 },
+              { "ability_id": 1378931225 },
+              { "ability_id": 3140772621 },
+              { "ability_id": 2163598980 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 272496,
+      "name": "Afterburn Infernus- Jitizm12301",
+      "author_account_id": 82571600,
+      "version": 72,
+      "last_updated_timestamp": 1778206823,
+      "publish_timestamp": 1778206823,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "#Citadel_HeroBuilds_EarlyGame",
+            "mods": [
+              { "ability_id": 968099481 },
+              { "ability_id": 7409189 },
+              { "ability_id": 668299740 },
+              { "ability_id": 1548066885 },
+              { "ability_id": 84321454, "imbue_target_ability_id": 491391007 },
+              {
+                "ability_id": 2951612397,
+                "imbue_target_ability_id": 1593133799
+              },
+              { "ability_id": 876563814 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 3270001687 },
+              { "ability_id": 2356412290 },
+              { "ability_id": 4104549924 }
+            ]
+          },
+          {
+            "name": "Mid/Late Game",
+            "mods": [
+              { "ability_id": 2717651715 },
+              { "ability_id": 2081037738 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 2480592370 },
+              { "ability_id": 2226497419 },
+              { "ability_id": 865846625 },
+              { "ability_id": 2519598785 },
+              { "ability_id": 3884003354 }
+            ]
+          },
+          {
+            "name": "Situational",
+            "optional": false,
+            "mods": [
+              { "ability_id": 1925087134 },
+              { "ability_id": 1813726886 },
+              { "ability_id": 619484391 },
+              { "ability_id": 343572757 },
+              {
+                "ability_id": 3919289022,
+                "imbue_target_ability_id": 491391007
+              },
+              { "ability_id": 2447176615 },
+              { "ability_id": 2603935618 },
+              { "ability_id": 3731635960 },
+              { "ability_id": 3140772621 },
+              { "ability_id": 2163598980 },
+              { "ability_id": 1414025773 },
+              { "ability_id": 1047818222 },
+              { "ability_id": 3357231760 },
+              { "ability_id": 1955841979 },
+              { "ability_id": 1662311306 },
+              { "ability_id": 381961617 },
+              { "ability_id": 3403085434 },
+              { "ability_id": 1144549437 },
+              { "ability_id": 4075861416 },
+              { "ability_id": 1113837674 },
+              { "ability_id": 710436191 },
+              { "ability_id": 2739107182 }
+            ]
+          },
+          {
+            "name": "Early Defensives/Healing",
+            "optional": false,
+            "mods": [
+              { "ability_id": 2829638276 },
+              { "ability_id": 3862866912 },
+              { "ability_id": 1710079648 },
+              { "ability_id": 4204808176 },
+              { "ability_id": 1235347618 },
+              { "ability_id": 112198670 },
+              { "ability_id": 805079544 },
+              { "ability_id": 1644605047 },
+              { "ability_id": 3970837787 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 407305,
+      "name": "SN|P3R : Emberline [Dash Infernus]",
+      "author_account_id": 29715818,
+      "version": 52,
+      "last_updated_timestamp": 1783714851,
+      "publish_timestamp": 1783714851,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "1. Early",
+            "mods": [
+              { "ability_id": 968099481 },
+              { "ability_id": 7409189 },
+              { "ability_id": 1548066885 },
+              { "ability_id": 3776945997 },
+              { "ability_id": 876563814 },
+              { "ability_id": 2603935618 },
+              { "ability_id": 787198704 },
+              { "ability_id": 3731635960 },
+              { "ability_id": 1976391348 }
+            ]
+          },
+          {
+            "name": "#Citadel_HeroBuilds_Early",
+            "optional": true,
+            "mods": [{ "ability_id": 2829638276 }, { "ability_id": 3970837787 }]
+          },
+          {
+            "name": "2. CORE",
+            "mods": [
+              { "ability_id": 2356412290 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 2717651715 },
+              { "ability_id": 1797283378 },
+              { "ability_id": 2226497419 },
+              { "ability_id": 3270001687 },
+              { "ability_id": 343572757 },
+              { "ability_id": 3812615317 },
+              { "ability_id": 2519598785 }
+            ]
+          },
+          {
+            "name": "Armors",
+            "optional": true,
+            "mods": [{ "ability_id": 2163598980 }, { "ability_id": 1378931225 }]
+          },
+          {
+            "name": "Late : Greens",
+            "optional": true,
+            "mods": [
+              { "ability_id": 1955841979 },
+              { "ability_id": 3491236900 },
+              { "ability_id": 1250307611 },
+              { "ability_id": 3028234315 }
+            ]
+          },
+          {
+            "name": "Late : Survival",
+            "optional": true,
+            "mods": [{ "ability_id": 951866250 }, { "ability_id": 3357231760 }]
+          },
+          {
+            "name": "Good : Spirit Options",
+            "optional": true,
+            "mods": [
+              { "ability_id": 1102081447 },
+              { "ability_id": 1925087134 },
+              { "ability_id": 3144988365 },
+              { "ability_id": 2417568017 },
+              { "ability_id": 915014646 }
+            ]
+          },
+          {
+            "name": "Good : Green Options",
+            "optional": true,
+            "mods": [
+              { "ability_id": 1644605047 },
+              { "ability_id": 3140772621 },
+              { "ability_id": 1414025773 },
+              { "ability_id": 3361811174 }
+            ]
+          },
+          {
+            "name": "ALT : Gun Path",
+            "optional": true,
+            "mods": [{ "ability_id": 1144549437 }, { "ability_id": 2463960640 }]
+          },
+          {
+            "name": "Good : Gun Options",
+            "optional": true,
+            "mods": [
+              { "ability_id": 4104549924 },
+              { "ability_id": 2739107182 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 4075861416 },
+              { "ability_id": 2480592370 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 393668,
+      "name": "basil dash new new new new new new",
+      "author_account_id": 280308116,
+      "version": 73,
+      "last_updated_timestamp": 1783946332,
+      "publish_timestamp": 1783946332,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "#Citadel_HeroBuilds_Lane",
+            "optional": false,
+            "mods": [
+              { "ability_id": 968099481 },
+              { "ability_id": 2829638276 },
+              { "ability_id": 4204808176 },
+              { "ability_id": 1548066885 },
+              { "ability_id": 876563814 },
+              { "ability_id": 2603935618 },
+              { "ability_id": 7409189 },
+              { "ability_id": 3776945997 },
+              { "ability_id": 787198704 }
+            ]
+          },
+          {
+            "name": "ONLY if u prefer fire rate over mag",
+            "optional": true,
+            "mods": [{ "ability_id": 4104549924 }, { "ability_id": 668299740 }]
+          },
+          {
+            "name": "greens",
+            "optional": false,
+            "mods": [
+              { "ability_id": 3731635960 },
+              { "ability_id": 3270001687 },
+              { "ability_id": 1414025773 },
+              { "ability_id": 1378931225 },
+              { "ability_id": 1047818222 },
+              { "ability_id": 2163598980 },
+              { "ability_id": 3140772621 }
+            ]
+          },
+          {
+            "name": "if no rebuttal",
+            "optional": true,
+            "mods": [{ "ability_id": 3633614685 }]
+          },
+          {
+            "name": "",
+            "optional": true,
+            "mods": [{ "ability_id": 1644605047 }, { "ability_id": 112198670 }]
+          },
+          {
+            "name": "rush if ahead",
+            "optional": false,
+            "mods": [{ "ability_id": 2226497419 }]
+          },
+          {
+            "name": "core. buy either unstop or indom like 90% of the time",
+            "mods": [
+              { "ability_id": 2356412290 },
+              {
+                "ability_id": 2951612397,
+                "imbue_target_ability_id": 1593133799
+              },
+              { "ability_id": 2081037738 },
+              { "ability_id": 2717651715 },
+              { "ability_id": 1797283378 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 3357231760 },
+              { "ability_id": 951866250 }
+            ]
+          },
+          {
+            "name": "",
+            "optional": true,
+            "mods": [{ "ability_id": 1144549437 }, { "ability_id": 4075861416 }]
+          },
+          {
+            "name": "Late Game dash items.",
+            "mods": [
+              { "ability_id": 343572757 },
+              { "ability_id": 1662311306 },
+              { "ability_id": 1955841979 },
+              { "ability_id": 3491236900 },
+              { "ability_id": 1371725689 },
+              { "ability_id": 915014646 },
+              { "ability_id": 3028234315 },
+              { "ability_id": 1250307611 },
+              { "ability_id": 2519598785 },
+              { "ability_id": 1102081447 },
+              { "ability_id": 493591231 },
+              { "ability_id": 754480263 },
+              { "ability_id": 1193964439 },
+              { "ability_id": 2417568017 }
+            ]
+          },
+          {
+            "name": "",
+            "optional": true,
+            "mods": [{ "ability_id": 2480592370 }, { "ability_id": 2221211450 }]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 276107,
+      "name": "ABL TWITCH ABLKZ",
+      "author_account_id": 888853854,
+      "version": 4,
+      "last_updated_timestamp": 1783466965,
+      "publish_timestamp": 1783466965,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "#Citadel_HeroBuilds_EarlyGame",
+            "mods": [
+              { "ability_id": 668299740 },
+              { "ability_id": 4104549924 },
+              { "ability_id": 968099481 },
+              { "ability_id": 2603935618 },
+              { "ability_id": 7409189 },
+              { "ability_id": 1925087134 },
+              { "ability_id": 2081037738 }
+            ]
+          },
+          {
+            "name": "",
+            "optional": true,
+            "mods": [
+              { "ability_id": 3731635960 },
+              { "ability_id": 1414025773 },
+              { "ability_id": 2447176615 }
+            ]
+          },
+          {
+            "name": "#Citadel_HeroBuilds_LateGame",
+            "mods": [
+              { "ability_id": 3270001687 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 876563814 },
+              { "ability_id": 2226497419 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 2519598785 }
+            ]
+          },
+          {
+            "name": "",
+            "optional": true,
+            "mods": [
+              { "ability_id": 3776945997 },
+              { "ability_id": 787198704 },
+              { "ability_id": 2417568017 },
+              { "ability_id": 1797283378 }
+            ]
+          },
+          {
+            "name": "",
+            "optional": true,
+            "mods": [
+              { "ability_id": 1770441818 },
+              { "ability_id": 3884003354 },
+              { "ability_id": 2480592370 },
+              { "ability_id": 1113837674 },
+              { "ability_id": 2221211450 },
+              { "ability_id": 2037039379 },
+              { "ability_id": 1427630806 },
+              { "ability_id": 3491236900 },
+              { "ability_id": 951866250 }
+            ]
+          },
+          {
+            "name": "",
+            "optional": true,
+            "mods": [{ "ability_id": 3357231760 }, { "ability_id": 1250307611 }]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 1443,
+      "name": "BURN THEM ALL [Ricochet Teamfight/Farm]",
+      "author_account_id": 35199409,
+      "version": 4,
+      "last_updated_timestamp": 1724539094,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "Early Game",
+            "mods": [
+              { "ability_id": 1548066885 },
+              { "ability_id": 1144549437 },
+              { "ability_id": 558396679 },
+              { "ability_id": 968099481 },
+              { "ability_id": 4139877411 },
+              { "ability_id": 84321454 }
+            ]
+          },
+          { "name": "Ricochet Rush", "mods": [{ "ability_id": 2480592370 }] },
+          {
+            "name": "Mid-Game",
+            "mods": [
+              { "ability_id": 876563814 },
+              { "ability_id": 2081037738 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 2951612397 }
+            ]
+          },
+          {
+            "name": "Slot Upgrades",
+            "mods": [
+              { "ability_id": 7409189 },
+              { "ability_id": 2447176615 },
+              { "ability_id": 334300056 },
+              { "ability_id": 2356412290 },
+              { "ability_id": 2717651715 }
+            ]
+          },
+          {
+            "name": "Luxury Damage",
+            "mods": [
+              { "ability_id": 2226497419 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 3612042342 },
+              { "ability_id": 3884003354 }
+            ]
+          },
+          {
+            "name": "Luxury Survivability",
+            "mods": [
+              { "ability_id": 865846625 },
+              { "ability_id": 2037039379 },
+              { "ability_id": 3357231760 },
+              { "ability_id": 1282141666 },
+              { "ability_id": 2820116164 }
+            ]
+          },
+          {
+            "name": "Situational Items",
+            "mods": [
+              { "ability_id": 3731635960 },
+              { "ability_id": 2603935618 },
+              { "ability_id": 3357231760 },
+              { "ability_id": 1378931225 },
+              { "ability_id": 3133167885 },
+              { "ability_id": 4003032160 },
+              { "ability_id": 619484391 },
+              { "ability_id": 1102081447 },
+              { "ability_id": 2800629741 }
+            ]
+          },
+          { "name": "Infernus? More like InBURNus", "mods": [] }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 46778,
+      "name": "抖音小小阿胜火男炼狱出装xx",
+      "author_account_id": 1078331650,
+      "version": 50,
+      "last_updated_timestamp": 1744539147,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "500",
+            "mods": [
+              { "ability_id": 2678489038 },
+              { "ability_id": 1797283378 },
+              { "ability_id": 968099481 },
+              { "ability_id": 668299740 },
+              { "ability_id": 558396679 },
+              { "ability_id": 4139877411 }
+            ]
+          },
+          { "name": "", "mods": [{ "ability_id": 2829638276 }] },
+          {
+            "name": "中期出",
+            "mods": [
+              { "ability_id": 1144549437 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 2081037738 },
+              { "ability_id": 2951612397 },
+              { "ability_id": 223594321 },
+              { "ability_id": 3713423303 },
+              { "ability_id": 2226497419 }
+            ]
+          },
+          {
+            "name": "选出",
+            "mods": [{ "ability_id": 1644605047 }, { "ability_id": 2566692615 }]
+          },
+          {
+            "name": "后期出",
+            "mods": [
+              { "ability_id": 2480592370 },
+              { "ability_id": 865846625 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 2717651715 },
+              { "ability_id": 2163598980 },
+              { "ability_id": 3140772621 },
+              { "ability_id": 4075861416 },
+              { "ability_id": 3884003354 },
+              { "ability_id": 1102081447 }
+            ]
+          },
+          {
+            "name": "大后期更换装备",
+            "mods": [
+              { "ability_id": 2037039379 },
+              { "ability_id": 3357231760 },
+              { "ability_id": 3612042342 },
+              { "ability_id": 787198704 },
+              { "ability_id": 3776945997 },
+              { "ability_id": 3403085434 }
+            ]
+          },
+          {
+            "name": "保命装",
+            "mods": [
+              { "ability_id": 2533252781 },
+              { "ability_id": 1378931225 },
+              { "ability_id": 3731635960 },
+              { "ability_id": 4003032160 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 491391007 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 15306,
+      "name": "Mobalytics - Infernus by RinaVX",
+      "author_account_id": 83608685,
+      "version": 59,
+      "last_updated_timestamp": 1779776502,
+      "publish_timestamp": 1779776502,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "#Citadel_HeroBuilds_EarlyGame",
+            "mods": [
+              { "ability_id": 968099481 },
+              { "ability_id": 2829638276 },
+              { "ability_id": 7409189 },
+              { "ability_id": 2064029594 },
+              { "ability_id": 84321454, "imbue_target_ability_id": 491391007 },
+              {
+                "ability_id": 2951612397,
+                "imbue_target_ability_id": 1593133799
+              },
+              { "ability_id": 2717651715 },
+              { "ability_id": 112198670 }
+            ]
+          },
+          {
+            "name": "#Citadel_HeroBuilds_MidGame",
+            "optional": false,
+            "mods": [
+              { "ability_id": 876563814 },
+              { "ability_id": 2226497419 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 3731635960 },
+              { "ability_id": 1144549437 },
+              { "ability_id": 4075861416 }
+            ]
+          },
+          {
+            "name": "#Citadel_HeroBuilds_LateGame",
+            "optional": false,
+            "mods": [
+              { "ability_id": 2480592370 },
+              { "ability_id": 2519598785 },
+              { "ability_id": 865846625 },
+              { "ability_id": 2037039379 },
+              {
+                "ability_id": 3919289022,
+                "imbue_target_ability_id": 491391007
+              },
+              { "ability_id": 3357231760 },
+              { "ability_id": 1955841979 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 481574,
+      "name": "CHUDBRINGER_DL (INFERGOON)",
+      "author_account_id": 35187362,
+      "version": 9,
+      "last_updated_timestamp": 1773581440,
+      "publish_timestamp": 1773581440,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "Goon 1",
+            "mods": [
+              { "ability_id": 1548066885 },
+              { "ability_id": 968099481 },
+              { "ability_id": 7409189 },
+              { "ability_id": 2081037738 },
+              {
+                "ability_id": 2951612397,
+                "imbue_target_ability_id": 1593133799
+              },
+              { "ability_id": 2603935618 },
+              { "ability_id": 2717651715 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 3270001687 }
+            ]
+          },
+          {
+            "name": "Lane Goon",
+            "mods": [{ "ability_id": 1710079648 }, { "ability_id": 2829638276 }]
+          },
+          {
+            "name": "Goon 2",
+            "mods": [
+              { "ability_id": 1144549437 },
+              { "ability_id": 2163598980 },
+              { "ability_id": 2463960640 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 876563814 },
+              { "ability_id": 2480592370 },
+              { "ability_id": 2226497419 },
+              { "ability_id": 989206714 }
+            ]
+          },
+          {
+            "name": "Optional Goon",
+            "mods": [
+              { "ability_id": 4075861416 },
+              { "ability_id": 3731635960 },
+              { "ability_id": 1414025773 },
+              { "ability_id": 3140772621 },
+              { "ability_id": 865846625 },
+              { "ability_id": 2519598785 },
+              { "ability_id": 84321454 },
+              { "ability_id": 4104549924 },
+              { "ability_id": 393974127 }
+            ]
+          },
+          { "name": "Category 5", "mods": [{ "ability_id": 2462046703 }] }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 64404,
+      "name": "CARBATTERY Infernus V2",
+      "author_account_id": 189177777,
+      "version": 48,
+      "last_updated_timestamp": 1732707887,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "Early",
+            "mods": [
+              { "ability_id": 1248737459 },
+              { "ability_id": 2010028405 },
+              { "ability_id": 3862866912 },
+              { "ability_id": 1797283378 },
+              { "ability_id": 3399065363 }
+            ]
+          },
+          {
+            "name": "Early Option",
+            "mods": [
+              { "ability_id": 2829638276 },
+              { "ability_id": 1644605047 },
+              { "ability_id": 1710079648 }
+            ]
+          },
+          {
+            "name": "Mid",
+            "mods": [
+              { "ability_id": 2951612397 },
+              { "ability_id": 1144549437 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 2081037738 },
+              { "ability_id": 876563814 }
+            ]
+          },
+          {
+            "name": "Mid Option",
+            "mods": [
+              { "ability_id": 223594321 },
+              { "ability_id": 3713423303 },
+              { "ability_id": 2566692615 },
+              { "ability_id": 1047818222 }
+            ]
+          },
+          {
+            "name": "Late",
+            "mods": [
+              { "ability_id": 2447176615 },
+              { "ability_id": 2463960640 },
+              { "ability_id": 2480592370 },
+              { "ability_id": 2037039379 },
+              { "ability_id": 865846625 }
+            ]
+          },
+          {
+            "name": "Late Option",
+            "mods": [
+              { "ability_id": 2163598980 },
+              { "ability_id": 3140772621 },
+              { "ability_id": 1378931225 },
+              { "ability_id": 3731635960 }
+            ]
+          },
+          {
+            "name": "More Option",
+            "mods": [
+              { "ability_id": 2226497419 },
+              { "ability_id": 968099481 },
+              { "ability_id": 7409189 },
+              { "ability_id": 3612042342 },
+              { "ability_id": 3884003354 },
+              { "ability_id": 2717651715 },
+              { "ability_id": 4075861416 },
+              { "ability_id": 1254091416 },
+              { "ability_id": 3357231760 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 491391007 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 239350,
+      "name": "VP Trackball Zerggy Infernus",
+      "author_account_id": 35187362,
+      "version": 13,
+      "last_updated_timestamp": 1756113673,
+      "publish_timestamp": 1756113673,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "Early Game",
+            "mods": [
+              { "ability_id": 968099481 },
+              { "ability_id": 668299740 },
+              { "ability_id": 7409189 },
+              { "ability_id": 1976391348 },
+              { "ability_id": 3970837787 },
+              { "ability_id": 3776945997 },
+              { "ability_id": 787198704 },
+              { "ability_id": 1144549437 },
+              { "ability_id": 876563814 }
+            ]
+          },
+          {
+            "name": "Healing",
+            "mods": [{ "ability_id": 2829638276 }, { "ability_id": 1710079648 }]
+          },
+          {
+            "name": "Mid - Late",
+            "mods": [
+              { "ability_id": 84321454 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 3270001687 },
+              { "ability_id": 4075861416 },
+              { "ability_id": 2480592370 },
+              { "ability_id": 865846625 }
+            ]
+          },
+          {
+            "name": "Armors",
+            "optional": true,
+            "mods": [{ "ability_id": 2163598980 }, { "ability_id": 2463960640 }]
+          },
+          {
+            "name": "Utility",
+            "mods": [
+              { "ability_id": 3731635960 },
+              { "ability_id": 1414025773 },
+              { "ability_id": 334300056 },
+              { "ability_id": 2603935618 },
+              { "ability_id": 1813726886 },
+              { "ability_id": 619484391 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 86987,
+      "name": "Twitch.tv/AverageJonas TANKFERNUS (Mobalytics)",
+      "author_account_id": 74963221,
+      "version": 17,
+      "last_updated_timestamp": 1736720515,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "EARLY",
+            "mods": [
+              { "ability_id": 968099481 },
+              { "ability_id": 668299740 },
+              { "ability_id": 558396679 },
+              { "ability_id": 1797283378 },
+              { "ability_id": 1548066885 },
+              { "ability_id": 1144549437 },
+              { "ability_id": 876563814 },
+              { "ability_id": 4139877411 },
+              { "ability_id": 3776945997 }
+            ]
+          },
+          {
+            "name": "MID",
+            "mods": [
+              { "ability_id": 787198704 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 2566692615 },
+              { "ability_id": 2081037738 },
+              { "ability_id": 2951612397 },
+              { "ability_id": 3713423303 },
+              { "ability_id": 223594321 },
+              { "ability_id": 1925087134 },
+              { "ability_id": 7409189 }
+            ]
+          },
+          {
+            "name": "LATE",
+            "mods": [
+              { "ability_id": 865846625 },
+              { "ability_id": 1102081447 },
+              { "ability_id": 2163598980 },
+              { "ability_id": 3140772621 },
+              { "ability_id": 2717651715 },
+              { "ability_id": 4003032160 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 339443430 },
+              { "ability_id": 2356412290 }
+            ]
+          },
+          {
+            "name": "LUXURY/OPTIONAL",
+            "mods": [
+              { "ability_id": 2533252781 },
+              { "ability_id": 2407781327 },
+              { "ability_id": 3357231760 },
+              { "ability_id": 2226497419 },
+              { "ability_id": 3731635960 },
+              { "ability_id": 1378931225 },
+              { "ability_id": 2480592370 },
+              { "ability_id": 4075861416 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 5336,
+      "name": "TaanTi yt сборка из видео",
+      "author_account_id": 887925904,
+      "version": 1,
+      "last_updated_timestamp": 1723838840,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "Линия",
+            "mods": [
+              { "ability_id": 1248737459 },
+              { "ability_id": 668299740 },
+              { "ability_id": 558396679 },
+              { "ability_id": 1797283378 },
+              { "ability_id": 3399065363 },
+              { "ability_id": 4139877411 },
+              { "ability_id": 1009965641 }
+            ]
+          },
+          {
+            "name": "После линии",
+            "mods": [
+              { "ability_id": 1144549437 },
+              { "ability_id": 381961617 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 876563814 },
+              { "ability_id": 2081037738 },
+              { "ability_id": 2951612397 },
+              { "ability_id": 2447176615 }
+            ]
+          },
+          {
+            "name": "Мид Гейм",
+            "mods": [
+              { "ability_id": 7409189 },
+              { "ability_id": 3884003354 },
+              { "ability_id": 2717651715 },
+              { "ability_id": 334300056 }
+            ]
+          },
+          {
+            "name": "Лейт",
+            "mods": [
+              { "ability_id": 3612042342 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 3357231760 }
+            ]
+          },
+          {
+            "name": "Выживаемость",
+            "mods": [
+              { "ability_id": 3713423303 },
+              { "ability_id": 223594321 },
+              { "ability_id": 3140772621 },
+              { "ability_id": 2163598980 }
+            ]
+          },
+          {
+            "name": "Контроль",
+            "mods": [{ "ability_id": 1813726886 }, { "ability_id": 2617435668 }]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 165760,
+      "name": "Wulfee7 Twitch - BEST INFERNUS 3-RD SPELL BUILD",
+      "author_account_id": 394955797,
+      "version": 44,
+      "last_updated_timestamp": 1739253896,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "Early",
+            "mods": [
+              { "ability_id": 1248737459 },
+              { "ability_id": 1797283378 },
+              { "ability_id": 668299740 },
+              { "ability_id": 558396679 },
+              { "ability_id": 1144549437 },
+              { "ability_id": 4139877411 },
+              { "ability_id": 84321454 }
+            ]
+          },
+          { "name": "Hard", "mods": [{ "ability_id": 1710079648 }] },
+          {
+            "name": "Mid",
+            "mods": [
+              { "ability_id": 3403085434 },
+              { "ability_id": 2951612397 },
+              { "ability_id": 876563814 },
+              { "ability_id": 1047818222 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 2081037738 },
+              { "ability_id": 2566692615 }
+            ]
+          },
+          {
+            "name": "Optional",
+            "mods": [{ "ability_id": 1644605047 }, { "ability_id": 2059712766 }]
+          },
+          {
+            "name": "Mid-Late",
+            "mods": [
+              { "ability_id": 2480592370 },
+              { "ability_id": 3731635960 },
+              { "ability_id": 3713423303 },
+              { "ability_id": 223594321 },
+              { "ability_id": 2533252781 },
+              { "ability_id": 3140772621 },
+              { "ability_id": 2717651715 },
+              { "ability_id": 2226497419 }
+            ]
+          },
+          {
+            "name": "Late",
+            "mods": [
+              { "ability_id": 2037039379 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 1113837674 },
+              { "ability_id": 2163598980 },
+              { "ability_id": 865846625 },
+              { "ability_id": 3612042342 },
+              { "ability_id": 3884003354 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 10982,
+      "name": "infernus through pain",
+      "author_account_id": 240216615,
+      "version": 10,
+      "last_updated_timestamp": 1726994406,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "Lane",
+            "mods": [
+              { "ability_id": 1548066885 },
+              { "ability_id": 668299740 },
+              { "ability_id": 558396679 },
+              { "ability_id": 3399065363 },
+              { "ability_id": 1797283378 },
+              { "ability_id": 1248737459 }
+            ]
+          },
+          {
+            "name": "если тяжелая линия",
+            "mods": [{ "ability_id": 1710079648 }, { "ability_id": 2829638276 }]
+          },
+          {
+            "name": "After",
+            "mods": [
+              { "ability_id": 1144549437 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 876563814 },
+              { "ability_id": 2447176615 },
+              { "ability_id": 2566692615 },
+              { "ability_id": 2603935618 },
+              { "ability_id": 2951612397 },
+              { "ability_id": 2081037738 },
+              { "ability_id": 1925087134 }
+            ]
+          },
+          {
+            "name": "After",
+            "mods": [
+              { "ability_id": 1102081447 },
+              { "ability_id": 2717651715 },
+              { "ability_id": 2533252781 },
+              { "ability_id": 2226497419 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 865846625 },
+              { "ability_id": 2480592370 }
+            ]
+          },
+          {
+            "name": "",
+            "mods": [
+              { "ability_id": 3144988365 },
+              { "ability_id": 1813726886 },
+              { "ability_id": 2922054143 },
+              { "ability_id": 619484391 },
+              { "ability_id": 1378931225 },
+              { "ability_id": 3270001687 },
+              { "ability_id": 1798666702 },
+              { "ability_id": 3357231760 },
+              { "ability_id": 3731635960 }
+            ]
+          },
+          {
+            "name": "фан шмотки, могут даже воркать",
+            "mods": [
+              { "ability_id": 1371725689 },
+              { "ability_id": 2800629741 },
+              { "ability_id": 2820116164 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 174588,
+      "name": "NOIZEEH - NEW INFERUS GODMODE",
+      "author_account_id": 31684840,
+      "version": 20,
+      "last_updated_timestamp": 1741030372,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "Early Game",
+            "mods": [
+              { "ability_id": 1797283378 },
+              { "ability_id": 968099481 },
+              { "ability_id": 668299740 },
+              { "ability_id": 558396679 },
+              { "ability_id": 4139877411 },
+              { "ability_id": 3147316197 },
+              { "ability_id": 1144549437 },
+              { "ability_id": 1976391348 }
+            ]
+          },
+          {
+            "name": "WHEN 2 IS MAX",
+            "mods": [{ "ability_id": 3776945997 }, { "ability_id": 787198704 }]
+          },
+          {
+            "name": "Mid game",
+            "mods": [
+              { "ability_id": 2603935618 },
+              { "ability_id": 2951612397 },
+              { "ability_id": 3977876567 },
+              { "ability_id": 876563814 },
+              { "ability_id": 3270001687 },
+              { "ability_id": 2533252781 },
+              { "ability_id": 2566692615 },
+              { "ability_id": 2081037738 },
+              { "ability_id": 1047818222 }
+            ]
+          },
+          {
+            "name": "Late Options",
+            "mods": [
+              { "ability_id": 3731635960 },
+              { "ability_id": 7409189 },
+              { "ability_id": 2226497419 },
+              { "ability_id": 3357231760 },
+              { "ability_id": 865846625 },
+              { "ability_id": 3612042342 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 1925087134 },
+              { "ability_id": 2717651715 }
+            ]
+          },
+          {
+            "name": "Situationals",
+            "mods": [
+              { "ability_id": 3713423303 },
+              { "ability_id": 223594321 },
+              { "ability_id": 3140772621 },
+              { "ability_id": 2163598980 },
+              { "ability_id": 2480592370 },
+              { "ability_id": 1102081447 },
+              { "ability_id": 1378931225 },
+              { "ability_id": 334300056 },
+              { "ability_id": 1976391348 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1142270357 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 13952,
+      "name": "Hardecki's Infernus Build",
+      "author_account_id": 240216615,
+      "version": 2,
+      "last_updated_timestamp": 1724827925,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "early",
+            "mods": [
+              { "ability_id": 1548066885 },
+              { "ability_id": 668299740 },
+              { "ability_id": 558396679 },
+              { "ability_id": 3399065363 },
+              { "ability_id": 1797283378 },
+              { "ability_id": 968099481 }
+            ]
+          },
+          { "name": "If lane is hard", "mods": [{ "ability_id": 1710079648 }] },
+          {
+            "name": "semi-mid",
+            "mods": [
+              { "ability_id": 1144549437 },
+              { "ability_id": 876563814 },
+              { "ability_id": 2566692615 },
+              { "ability_id": 2951612397 },
+              { "ability_id": 2081037738 }
+            ]
+          },
+          { "name": "", "mods": [{ "ability_id": 3696726732 }] },
+          {
+            "name": "against control",
+            "mods": [{ "ability_id": 1644605047 }, { "ability_id": 2533252781 }]
+          },
+          {
+            "name": "mid",
+            "mods": [
+              { "ability_id": 7409189 },
+              { "ability_id": 2717651715 },
+              { "ability_id": 1102081447 }
+            ]
+          },
+          { "name": "against pocket", "mods": [{ "ability_id": 3731635960 }] },
+          {
+            "name": "against bullets like haze",
+            "mods": [{ "ability_id": 1378931225 }]
+          },
+          {
+            "name": "late",
+            "mods": [
+              { "ability_id": 2226497419 },
+              { "ability_id": 865846625 },
+              { "ability_id": 3612042342 },
+              { "ability_id": 2356412290 },
+              { "ability_id": 3357231760 },
+              { "ability_id": 1798666702 }
+            ]
+          },
+          {
+            "name": "",
+            "mods": [{ "ability_id": 2820116164 }, { "ability_id": 4003032160 }]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 491391007 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 217447,
+      "name": "Metro Oneshot Infernus NEW PATCH (twitch.tv/metro)",
+      "author_account_id": 46014726,
+      "version": 44,
+      "last_updated_timestamp": 1763913754,
+      "publish_timestamp": 1763913754,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "#Citadel_HeroBuilds_Lane",
+            "mods": [
+              { "ability_id": 1009965641 },
+              { "ability_id": 668299740 },
+              { "ability_id": 1925087134 },
+              { "ability_id": 3399065363 },
+              { "ability_id": 1548066885 },
+              { "ability_id": 805079544 },
+              { "ability_id": 3696726732 }
+            ]
+          },
+          {
+            "name": "Healing",
+            "optional": true,
+            "mods": [{ "ability_id": 1710079648 }, { "ability_id": 2829638276 }]
+          },
+          {
+            "name": "#Citadel_HeroBuilds_Mid",
+            "mods": [
+              {
+                "ability_id": 2951612397,
+                "imbue_target_ability_id": 1593133799
+              },
+              { "ability_id": 2717651715 },
+              { "ability_id": 876563814 },
+              { "ability_id": 2447176615 },
+              { "ability_id": 1219329868 },
+              { "ability_id": 2142980412 },
+              { "ability_id": 2739107182 }
+            ]
+          },
+          {
+            "name": "#Citadel_HeroBuilds_Late",
+            "mods": [
+              { "ability_id": 2463960640 },
+              { "ability_id": 865846625 },
+              { "ability_id": 3884003354 },
+              { "ability_id": 2533252781 },
+              { "ability_id": 2480592370 },
+              { "ability_id": 2037039379 },
+              { "ability_id": 2519598785 },
+              { "ability_id": 1250307611 }
+            ]
+          },
+          {
+            "name": "Situational",
+            "optional": true,
+            "mods": [
+              { "ability_id": 1414025773 },
+              { "ability_id": 3731635960 },
+              { "ability_id": 2163598980 },
+              { "ability_id": 3140772621 },
+              { "ability_id": 3403085434 },
+              { "ability_id": 3357231760 },
+              { "ability_id": 1955841979 },
+              { "ability_id": 3491236900 },
+              { "ability_id": 3919289022 },
+              { "ability_id": 3005970438 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 81983,
+      "name": "WAKUTA INFERNUS",
+      "author_account_id": 1188323320,
+      "version": 26,
+      "last_updated_timestamp": 1730043495,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "Early",
+            "mods": [
+              { "ability_id": 2829638276 },
+              { "ability_id": 4139877411 },
+              { "ability_id": 558396679 },
+              { "ability_id": 968099481 },
+              { "ability_id": 668299740 },
+              { "ability_id": 84321454 },
+              { "ability_id": 2951612397 }
+            ]
+          },
+          { "name": "Defensive", "mods": [{ "ability_id": 1710079648 }] },
+          { "name": "After Lane", "mods": [{ "ability_id": 3399065363 }] },
+          {
+            "name": "Post Early",
+            "mods": [
+              { "ability_id": 876563814 },
+              { "ability_id": 2081037738 },
+              { "ability_id": 3403085434 }
+            ]
+          },
+          {
+            "name": "Mid",
+            "mods": [
+              { "ability_id": 7409189 },
+              { "ability_id": 2480592370 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 1144549437 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 2717651715 }
+            ]
+          },
+          {
+            "name": "Late",
+            "mods": [
+              { "ability_id": 2533252781 },
+              { "ability_id": 1102081447 },
+              { "ability_id": 2226497419 },
+              { "ability_id": 4003032160 },
+              { "ability_id": 3585132399 }
+            ]
+          },
+          {
+            "name": "Armor",
+            "mods": [
+              { "ability_id": 3713423303 },
+              { "ability_id": 223594321 },
+              { "ability_id": 3140772621 },
+              { "ability_id": 2163598980 }
+            ]
+          },
+          {
+            "name": "Super Late",
+            "mods": [
+              { "ability_id": 334300056 },
+              { "ability_id": 3612042342 },
+              { "ability_id": 865846625 },
+              { "ability_id": 2820116164 },
+              { "ability_id": 3884003354 },
+              { "ability_id": 1396247347 },
+              { "ability_id": 2037039379 }
+            ]
+          },
+          {
+            "name": "Counter Items",
+            "mods": [
+              { "ability_id": 3361075077 },
+              { "ability_id": 1644605047 },
+              { "ability_id": 3731635960 },
+              { "ability_id": 1378931225 },
+              { "ability_id": 1254091416 },
+              { "ability_id": 3357231760 },
+              { "ability_id": 2617435668 }
+            ]
+          },
+          { "name": "Flex", "mods": [{ "ability_id": 1925087134 }] }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 491391007 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 105490,
+      "name": "琳家无敌火男",
+      "author_account_id": 1657144845,
+      "version": 40,
+      "last_updated_timestamp": 1731229430,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "前期必买",
+            "mods": [
+              { "ability_id": 668299740 },
+              { "ability_id": 1548066885 },
+              { "ability_id": 4139877411 },
+              { "ability_id": 3399065363 },
+              { "ability_id": 558396679 },
+              { "ability_id": 968099481 },
+              { "ability_id": 1710079648 }
+            ]
+          },
+          {
+            "name": "前中期购买",
+            "mods": [
+              { "ability_id": 1144549437 },
+              { "ability_id": 2447176615 },
+              { "ability_id": 84321454 },
+              { "ability_id": 2081037738 },
+              { "ability_id": 2951612397 },
+              { "ability_id": 876563814 },
+              { "ability_id": 2566692615 },
+              { "ability_id": 3696726732 }
+            ]
+          },
+          {
+            "name": "中后期购买",
+            "mods": [
+              { "ability_id": 3005970438 },
+              { "ability_id": 2356412290 },
+              { "ability_id": 3713423303 },
+              { "ability_id": 2480592370 },
+              { "ability_id": 2226497419 },
+              { "ability_id": 7409189 },
+              { "ability_id": 2717651715 },
+              { "ability_id": 865846625 },
+              { "ability_id": 3612042342 }
+            ]
+          },
+          {
+            "name": "后期购买",
+            "mods": [
+              { "ability_id": 2037039379 },
+              { "ability_id": 3357231760 },
+              { "ability_id": 2407781327 },
+              { "ability_id": 4003032160 }
+            ]
+          },
+          {
+            "name": "防御类装备",
+            "mods": [
+              { "ability_id": 2163598980 },
+              { "ability_id": 3140772621 },
+              { "ability_id": 1378931225 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 491391007 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 327832,
+      "name": "heheheh... u see that shit? ( LIGHTBRINGER )",
+      "author_account_id": 13446690,
+      "version": 10,
+      "last_updated_timestamp": 1761135139,
+      "publish_timestamp": 1761135139,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "pick 1",
+            "optional": true,
+            "mods": [{ "ability_id": 2010028405 }, { "ability_id": 395867183 }]
+          },
+          {
+            "name": "#Citadel_HeroBuilds_EarlyGame",
+            "mods": [
+              { "ability_id": 968099481 },
+              { "ability_id": 7409189 },
+              { "ability_id": 2603935618 },
+              { "ability_id": 1009965641 },
+              { "ability_id": 709540378 },
+              {
+                "ability_id": 2951612397,
+                "imbue_target_ability_id": 1593133799
+              },
+              { "ability_id": 3399065363 },
+              { "ability_id": 2447176615 },
+              { "ability_id": 3270001687 },
+              { "ability_id": 1144549437 },
+              { "ability_id": 84321454, "imbue_target_ability_id": 491391007 }
+            ]
+          },
+          {
+            "name": "heal/burgerbox",
+            "optional": true,
+            "mods": [
+              { "ability_id": 1710079648 },
+              { "ability_id": 2829638276 },
+              { "ability_id": 4204808176 },
+              { "ability_id": 876563814 },
+              { "ability_id": 865958998 }
+            ]
+          },
+          {
+            "name": "midgame",
+            "mods": [
+              { "ability_id": 2717651715 },
+              { "ability_id": 1219329868 },
+              { "ability_id": 2519598785 },
+              { "ability_id": 811521119 },
+              { "ability_id": 710436191 },
+              { "ability_id": 4104549924 },
+              { "ability_id": 2081037738 }
+            ]
+          },
+          {
+            "name": "util",
+            "optional": true,
+            "mods": [
+              { "ability_id": 1932939246 },
+              { "ability_id": 1102081447 },
+              { "ability_id": 1925087134 },
+              { "ability_id": 619484391 },
+              { "ability_id": 2617435668 },
+              { "ability_id": 2142980412 }
+            ]
+          },
+          {
+            "name": "chungus",
+            "optional": true,
+            "mods": [
+              { "ability_id": 112198670 },
+              { "ability_id": 1644605047 },
+              { "ability_id": 3731635960 },
+              { "ability_id": 2163598980 },
+              { "ability_id": 3140772621 },
+              { "ability_id": 1414025773 },
+              { "ability_id": 1955841979 },
+              { "ability_id": 2533252781 }
+            ]
+          },
+          {
+            "name": "slotlock",
+            "optional": true,
+            "mods": [
+              { "ability_id": 4075861416 },
+              { "ability_id": 3919289022 },
+              { "ability_id": 3005970438 },
+              { "ability_id": 1250307611 }
+            ]
+          },
+          {
+            "name": "#Citadel_HeroBuilds_LateGame",
+            "mods": [
+              { "ability_id": 3884003354 },
+              { "ability_id": 339443430 },
+              { "ability_id": 343572757 },
+              { "ability_id": 2226497419 },
+              { "ability_id": 1282141666 },
+              { "ability_id": 865846625 },
+              { "ability_id": 2820116164 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1080948381 },
+            { "ability_id": 2398133749 },
+            { "ability_id": 2398133749 },
+            { "ability_id": 1458044103 },
+            { "ability_id": 2043074967 },
+            { "ability_id": 3379486147 },
+            { "ability_id": 1009029159 },
+            { "ability_id": 1009029159 },
+            { "ability_id": 3493884851 }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "hero_build": {
+      "hero_build_id": 108778,
+      "name": "turbo absolute infernus 95% WR top 10 EU RU NA",
+      "author_account_id": 901357991,
+      "version": 12,
+      "last_updated_timestamp": 1753798015,
+      "publish_timestamp": 1753798015,
+      "details": {
+        "mod_categories": [
+          {
+            "name": "lane",
+            "mods": [
+              { "ability_id": 4139877411 },
+              { "ability_id": 3977876567 },
+              { "ability_id": 668299740 },
+              { "ability_id": 968099481 },
+              { "ability_id": 1548066885 },
+              { "ability_id": 4104549924 },
+              { "ability_id": 3633614685 },
+              { "ability_id": 3585132399 }
+            ]
+          },
+          {
+            "name": "heal",
+            "optional": true,
+            "mods": [{ "ability_id": 2829638276 }, { "ability_id": 1710079648 }]
+          },
+          {
+            "name": "mid",
+            "mods": [
+              { "ability_id": 1144549437 },
+              { "ability_id": 3696726732 },
+              { "ability_id": 876563814 },
+              { "ability_id": 7409189 },
+              { "ability_id": 84321454, "imbue_target_ability_id": 491391007 },
+              { "ability_id": 2463960640 },
+              { "ability_id": 4075861416 },
+              { "ability_id": 2739107182 },
+              { "ability_id": 2480592370 }
+            ]
+          },
+          {
+            "name": "late",
+            "mods": [
+              { "ability_id": 2226497419 },
+              { "ability_id": 2037039379 },
+              { "ability_id": 865846625 },
+              { "ability_id": 3005970438 },
+              {
+                "ability_id": 3919289022,
+                "imbue_target_ability_id": 491391007
+              },
+              { "ability_id": 2519598785 },
+              { "ability_id": 787198704 },
+              { "ability_id": 3884003354 },
+              { "ability_id": 673001892 }
+            ]
+          },
+          {
+            "name": "situational",
+            "optional": true,
+            "mods": [
+              { "ability_id": 3970837787 },
+              { "ability_id": 112198670 },
+              { "ability_id": 3361075077 },
+              { "ability_id": 1414025773 },
+              { "ability_id": 2163598980 },
+              { "ability_id": 3731635960 },
+              { "ability_id": 3491236900 },
+              { "ability_id": 1250307611 },
+              { "ability_id": 2407781327 },
+              { "ability_id": 1955841979 },
+              { "ability_id": 3357231760 }
+            ]
+          }
+        ],
+        "ability_order": {
+          "currency_changes": [
+            { "ability_id": 1593133799 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 1593133799 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 491391007 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 3516947824 },
+            { "ability_id": 1142270357 },
+            { "ability_id": 1142270357 }
+          ]
+        }
+      }
+    }
+  }
+]

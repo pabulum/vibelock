@@ -28,6 +28,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # The browser smoke tests (src/test/) run the real app in headless Chromium.
+      - run: npx playwright install --with-deps chromium
       # Gate the deploy on lint + tests so a regression (e.g. a broken stats primitive) can't ship.
       - run: npm run lint
       - run: npm test
