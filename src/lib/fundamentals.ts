@@ -17,10 +17,11 @@ import type {
 
 // --- Recency: "my last N games on this hero" as a timestamp window ---
 
-/** How many recent games the benchmark reads by default. Small on purpose: right after a session
- * the useful read is your *current* form, not an average dragged back weeks — a game from 40 days
- * ago is a different player. Five smooths a single unlucky game without reaching for stale ones. */
-export const RECENT_GAMES_DEFAULT = 5;
+/** How many recent games the benchmark reads by default. One, to match the rest of the page: the
+ * Economy panel overlays your *last game* per source, so the combat card reading the same game
+ * makes the whole dashboard one coherent post-game story rather than two windows side by side. A
+ * single game is noisy — the card says so, and the selector widens it to 5/10/20 in one click. */
+export const RECENT_GAMES_DEFAULT = 1;
 
 export interface RecentWindow {
   /** Pass to the metrics endpoint to scope it to exactly these games. */
@@ -204,10 +205,16 @@ const LEVERS: Lever[] = [
     priority: 3,
   },
   {
+    // NOT "soak more lane": soaking is the *proximity* half of trooper souls and needs no last hit
+    // at all — you get it by being within 45m of the orb (or 30m of the killer) when souls
+    // distribute. A trooper drops two orbs worth 50% of the bounty each: the ground orb can't be
+    // denied, while the floating one is contested — shoot it to secure, or an enemy shoots it and
+    // takes those souls themselves. So a low count here is *contested* souls being lost, never
+    // "free souls on the table" (deadlock.wiki/Souls).
     key: "last_hits",
-    action: "Soak more lane",
+    action: "Secure your orbs",
     detail:
-      "You last-hit fewer creeps than most {hero} players — free souls left on the table.",
+      "You confirm fewer soul orbs than most {hero} players — half a trooper's souls ride on the floating orb, and the enemy takes them if they shoot it first.",
     priority: 2,
   },
   {
@@ -224,10 +231,12 @@ const LEVERS: Lever[] = [
     priority: 1,
   },
   {
+    // A deny isn't only starvation: hitting the enemy's floating orb grants those souls to you and
+    // nearby allies, so it's a swing — they lose the orb's half, you gain it.
     key: "denies",
     action: "Deny more",
     detail:
-      "Denying starves the enemy laner — you're denying less than the ladder.",
+      "You deny less than the ladder — shooting the enemy's floating orb takes that half of the trooper for yourself instead.",
     priority: 1,
   },
   {

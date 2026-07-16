@@ -524,8 +524,16 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Climb tips: the 1–2 weakest controllable levers, turned into concrete "do this next game"
-   advice under the fundamentals bars (lib/fundamentals.climbAdvice). */
+/* Climb tips (lib/fundamentals.climbAdvice): the 1–2 weakest controllable levers as concrete "do
+   this next game" advice. Its own dashboard card — the advice spans farm AND survival, so it
+   belonged inside neither the Economy nor the Combat panel. */
+.climbcard .climbtip {
+  margin-bottom: 6px;
+}
+.climbcard .lastgamelink {
+  margin-top: 2px;
+}
+/* The match modal still stacks its tips under a divider, so the block style stays. */
 .climbtips {
   margin-top: 10px;
   padding-top: 8px;
@@ -538,6 +546,7 @@ body {
   letter-spacing: 0.06em;
   color: var(--muted);
   margin-bottom: 5px;
+  flex: none;
 }
 .climbtip {
   display: flex;
@@ -613,95 +622,72 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Pre-build dashboard: your fundamentals, skill order, and the community check as uniform
-   cards in a wrap row — three-up on a wide screen, wrapping to fewer per row as it narrows.
-   Fundamentals is ordered first (leftmost) since it's the tallest, so it anchors the row; the
-   community card sizes to its content so its build cards sit side by side rather than stacking
-   into a long strip. Each is a self-contained card; the page gutter and inter-card spacing
-   live here, so the cards carry no outer margin. */
+/* Pre-build dashboard: a plain two-column grid, paired by subject.
+     row 1  Economy | Combat & survival   — the two "how you're doing" reads
+     row 2  Skill order | Community check — the two "what to build" reads
+   Deliberately NOT a wrap row (cards hung at ragged depths) and no row-spanning feature column: a
+   spanned Economy left a big hole beside it whenever it had no farm data to show, and forcing the
+   community card full-width made it an awkward page-wide band. Equal columns keep every card the
+   same width, so uneven heights read as a dashboard rather than a pile. One column below 900px.
+   Cards carry no outer margin — the page gutter and gaps live here. */
 .dash {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 14px;
   padding: 8px 22px 4px;
+}
+/* Two balanced columns, NOT a grid: grid rows force every card in a row to share the tallest one's
+   height, which punched a ~270px hole under the short Combat card whenever Economy had a full
+   breakdown to show. Multi-column packs each card directly under the previous one and balances the
+   column heights itself, so there are no interior gaps and the balance adapts to whatever the cards
+   actually contain (Economy collapses to a couple of lines when a hero has no farm data yet).
+   `break-inside: avoid` keeps a card whole rather than splitting it across the columns. */
+@media (min-width: 900px) {
+  .dash {
+    column-count: 2;
+    column-gap: 14px;
+  }
+}
+.dash > * {
+  break-inside: avoid;
+  margin: 0 0 14px;
 }
 /* Shared card frame for the dashboard panels. */
 .dash > .skills,
 .dash > .fundamentals,
+.dash > .economy,
+.dash > .climbcard,
 .dash > .community {
-  margin: 0;
+  /* Bottom margin is the inter-card gap in the column flow — it must match `.dash > *` above, and
+     it's repeated here because these class selectors would otherwise out-specify it back to 0. */
+  margin: 0 0 14px;
   padding: 14px 16px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 10px;
+  min-width: 0;
 }
-/* Landscape layout: the percentile bars sit beside the "To climb" tips (rather than stacked
-   above them), so the tallest panel is roughly as short as the skill/community cards next to
-   it instead of hanging a ragged ~100px lower. */
+.dash > .economy > h2,
+.dash > .climbcard > h2,
+.dash > .community > h2 {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+.dash > .economy > h2 .sub,
+.dash > .community > h2 .sub {
+  font-weight: 400;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+/* The "To climb" tips used to live here beside the bars; they're their own strip above the dash now
+   (they're holistic advice, not a combat stat), so this card is simply a heading plus its rows. */
 .dash > .fundamentals {
-  order: -1;
-  flex: 0 1 660px;
-  max-width: none;
   cursor: help;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(190px, 240px);
-  grid-template-areas:
-    "head head"
-    "rows climb";
-  gap: 4px 22px;
-  align-content: start;
-}
-.dash > .fundamentals > h2 {
-  grid-area: head;
-}
-.dash > .fundamentals > .fundrows {
-  grid-area: rows;
-}
-.dash > .fundamentals > .climbtips {
-  grid-area: climb;
-  margin-top: 0;
-  padding-top: 0;
-  padding-left: 20px;
-  border-top: none;
-  border-left: 1px solid var(--line);
-  align-self: start;
-}
-/* Keep the skill timeline compact so its level pips don't stretch sparse. */
-.dash > .skills {
-  flex: 0 1 auto;
-  width: min(100%, 600px);
-}
-/* Sized to its content (max-content = build cards on one line), so one card is a tidy box and
-   two sit side by side rather than stacking into a long strip — and it never blows out to a
-   full-width band when it wraps to its own row. */
-.dash > .community {
-  flex: 0 0 auto;
-  width: max-content;
-  max-width: 100%;
+  /* The standalone card caps itself at 520px; as a grid item it should fill its column instead. */
+  max-width: none;
 }
 @media (max-width: 760px) {
   .dash {
     padding-left: 14px;
     padding-right: 14px;
-  }
-}
-/* On a narrow card the fundamentals bars and tips can't sit side by side — stack them, and
-   restore the tips' top divider (it becomes a left divider only in the landscape layout). */
-@media (max-width: 560px) {
-  .dash > .fundamentals {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "head"
-      "rows"
-      "climb";
-  }
-  .dash > .fundamentals > .climbtips {
-    margin-top: 8px;
-    padding-top: 8px;
-    padding-left: 0;
-    border-top: 1px solid var(--line);
-    border-left: none;
   }
 }
 
@@ -899,8 +885,12 @@ body {
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
-  flex: 0 1 360px;
+  /* The community card is now a full-width grid band, so the builds grow to share it rather than
+     being pinned to a fixed width — capped so two cards read as a pair instead of stretching into
+     banners, and dropping to one per row only when the viewport genuinely can't fit two. */
+  flex: 1 1 300px;
   min-width: 0;
+  max-width: 520px;
   padding: 7px 11px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -2586,16 +2576,13 @@ body {
   letter-spacing: 0.05em;
   color: var(--muted);
 }
-.econkind.k-lever {
+.econkind.k-steady {
   color: #7ecf9e;
 }
-.econrow .fbar > span.k-lever {
+.econrow .fbar > span.k-steady {
   background: #7ecf9e;
 }
-.econrow .fbar > span.k-lane {
-  background: var(--accent);
-}
-.econrow .fbar > span.k-outcome {
+.econrow .fbar > span.k-swingy {
   background: #d8a05a;
 }
 .econrow .fbar > span.k-passive {
@@ -2611,6 +2598,180 @@ body {
   font-size: 11px;
 }
 
+/* --- Economy panel: souls/min headline, then the steady-vs-swingy source breakdown --- */
+
+/* Headline: the one number that most separates ranks, framed as this card's thesis rather than a
+   row lost among six others. Sits above a divider so the breakdown reads as its explanation. */
+.ecohead {
+  display: grid;
+  grid-template-columns: 72px 46px 1fr 30px 52px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 9px;
+  margin-bottom: 9px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+}
+.ecohead .fval {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.ecohead .fbar {
+  height: 6px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.ecohead .fbar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.ecohead .fbar > span.hi {
+  background: #7ecf9e;
+}
+.ecohead .fbar > span.lo {
+  background: #e08989;
+}
+.ecohead .fpct {
+  text-align: right;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.ecohead .ecovs {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  text-align: right;
+}
+
+.economy .econlead {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+}
+.economy .econlead strong,
+.economy .econlead em {
+  font-style: normal;
+  color: #7ecf9e;
+}
+.economy .econgather {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* A source group (steady / swingy): a coloured header, then its rows. The group IS the framing, so
+   rows carry no per-row kind chip — one label per bucket instead of one per line. */
+.ecogroup + .ecogroup {
+  margin-top: 9px;
+}
+.ecogrouphdr {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding-bottom: 2px;
+}
+.ecogrouphdr.k-steady {
+  color: #7ecf9e;
+}
+.ecogrouphdr.k-swingy {
+  color: #d8a05a;
+}
+.ecorow {
+  display: grid;
+  /* Label column fits "Bosses & objectives" on one line — it wrapped to two at 116px. */
+  grid-template-columns: 132px 1fr 58px;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 12.5px;
+}
+/* With the last-game overlay there's a fourth column: your own rate, same units as the median. */
+.economy.has-you .ecorow {
+  grid-template-columns: 132px 1fr 58px 62px;
+}
+/* Column headers over the median/you numbers — the two columns are otherwise indistinguishable. */
+.ecorow.ecohdr {
+  padding: 0 0 3px;
+}
+.ecorow.ecohdr .fpop,
+.ecorow.ecohdr .fyou {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+/* Bullet chart: the filled bar is YOUR rate (so it means the same thing as the souls/min bar above
+   it), read against a tick at the hero's median. Bar past the tick = above median. */
+.ecorow .fbar {
+  position: relative;
+  height: 6px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.ecorow .fbar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--muted);
+}
+.ecorow .fbar > .ftick {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 10px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text);
+  opacity: 0.75;
+}
+.ecorow .fbar > span.k-steady {
+  background: #7ecf9e;
+}
+.ecorow .fbar > span.k-swingy {
+  background: #d8a05a;
+}
+.ecorow .fpop {
+  text-align: right;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+/* Your last game: the rate leads (same units as the median beside it), the percentile trails muted
+   and small — a locator, not a grade, so it gets no good/bad colour. */
+.ecorow .fyou {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 4px;
+  white-space: nowrap;
+}
+.ecorow .fyoun {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+/* Above / below the hero's median. A direction, not a verdict — the note says as much. */
+.ecorow .fyoun.hi {
+  color: #7ecf9e;
+}
+.ecorow .fyoun.lo {
+  color: #e08989;
+}
+.ecorow .fyoup {
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 560px) {
   .matchrow {
     grid-template-columns: 40px 1fr 64px;
@@ -2622,6 +2783,18 @@ body {
     grid-template-columns: 96px 1fr 44px 50px 28px;
   }
   .econrow .econkind {
+    display: none;
+  }
+  .ecorow {
+    grid-template-columns: 96px 1fr 50px;
+  }
+  .economy.has-you .ecorow {
+    grid-template-columns: 96px 1fr 50px 56px;
+  }
+  .ecohead {
+    grid-template-columns: 66px 44px 1fr 28px;
+  }
+  .ecohead .ecovs {
     display: none;
   }
 }

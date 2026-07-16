@@ -119,9 +119,8 @@ function WpChart({ a }: { a: MatchAnalysis }) {
 }
 
 const KIND_LABEL: Record<string, string> = {
-  lever: "farmable",
-  lane: "lane",
-  outcome: "fight-driven",
+  steady: "steady farm",
+  swingy: "fights & obj",
   passive: "passive",
 };
 
@@ -129,13 +128,18 @@ export function MatchModal({
   accountId,
   heroes,
   autoLoadLatest = false,
+  autoLoadMatchId = null,
   onClose,
 }: {
   /** The stored profile's account id; enables the recent-games list and picks the seat. */
   accountId: number | null;
   heroes: Hero[];
-  /** Open straight onto the player's most recent game (the build page's "analyze last game" link). */
+  /** Open straight onto a game (the build page's "analyze last game" link). */
   autoLoadLatest?: boolean;
+  /** Which game to open when {@link autoLoadLatest} is set — the build page passes the player's last
+   * game on the *selected hero*, since that's the hero whose build they're reading. Null (never
+   * played it) falls back to their most recent game on any hero. */
+  autoLoadMatchId?: number | null;
   onClose: () => void;
 }) {
   const [input, setInput] = useState("");
@@ -298,14 +302,16 @@ export function MatchModal({
         setRecent(recentRows.slice(0, 8));
         if (autoLoadLatest && !autoLoaded.current && recentRows.length > 0) {
           autoLoaded.current = true;
-          setInput(String(recentRows[0].match_id));
-          void load(recentRows[0].match_id);
+          // Prefer the caller's target (the selected hero's last game); fall back to the newest.
+          const target = autoLoadMatchId ?? recentRows[0].match_id;
+          setInput(String(target));
+          void load(target);
         }
       },
       () => live.current && setRecent([]),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId, autoLoadLatest]);
+  }, [accountId, autoLoadLatest, autoLoadMatchId]);
 
   const a = analysis;
   const maxShare = useMemo(
@@ -578,11 +584,12 @@ export function MatchModal({
                   ))}
                 </div>
                 <p className="matchnote">
-                  <em>farmable</em> sources (camps, breakables) are the levers
-                  you control next game; <em>fight-driven</em> souls mostly
-                  follow from fights going well. Lane soak is context, not a
-                  grade — its volume runs low on roaming styles. Percentiles are
-                  vs players on this hero one rank up, where available.
+                  <em>steady farm</em> — lane, camps, breakables, denies —
+                  arrives whether or not fights go your way (lane is the least
+                  win-tied source of all). <em>Fights &amp; objectives</em> are
+                  contested and ride on the game going your way. Neither is a
+                  grade. Percentiles are vs players on this hero one rank up,
+                  where available.
                 </p>
               </section>
 

@@ -5,6 +5,7 @@ import {
   deathInsights,
   deathsSummary,
   economyRows,
+  heroFarmProfile,
   matchFundamentals,
   winProbability,
   wpTimeline,
@@ -214,12 +215,12 @@ describe("economyRows", () => {
     ]);
     const lane = rows[0];
     expect(lane.gold).toBe(1200);
-    expect(lane.kind).toBe("lane");
+    expect(lane.kind).toBe("steady");
     expect(lane.perMin).toBeCloseTo(120, 5);
     expect(lane.src).toBe(2); // single source ⇒ benchmarkable
-    expect(rows.find((r) => r.key === "camps")?.kind).toBe("lever");
+    expect(rows.find((r) => r.key === "camps")?.kind).toBe("steady");
     expect(rows.find((r) => r.key === "camps")?.src).toBe(3);
-    expect(rows.find((r) => r.key === "kills")?.kind).toBe("outcome");
+    expect(rows.find((r) => r.key === "kills")?.kind).toBe("swingy");
     expect(rows.find((r) => r.key === "kills")?.src).toBeUndefined(); // grouped ⇒ not benchmarked
     // Shares sum to 1 over the shown rows (team bonus was zero and dropped).
     expect(rows.reduce((s, r) => s + r.share, 0)).toBeCloseTo(1, 5);
@@ -257,6 +258,71 @@ describe("benchmarkEconomy", () => {
     expect(
       benchmarkEconomy(rows, 99, 9, wp({ "1:9": { n: 500, src: {} } })),
     ).toEqual(rows); // wrong hero
+  });
+});
+
+describe("heroFarmProfile", () => {
+  const wp = (norms: WpStats["farmNorms"]): WpStats => ({
+    ...WP,
+    farmPcts: [10, 25, 50, 75, 90],
+    farmNorms: norms,
+  });
+  // p50 (index 2) medians: camps 100, breakables 50, lane 400, kills 80, assists 20.
+  const cell = {
+    n: 200,
+    src: {
+      3: [40, 70, 100, 150, 190],
+      12: [20, 35, 50, 70, 95],
+      2: [300, 350, 400, 470, 540],
+      1: [40, 60, 80, 120, 160],
+      6: [10, 15, 20, 30, 40],
+    },
+  };
+
+  it("builds the median mix, groups kills+assists, and sums steady share", () => {
+    const prof = heroFarmProfile(wp({ "5:8": cell }), 5, 8)!;
+    expect(prof.tier).toBe(8);
+    expect(prof.substituted).toBe(false);
+    expect(prof.n).toBe(200);
+    // Rows largest-median first; kills+assists collapse to one 100/min "kills" row.
+    expect(prof.rows.map((r) => [r.key, r.perMin])).toEqual([
+      ["lane", 400],
+      ["camps", 100],
+      ["kills", 100], // 80 + 20
+      ["boxes", 50],
+    ]);
+    // steadyShare = (lane + camps + breakables) / total = (400 + 100 + 50) / 650; kills is swingy.
+    expect(prof.steadyShare).toBeCloseTo(550 / 650, 5);
+    expect(prof.rows.reduce((s, r) => s + r.share, 0)).toBeCloseTo(1, 5);
+  });
+
+  it("falls back to the nearest baked tier within ±2 and flags it", () => {
+    // Requested tier 5 isn't baked; tier 6 is one away ⇒ used and flagged substituted.
+    const prof = heroFarmProfile(wp({ "5:6": cell }), 5, 5)!;
+    expect(prof.tier).toBe(6);
+    expect(prof.substituted).toBe(true);
+    // Ties break toward the climb (up): tier 5 requested, both 4 and 6 baked ⇒ 6 wins.
+    const both = heroFarmProfile(
+      wp({ "5:4": { n: 5, src: cell.src }, "5:6": cell }),
+      5,
+      5,
+    )!;
+    expect(both.tier).toBe(6);
+    // Beyond ±2 there's no substitute: tier 5 requested, only tier 8 baked ⇒ null.
+    expect(heroFarmProfile(wp({ "5:8": cell }), 5, 5)).toBeNull();
+  });
+
+  it("drops a grouped row unless every member source is baked", () => {
+    // Assists (6) missing ⇒ the kills+assists group can't be formed consistently, so it's omitted.
+    const partial = { n: 200, src: { 3: cell.src[3], 1: cell.src[1] } };
+    const prof = heroFarmProfile(wp({ "5:8": partial }), 5, 8)!;
+    expect(prof.rows.map((r) => r.key)).toEqual(["camps"]);
+  });
+
+  it("returns null when the cell, grid, or data is absent", () => {
+    expect(heroFarmProfile(wp({ "5:8": cell }), 99, 8)).toBeNull(); // wrong hero
+    expect(heroFarmProfile(wp(undefined), 5, 8)).toBeNull();
+    expect(heroFarmProfile(null, 5, 8)).toBeNull();
   });
 });
 

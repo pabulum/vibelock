@@ -12,6 +12,7 @@ import {
   getItems,
   getHeroLadderStats,
   getItemStats,
+  getMatchMetadata,
   getPatches,
   getPlayerHeroStats,
   getPlayerMatchHistory,
@@ -51,6 +52,11 @@ import {
 import { buildJointGamesLookup } from "./lib/pairs";
 import { buildSynergyLookup, singleRecordsFromFlow } from "./lib/synergy";
 import { bestImbueTargets } from "./lib/imbue";
+import {
+  benchmarkEconomy,
+  economyRows,
+  heroFarmProfile,
+} from "./lib/matchAnalysis";
 import { heroMatchups } from "./lib/matchups";
 import {
   bandForTier,
@@ -70,6 +76,7 @@ import { parseSteamInput, parseVanityName } from "./lib/steamId";
 import { useAsyncTask, useSettle } from "./hooks";
 import { CommunityRow } from "./components/CommunityRow";
 import { ExportPanel } from "./components/ExportPanel";
+import { EconomyPanel, type LastGameFarm } from "./components/EconomyPanel";
 import { GuideModal } from "./components/GuideModal";
 import { LabModal } from "./components/LabModal";
 import { MatchModal } from "./components/MatchModal";
@@ -110,6 +117,11 @@ import type {
 } from "./types";
 
 const COUNTER_ADDS_PER_PHASE = 3; // cap on counter-only picks folded into a phase's swaps
+
+/** Fundamentals rows the "Combat & survival" card still shows. Everything soul-shaped moved to the
+ * Economy panel (souls/min as its headline; last hits / jungle / denies replaced by the real
+ * per-source breakdown), so what's left here is staying alive and what you do in a fight. */
+const COMBAT_KEYS = new Set(["deaths", "player_damage_per_min", "accuracy"]);
 
 /** The core pick a counter item should swap in for: the weakest same-slot core item for this
  * comp (lowest comp-aware score) — the one to drop to make room. */
@@ -346,6 +358,13 @@ export default function App() {
     /** The rank being benchmarked against — the climb target, one tier up. */
     benchmarkLabel: string;
   } | null>(null);
+  // Your last game on this hero, overlaid on the Economy card as a per-source rate. Null unless
+  // you're linked and that game is ingested — the card is population-only otherwise.
+  const [lastGameFarm, setLastGameFarm] = useState<LastGameFarm | null>(null);
+  // The match id of your most recent game on the SELECTED hero, or null if you've never played it.
+  // Separate from lastGameFarm: that one also needs the match to be ingested and the rank baked,
+  // whereas this only needs the game to exist — it's what "analyze your last <hero> game" opens.
+  const [lastHeroMatchId, setLastHeroMatchId] = useState<number | null>(null);
   // How many recent games the fundamentals card reads. Scoping by *games* (not days) is what keeps a
   // long break out of the average — see lib/fundamentals.recentWindow. Default small: right after a
   // session you want your *current* form, not an average dragged back weeks.
@@ -416,6 +435,23 @@ export default function App() {
   );
   const { minBadge, maxBadge } = rankSelToBadges(rankSel);
   const rankLabel = rankSelLabel(rankSel);
+  // Descriptive soul-income shape for this hero at this rank (population median from the Lab's farm
+  // norms). Independent of the player's account — it renders whenever a hero + rank cell is baked.
+  const farmProfile = useMemo(
+    () =>
+      hero && wpStats
+        ? heroFarmProfile(wpStats, hero.id, tierOf(rankSel))
+        : null,
+    [hero, wpStats, rankSel],
+  );
+  // The Economy panel owns the soul story now, so souls/min is its headline rather than a combat row.
+  // last_hits / neutral_damage / denies aren't displayed anywhere any more — the per-source breakdown
+  // says the same thing with real soul numbers instead of the metrics endpoint's damage proxies — but
+  // they stay in `fundamentals.rows` so climbAdvice can still raise farm tips from them.
+  const soulsPerMinRow =
+    fundamentals?.rows.find((r) => r.key === "net_worth_per_min") ?? null;
+  const combatRows =
+    fundamentals?.rows.filter((r) => COMBAT_KEYS.has(r.key)) ?? [];
   // Numeric anchor for rank-scaled heuristics (the new-hero learning tax): the floor tier, or a
   // band's midpoint.
   const tierAnchor =
@@ -661,6 +697,56 @@ export default function App() {
       );
     },
     [accountId, hero, rankSel, patchIdx, patches, backfillOn, recentGames],
+    setError,
+  );
+
+  // Last-game overlay for the Soul income card: your most recent game on this hero, its per-source
+  // souls placed on the same population grid the card shows. Cached-first (getMatchMetadata never
+  // spends Steam budget here) and fully best-effort — a not-yet-ingested game, a missing account, or
+  // a hero/rank without baked norms all just leave the card population-only.
+  useAsyncTask(
+    async (signal) => {
+      if (!accountId || !hero) {
+        setLastGameFarm(null);
+        setLastHeroMatchId(null);
+        return;
+      }
+      const history = await getPlayerMatchHistory(accountId).catch(
+        () => [] as MatchHistoryRow[],
+      );
+      if (signal.aborted) return;
+      // History is newest-first, so the first match on this hero is the latest one.
+      const last = history.find((r) => r.hero_id === hero.id);
+      setLastHeroMatchId(last?.match_id ?? null);
+      if (!last || !wpStats) {
+        setLastGameFarm(null);
+        return;
+      }
+      // Cached-first: 404 (not ingested yet) throws and we simply show no overlay.
+      const match = await getMatchMetadata(last.match_id).catch(() => null);
+      if (signal.aborted) return;
+      const focus = match?.players.find((p) => p.account_id === accountId);
+      if (!match || !focus) {
+        setLastGameFarm(null);
+        return;
+      }
+      const rows = benchmarkEconomy(
+        economyRows(focus, match.duration_s),
+        hero.id,
+        tierOf(rankSel),
+        wpStats,
+      );
+      setLastGameFarm({
+        won: match.winning_team === focus.team,
+        bySrc: new Map(
+          rows.map((r) => [
+            r.key,
+            { perMin: r.perMin, percentile: r.percentile },
+          ]),
+        ),
+      });
+    },
+    [accountId, hero, rankSel, wpStats],
     setError,
   );
 
@@ -1569,25 +1655,30 @@ export default function App() {
       {archetypeSet && <div className="identity">{archetypeSet.note}</div>}
 
       <div className="dash">
-        {abilities && skillBuild ? (
-          <SkillOrder
-            skill={skillBuild}
-            abilities={abilities}
-            slotOrder={slotOrder}
-            settleRef={skillRef}
+        {/* The flagship: your souls/min, where this hero's souls come from, and your last game on
+            top of it. Shows whenever EITHER layer has data — the farm breakdown is baked per
+            (hero, rank) and is still filling in, so souls/min must not vanish with it. */}
+        {hero && (farmProfile || soulsPerMinRow) && (
+          <EconomyPanel
+            profile={farmProfile}
+            heroName={hero.name}
+            rankLabel={rankLabel}
+            dataRankLabel={
+              farmProfile ? rankFloorLabel(farmProfile.tier) : undefined
+            }
+            soulsPerMin={soulsPerMinRow}
+            lastGame={lastGameFarm}
           />
-        ) : (
-          hero && !skillLoading && <SkillEmpty />
         )}
 
         {fundamentals && hero && (
           <section
             className="fundamentals"
             ref={fundamentalsRef}
-            title="Your average per game, placed on the distribution of games at this rank floor (percentile, higher = better; deaths inverted). Souls/min and deaths are the two stats that most separate rank tiers — the climb levers."
+            title="Your average per game, placed on the distribution of games at this rank floor (percentile, higher = better; deaths inverted). Farm lives in the Economy panel; this is what's left — staying alive and what you do in fights."
           >
             <h2>
-              Your fundamentals{" "}
+              Combat &amp; survival{" "}
               <span className="sub">
                 {fundamentals.heroScoped ? hero.name : "all heroes"}
                 {fundamentals.window && (
@@ -1618,7 +1709,7 @@ export default function App() {
               </select>
             </h2>
             <div className="fundrows">
-              {fundamentals.rows.map((r) => (
+              {combatRows.map((r) => (
                 <div
                   className="fundrow"
                   key={r.key}
@@ -1642,41 +1733,18 @@ export default function App() {
                 </div>
               ))}
             </div>
-            {(() => {
-              const tips = climbAdvice(
-                fundamentals.rows,
-                fundamentals.heroScoped ? hero.name : "these",
-              );
-              return (
-                <div className="climbtips">
-                  <span className="climbhdr">To climb</span>
-                  {tips.length === 0 ? (
-                    <p className="climbnote">
-                      Your controllables are at or above the ladder here — play
-                      your game.
-                    </p>
-                  ) : (
-                    tips.map((t) => (
-                      <div className="climbtip" key={t.key}>
-                        <span className="climbaction">{t.action}</span>
-                        <span className="climbdetail">{t.detail}</span>
-                      </div>
-                    ))
-                  )}
-                  <button
-                    type="button"
-                    className="lastgamelink"
-                    onClick={() => {
-                      setMatchAutoLatest(true);
-                      setShowMatch(true);
-                    }}
-                  >
-                    Analyze your last game →
-                  </button>
-                </div>
-              );
-            })()}
           </section>
+        )}
+
+        {abilities && skillBuild ? (
+          <SkillOrder
+            skill={skillBuild}
+            abilities={abilities}
+            slotOrder={slotOrder}
+            settleRef={skillRef}
+          />
+        ) : (
+          hero && !skillLoading && <SkillEmpty />
         )}
 
         {communityMatch && (communityMatch.best || communityMatch.aligned) && (
@@ -1739,6 +1807,48 @@ export default function App() {
                 What “% match”, core &amp; flex mean →
               </button>
             </p>
+          </section>
+        )}
+
+        {/* "To climb" spans farm AND survival, so it's its own card rather than a corner of either
+            panel. Last in the flow: the column packer drops it into whichever column has room,
+            which keeps it compact instead of a page-wide band. */}
+        {fundamentals && hero && (
+          <section className="climbcard">
+            <h2>To climb</h2>
+            {(() => {
+              // Reads the FULL row set — including the farm rows the Economy panel displays — so
+              // farm advice survives those rows having moved out of the combat card.
+              const tips = climbAdvice(
+                fundamentals.rows,
+                fundamentals.heroScoped ? hero.name : "these",
+              );
+              return tips.length === 0 ? (
+                <p className="climbnote">
+                  Your controllables are at or above the ladder here — play your
+                  game.
+                </p>
+              ) : (
+                tips.map((t) => (
+                  <div className="climbtip" key={t.key}>
+                    <span className="climbaction">{t.action}</span>
+                    <span className="climbdetail">{t.detail}</span>
+                  </div>
+                ))
+              );
+            })()}
+            <button
+              type="button"
+              className="lastgamelink"
+              onClick={() => {
+                setMatchAutoLatest(true);
+                setShowMatch(true);
+              }}
+            >
+              {lastHeroMatchId
+                ? `Analyze your last ${hero.name} game →`
+                : "Analyze your last game →"}
+            </button>
           </section>
         )}
       </div>
@@ -1957,6 +2067,7 @@ export default function App() {
           accountId={accountId}
           heroes={heroes}
           autoLoadLatest={matchAutoLatest}
+          autoLoadMatchId={lastHeroMatchId}
           onClose={() => setShowMatch(false)}
         />
       )}

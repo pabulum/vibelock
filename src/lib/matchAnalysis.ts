@@ -195,7 +195,13 @@ const SRC = {
   breakables: 12,
 } as const;
 
-export type EconomyKind = "lever" | "lane" | "outcome" | "passive";
+/** How *reliable* a soul source is, not how controllable — every source is a choice (you pick
+ * whether to soak lane, contest a camp, deny an orb, take a fight). The axis the wiki and our WPA
+ * confound both draw is steadiness: `steady` farm (lane, camps, breakables, denies) is map income
+ * that arrives whether or not fights go your way — lane is in fact the *least* win-correlated source;
+ * `swingy` souls (kills, bosses, urn) are contested and ride on the game going your way; `passive`
+ * is item/team trickle. Drives the framing group, never a grade. */
+export type EconomyKind = "steady" | "swingy" | "passive";
 
 export interface EconomyRow {
   key: string;
@@ -204,7 +210,7 @@ export interface EconomyRow {
   gold: number;
   perMin: number;
   share: number;
-  /** How controllable the source is — drives the framing chip, not a grade. */
+  /** Which reliability group the source falls in — drives the framing chip, not a grade. */
   kind: EconomyKind;
   /** EGoldSource id when the row is a single source (so it can be benchmarked vs population);
    * undefined for grouped rows (kills+assists, passive) that don't map 1:1 to a baked norm. */
@@ -218,10 +224,80 @@ const gold = (g: MatchGoldSource | undefined) =>
   (g?.gold ?? 0) + (g?.gold_orbs ?? 0);
 
 /**
- * The focus player's souls by source, largest first. `kind` encodes the confound spectrum
- * measured on the aggregate data: camps/boxes are farmable levers (you can simply take more of
- * them next game), the lane soak is presented neutrally (its volume inverts on roamers), and
- * kills/bosses/urn are mostly outcomes of fights going well rather than independent inputs.
+ * How gold sources are grouped into the displayed rows, shared by the per-game economy view
+ * ({@link economyRows}) and the per-hero farm profile ({@link heroFarmProfile}) so both read one
+ * source of truth. `kind` is the reliability group (see {@link EconomyKind}): lane/camps/breakables/
+ * denies are `steady` map farm, kills/bosses/urn are `swingy` contested souls, item/team trickle is
+ * `passive`. `benchSrc` is the single EGoldSource id a row can be benchmarked against — set only for
+ * one-source rows (grouped rows like kills+assists map to no single norm).
+ */
+interface SourceGroup {
+  key: string;
+  label: string;
+  kind: EconomyKind;
+  srcs: number[];
+  benchSrc?: number;
+}
+const SOURCE_GROUPS: SourceGroup[] = [
+  {
+    key: "lane",
+    label: "Lane soak",
+    kind: "steady",
+    srcs: [SRC.laneCreeps],
+    benchSrc: SRC.laneCreeps,
+  },
+  {
+    key: "camps",
+    label: "Neutral camps",
+    kind: "steady",
+    srcs: [SRC.neutralCamps],
+    benchSrc: SRC.neutralCamps,
+  },
+  {
+    key: "boxes",
+    label: "Breakables",
+    kind: "steady",
+    srcs: [SRC.breakables],
+    benchSrc: SRC.breakables,
+  },
+  {
+    key: "denies",
+    label: "Denies",
+    kind: "steady",
+    srcs: [SRC.denies],
+    benchSrc: SRC.denies,
+  },
+  {
+    key: "kills",
+    label: "Kills & assists",
+    kind: "swingy",
+    srcs: [SRC.kills, SRC.assists],
+  },
+  {
+    key: "bosses",
+    label: "Bosses & objectives",
+    kind: "swingy",
+    srcs: [SRC.bosses],
+    benchSrc: SRC.bosses,
+  },
+  {
+    key: "urn",
+    label: "Urn",
+    kind: "swingy",
+    srcs: [SRC.urn],
+    benchSrc: SRC.urn,
+  },
+  {
+    key: "passive",
+    label: "Passive & items",
+    kind: "passive",
+    srcs: [SRC.teamBonus, ...SRC.itemGenerated],
+  },
+];
+
+/**
+ * The focus player's souls by source, largest first — see {@link SOURCE_GROUPS} for the grouping and
+ * the confound spectrum the `kind` tags encode.
  */
 export function economyRows(p: MatchPlayer, durationS: number): EconomyRow[] {
   const last = p.stats?.[p.stats.length - 1];
@@ -229,74 +305,123 @@ export function economyRows(p: MatchPlayer, durationS: number): EconomyRow[] {
   for (const g of last?.gold_sources ?? []) by.set(g.source, g);
 
   const mins = Math.max(1, durationS / 60);
-  const rows: Array<Omit<EconomyRow, "perMin" | "share">> = [
-    {
-      key: "camps",
-      label: "Neutral camps",
-      gold: gold(by.get(SRC.neutralCamps)),
-      kind: "lever",
-      src: SRC.neutralCamps,
-    },
-    {
-      key: "boxes",
-      label: "Breakables",
-      gold: gold(by.get(SRC.breakables)),
-      kind: "lever",
-      src: SRC.breakables,
-    },
-    {
-      key: "lane",
-      label: "Lane soak",
-      gold: gold(by.get(SRC.laneCreeps)),
-      kind: "lane",
-      src: SRC.laneCreeps,
-    },
-    {
-      key: "denies",
-      label: "Denies",
-      gold: gold(by.get(SRC.denies)),
-      kind: "lane",
-      src: SRC.denies,
-    },
-    {
-      // Grouped (kills + assists) ⇒ no single-source norm, so no population benchmark.
-      key: "kills",
-      label: "Kills & assists",
-      gold: gold(by.get(SRC.kills)) + gold(by.get(SRC.assists)),
-      kind: "outcome",
-    },
-    {
-      key: "bosses",
-      label: "Bosses & objectives",
-      gold: gold(by.get(SRC.bosses)),
-      kind: "outcome",
-      src: SRC.bosses,
-    },
-    {
-      key: "urn",
-      label: "Urn",
-      gold: gold(by.get(SRC.urn)),
-      kind: "outcome",
-      src: SRC.urn,
-    },
-    {
-      key: "passive",
-      label: "Passive & items",
-      gold:
-        gold(by.get(SRC.teamBonus)) +
-        SRC.itemGenerated.reduce((s, id) => s + gold(by.get(id)), 0),
-      kind: "passive",
-    },
-  ];
-  const total = rows.reduce((s, r) => s + r.gold, 0) || 1;
-  return rows
-    .map((r) => ({
-      ...r,
-      perMin: r.gold / mins,
-      share: r.gold / total,
-    }))
+  const total =
+    SOURCE_GROUPS.reduce(
+      (s, grp) => s + grp.srcs.reduce((t, id) => t + gold(by.get(id)), 0),
+      0,
+    ) || 1;
+  return SOURCE_GROUPS.map((grp) => {
+    const g = grp.srcs.reduce((t, id) => t + gold(by.get(id)), 0);
+    return {
+      key: grp.key,
+      label: grp.label,
+      kind: grp.kind,
+      gold: g,
+      src: grp.benchSrc,
+      perMin: g / mins,
+      share: g / total,
+    };
+  })
     .filter((r) => r.gold > 0)
     .sort((a, b) => b.gold - a.gold);
+}
+
+// --- Per-hero farm profile: the population's soul-income mix for a (hero, rank), forward-looking ---
+
+export interface FarmProfileRow {
+  key: string;
+  label: string;
+  kind: EconomyKind;
+  /** Population median souls/min from this (group of) source(s) at the hero + rank. */
+  perMin: number;
+  /** This row's share of the summed-median mix (a shape, not an exact budget: the median of a sum
+   * isn't the sum of medians, so shares are approximate by construction). */
+  share: number;
+}
+
+export interface HeroFarmProfile {
+  /** Rank tier the norms are actually drawn from — may differ from the requested tier when the exact
+   * cell isn't baked and a nearby one was substituted (see {@link heroFarmProfile}). */
+  tier: number;
+  /** True when {@link tier} is a fallback (nearest baked tier), so the UI can say "nearest data: …". */
+  substituted: boolean;
+  /** Sample size of the underlying cell (games). */
+  n: number;
+  /** Rows largest-median first. */
+  rows: FarmProfileRow[];
+  /** Combined median share from the steady farm sources (lane + camps + breakables + denies) — the
+   * headline: how much of this hero's income arrives whether or not fights go your way. */
+  steadyShare: number;
+}
+
+/** Tier offsets searched for a baked cell, nearest first (ties break toward the climb, i.e. up).
+ * Capped at ±2 because farm norms drift across ranks — borrowing tier 10 data for a tier 4 player
+ * would mislead, so beyond two tiers we show nothing rather than a wrong shape. */
+const TIER_FALLBACK_OFFSETS = [0, 1, -1, 2, -2];
+
+/**
+ * The soul-income *shape* of a hero at a rank, from the baked farm norms (wp-stats.json) — the
+ * forward-looking counterpart to the per-game {@link economyRows}. Descriptive only: it says how the
+ * population's souls split across sources (and how much is steady farm), NOT that farming more of any
+ * source causes wins — that gradient is ~0 once total net worth is held fixed, so no win-rate number
+ * is attached.
+ *
+ * `tier` is the *preferred* tier; when its cell isn't baked (thin economy data, a rare hero/rank, or
+ * a band whose centre tier simply has no cell) the nearest baked tier within ±2 is used and flagged
+ * via `substituted`. Returns null only when nothing baked is within range, so the UI hides the card.
+ */
+export function heroFarmProfile(
+  wp: WpStats | null,
+  heroId: number,
+  tier: number,
+): HeroFarmProfile | null {
+  const pcts = wp?.farmPcts;
+  if (!wp?.farmNorms || !pcts) return null;
+  const p50 = pcts.indexOf(50);
+  if (p50 < 0) return null;
+
+  let usedTier = tier;
+  let cell: NonNullable<WpStats["farmNorms"]>[string] | undefined;
+  for (const off of TIER_FALLBACK_OFFSETS) {
+    const t = tier + off;
+    if (t < 0 || t > 11) continue;
+    const c = wp.farmNorms[`${heroId}:${t}`];
+    if (c) {
+      cell = c;
+      usedTier = t;
+      break;
+    }
+  }
+  if (!cell) return null;
+
+  const cellSrc = cell.src;
+  const median = (src: number): number | null => {
+    const vals = cellSrc[String(src)];
+    return vals && vals.length === pcts.length ? vals[p50] : null;
+  };
+  const raw = SOURCE_GROUPS.flatMap((grp) => {
+    const parts = grp.srcs.map(median);
+    // A group contributes only when every member source is baked, so the mix stays self-consistent.
+    if (parts.some((v) => v === null)) return [];
+    const perMin = (parts as number[]).reduce((s, v) => s + v, 0);
+    return perMin > 0
+      ? [{ key: grp.key, label: grp.label, kind: grp.kind, perMin }]
+      : [];
+  });
+  const total = raw.reduce((s, r) => s + r.perMin, 0) || 1;
+  const rows = raw
+    .map((r) => ({ ...r, share: r.perMin / total }))
+    .sort((a, b) => b.perMin - a.perMin);
+  const steadyShare = rows
+    .filter((r) => r.kind === "steady")
+    .reduce((s, r) => s + r.share, 0);
+  return {
+    tier: usedTier,
+    substituted: usedTier !== tier,
+    n: cell.n,
+    rows,
+    steadyShare,
+  };
 }
 
 /** Place `value` on a percentile grid (e.g. [10,25,50,75,90] → [v10,v25,v50,v75,v90]) by piecewise-

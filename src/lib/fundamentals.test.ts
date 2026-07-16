@@ -168,7 +168,7 @@ describe("climbAdvice", () => {
       "last_hits",
       "neutral_damage_per_min",
     ]);
-    expect(tips[0].action).toBe("Soak more lane");
+    expect(tips[0].action).toBe("Secure your orbs");
     expect(tips[0].detail).toContain("Abrams"); // {hero} substituted
   });
 
