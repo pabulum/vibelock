@@ -59,9 +59,12 @@ export function EconomyPanel({
 }) {
   const hasYou = !!lastGame && !!profile;
   // One souls/min scale across every row so bar lengths are comparable, sized to whichever is
-  // bigger — the median or your game — so neither can overflow the track.
+  // bigger — the median or your game — so neither can overflow the track. The 8% headroom keeps
+  // the largest value off the track's edge: without it that row's tick lands at exactly 100%,
+  // fusing with the border where it reads as decoration rather than a median marker.
   const scaleMax = profile
-    ? Math.max(
+    ? 1.08 *
+      Math.max(
         ...profile.rows.map((r) =>
           Math.max(r.perMin, lastGame?.bySrc.get(r.key)?.perMin ?? 0),
         ),
