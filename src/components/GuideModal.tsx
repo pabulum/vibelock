@@ -236,7 +236,13 @@ export function GuideModal({ onClose }: { onClose: () => void }) {
           <dd>
             How much a community build’s core overlaps ours: shared ÷ combined
             core items (Jaccard). Ranks builds “most like ours”, so tightly
-            focused builds rank above kitchen-sink ones.
+            focused builds rank above kitchen-sink ones. The hover preview
+            breaks the same comparison into verdicts: items both builds run
+            (accent), items both run but at different commitment (amber, ▼ our
+            core is situational for them / ▲ theirs is situational for us),
+            their core picks we skip (green), and our picks their menu doesn’t
+            list (red). Their situational-only tail is collapsed to a count —
+            that’s the kitchen-sink part.
           </dd>
 
           <dt>

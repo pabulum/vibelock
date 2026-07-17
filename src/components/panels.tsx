@@ -15,7 +15,7 @@ import type {
   SkillBuild,
 } from "../types";
 import { ABILITY_COLORS, SLOT_COLORS } from "./colors";
-import { CounterQuickAdd } from "./CounterQuickAdd";
+import { IS_MAC } from "../lib/palette";
 import { ItemRow } from "./ItemRow";
 
 // The brand mark: a diamond gem that shows a real item icon (masked to the diamond
@@ -270,13 +270,14 @@ export function OvertimeColumn({
 export function CounterPicker({
   heroes,
   enemies,
-  onAdd,
   onRemove,
+  onOpen,
 }: {
   heroes: Hero[];
   enemies: number[];
-  onAdd: (id: number) => void;
   onRemove: (id: number) => void;
+  /** Opens the command palette in enemies mode — the picker's search-and-browse input. */
+  onOpen: () => void;
 }) {
   return (
     <div className="enemies">
@@ -294,24 +295,16 @@ export function CounterPicker({
           </button>
         );
       })}
-      {/* Fast path: type-and-Enter with fuzzy autocomplete (lib/fuzzy). */}
-      <CounterQuickAdd heroes={heroes} enemies={enemies} onAdd={onAdd} />
-      {/* Classic path: the exhaustive dropdown, kept alongside for browsing. */}
-      <select
-        value=""
-        onChange={(e) => {
-          if (e.target.value) onAdd(Number(e.target.value));
-        }}
+      {/* One entry point for both styles — fuzzy type-and-Enter chains ("haz⏎ vind⏎") and
+          portrait browsing both live in the palette (components/CommandPalette). */}
+      <button
+        type="button"
+        className="addenemy"
+        onClick={onOpen}
+        title={`Search or browse the enemy team — type a few letters, Enter, repeat (also ${IS_MAC ? "⌘K" : "Ctrl+K"} anywhere)`}
       >
-        <option value="">+ add enemy…</option>
-        {heroes
-          .filter((h) => !enemies.includes(h.id))
-          .map((h) => (
-            <option key={h.id} value={h.id}>
-              {h.name}
-            </option>
-          ))}
-      </select>
+        + add enemies…
+      </button>
     </div>
   );
 }

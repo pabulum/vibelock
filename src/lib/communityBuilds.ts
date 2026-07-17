@@ -4,6 +4,7 @@
 // strong endorsement — the meta agrees with what the tool generated.
 
 import type {
+  BuildDiff,
   CommunityBuild,
   CommunityMatch,
   HeroBuildStatRow,
@@ -98,4 +99,50 @@ export function matchCommunityBuilds(
   const aligned = ranked.reduce((a, b) => (b.similarity > a.similarity ? b : a));
 
   return { best, aligned, agree: best?.build.id === aligned.build.id };
+}
+
+/**
+ * Structured diff of our generated build against one community build, for the hover preview.
+ * Same core/flex readings the % match above ranks on: their core = the build's non-optional
+ * sections (coreItemIds), their flex = the rest of the menu; ours arrives already split (an
+ * item in both of our lists counts as core). Buckets partition the union — see {@link BuildDiff}.
+ */
+export function diffBuild(
+  ourCoreIds: number[],
+  ourSituIds: number[],
+  build: CommunityBuild,
+): BuildDiff {
+  const ourCore = new Set(ourCoreIds);
+  const ourSitu = new Set(ourSituIds.filter((id) => !ourCore.has(id)));
+  const theirCore = new Set(build.coreItemIds);
+  // Defensive union: core ids should all appear in itemIds, but the diff must not invent
+  // a "missing" bucket entry out of a payload that lists a core item only in its section.
+  const theirAll = new Set([...build.itemIds, ...build.coreItemIds]);
+
+  const diff: BuildDiff = {
+    agreeCore: [],
+    agreeFlex: [],
+    demoted: [],
+    promoted: [],
+    added: [],
+    addedFlexCount: 0,
+    missingCore: [],
+    missingFlex: [],
+  };
+  for (const id of ourCore) {
+    if (theirCore.has(id)) diff.agreeCore.push(id);
+    else if (theirAll.has(id)) diff.demoted.push(id);
+    else diff.missingCore.push(id);
+  }
+  for (const id of ourSitu) {
+    if (theirCore.has(id)) diff.promoted.push(id);
+    else if (theirAll.has(id)) diff.agreeFlex.push(id);
+    else diff.missingFlex.push(id);
+  }
+  for (const id of theirAll) {
+    if (ourCore.has(id) || ourSitu.has(id)) continue;
+    if (theirCore.has(id)) diff.added.push(id);
+    else diff.addedFlexCount++;
+  }
+  return diff;
 }

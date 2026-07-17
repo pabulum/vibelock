@@ -1059,31 +1059,70 @@ body {
   flex-wrap: wrap;
   gap: 4px;
 }
+/* Diff verdict colors (see BuildPreview): border stays the slot color, the ring says how the
+   two builds relate — accent = both run it, amber = both run it at different commitment,
+   green = their core pick we skip, red = our pick their menu lacks. `.dim` marks the
+   flex-level half of a bucket so core-level (dis)agreements read first. */
 .buildprev .bp-item {
+  position: relative;
   width: 26px;
   height: 26px;
   border-radius: 5px;
   border: 1px solid;
   overflow: hidden;
-  opacity: 0.4;
-  filter: grayscale(0.5);
 }
-.buildprev .bp-item.shared {
-  opacity: 1;
-  filter: none;
+.buildprev .bp-item.agree {
   box-shadow: 0 0 0 1px var(--accent);
 }
-.buildprev .bp-item.missing {
-  opacity: 1;
-  filter: none;
+.buildprev .bp-item.differ {
   box-shadow: 0 0 0 1px #e0b341;
+}
+.buildprev .bp-item.added {
+  box-shadow: 0 0 0 1px #54c66b;
+}
+.buildprev .bp-item.missing {
+  box-shadow: 0 0 0 1px #d87a7a;
+}
+.buildprev .bp-item.dim {
+  opacity: 0.55;
+}
+/* Role-mismatch direction: ▼ our core is only situational for them, ▲ their core is only
+   situational for us. Corner badge like the skill-rank one. */
+.buildprev .bp-flag {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding: 0 1px;
+  font-size: 8px;
+  line-height: 11px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #e0b341;
+  border-top-left-radius: 4px;
 }
 .buildprev .bp-sub {
   margin: 9px 0 5px;
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.buildprev .bp-sub.agree {
+  color: var(--accent);
+}
+.buildprev .bp-sub.differ {
   color: #e0b341;
+}
+.buildprev .bp-sub.added {
+  color: #54c66b;
+}
+.buildprev .bp-sub.missing {
+  color: #d87a7a;
+}
+/* Their situational-only tail, collapsed to a count — the kitchen-sink part of the menu. */
+.buildprev .bp-tail {
+  margin-top: 7px;
+  font-size: 10.5px;
+  color: var(--muted);
 }
 .buildprev .bp-item img {
   width: 100%;
@@ -1146,14 +1185,6 @@ body {
   letter-spacing: 0.06em;
   color: var(--muted);
 }
-.enemies select {
-  background: var(--panel2);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 5px 8px;
-  font-size: 13px;
-}
 .chip {
   display: inline-flex;
   align-items: center;
@@ -1170,61 +1201,20 @@ body {
   background: #4a313c;
 }
 
-/* Rapid enemy entry: fuzzy type-and-Enter input + its autocomplete menu. */
-.quickadd {
-  position: relative;
-  display: inline-block;
-}
-.quickadd-in {
+/* The enemy picker's single entry point — opens the command palette in enemies mode.
+   Chip-shaped and dashed: an empty slot in the row of enemy chips, waiting to be filled. */
+.addenemy {
   background: var(--panel2);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 5px 8px;
-  font-size: 13px;
-  width: 220px;
-}
-.quickadd-in:focus {
-  outline: none;
-  border-color: #e39ab0;
-}
-.quickadd-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 40;
-  min-width: 200px;
-  max-height: 280px;
-  overflow-y: auto;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  padding: 4px;
-}
-.quickadd-opt {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  background: none;
-  border: none;
-  border-radius: 6px;
-  padding: 5px 8px;
-  font-size: 13px;
-  color: var(--text);
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12px;
   cursor: pointer;
-  text-align: left;
 }
-.quickadd-opt.on {
-  background: #3a2730;
-  color: #f0c2cf;
-}
-.quickadd-opt img {
-  width: 22px;
-  height: 22px;
-  border-radius: 4px;
-  object-fit: cover;
+.addenemy:hover {
+  color: var(--text);
+  border-color: #e39ab0;
 }
 
 /* One-line explainer shown above the build when enemies are selected; the counter
@@ -2133,6 +2123,164 @@ dialog.guide:not([open])::backdrop {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 2px 20px 20px;
+}
+
+/* --- Ctrl+K command palette — a native <dialog> like the guide modal, but the query input is
+   the header and the ranked command list is the body (see components/CommandPalette). Snappier
+   transitions than the guide (0.12s, keep in sync with EXIT_MS): a palette is a reflex, not a
+   destination. --- */
+dialog.palette {
+  margin: 12vh auto auto;
+  width: min(540px, calc(100vw - 32px));
+  max-width: none;
+  padding: 0;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  color: var(--text);
+  font:
+    13.5px/1.45 system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    sans-serif;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease,
+    overlay 0.12s ease allow-discrete,
+    display 0.12s ease allow-discrete;
+}
+dialog.palette[open] {
+  display: flex;
+  flex-direction: column;
+}
+dialog.palette:not([open]) {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+}
+@starting-style {
+  dialog.palette[open] {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+  dialog.palette[open]::backdrop {
+    opacity: 0;
+  }
+}
+dialog.palette::backdrop {
+  background: rgba(8, 10, 13, 0.5);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  opacity: 1;
+  transition:
+    opacity 0.12s ease,
+    overlay 0.12s ease allow-discrete,
+    display 0.12s ease allow-discrete;
+}
+dialog.palette:not([open])::backdrop {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  dialog.palette,
+  dialog.palette::backdrop {
+    transition: none;
+  }
+}
+.pal-in {
+  flex: 0 0 auto;
+  width: 100%;
+  background: transparent;
+  color: var(--text);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 13px 16px;
+  font: inherit;
+  font-size: 15px;
+}
+.pal-in:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+.pal-in::placeholder {
+  color: var(--muted);
+}
+.pal-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(52vh, 460px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 5px;
+}
+.pal-hdr {
+  padding: 9px 10px 3px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.pal-opt {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  background: none;
+  border: 0;
+  border-radius: 7px;
+  padding: 6px 10px;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.pal-opt.on {
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel2));
+}
+.pal-opt img,
+.pal-ico {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 4px;
+  object-fit: cover;
+}
+.pal-ico {
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  color: var(--muted);
+}
+.pal-lbl {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pal-check {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 12px;
+}
+.pal-hint {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+.pal-empty {
+  padding: 14px 12px;
+  color: var(--muted);
+}
+.pal-foot {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--line);
+  padding: 6px 12px;
+  font-size: 10.5px;
+  color: var(--muted);
 }
 
 /* --- Export-to-in-game panel (reuses the guide modal shell) --- */

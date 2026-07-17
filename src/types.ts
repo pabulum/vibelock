@@ -367,6 +367,33 @@ export interface RankedCommunityBuild {
   situShared: number;
 }
 
+/**
+ * Structured diff of our generated build against one community build (see diffBuild in
+ * lib/communityBuilds). Buckets partition the union of both item sets: every id lands in
+ * exactly one, so the hover preview can render the comparison instead of a soup of icons.
+ * "Core"/"flex" use the same definitions the % match ranks on — their core is the build's
+ * non-optional sections, their flex the rest of the menu; ours is core picks vs situational.
+ */
+export interface BuildDiff {
+  /** In both cores — the strongest agreement. */
+  agreeCore: number[];
+  /** Flagged situational by both sides. */
+  agreeFlex: number[];
+  /** In both builds, but our core pick is only situational for them. */
+  demoted: number[];
+  /** In both builds, but our situational pick is core for them. */
+  promoted: number[];
+  /** Their core picks our build doesn't list at all. */
+  added: number[];
+  /** Their situational-only tail we don't list — a count, not ids: kitchen-sink menus make
+   * icons there pure noise (the same reason % match ranks core:core). */
+  addedFlexCount: number;
+  /** Our core picks absent from their whole menu. */
+  missingCore: number[];
+  /** Our situational picks absent from their whole menu. */
+  missingFlex: number[];
+}
+
 /** The two community builds worth surfacing for the current hero/rank/patch + our build. */
 export interface CommunityMatch {
   /** Highest win rate in the rank/patch window. */

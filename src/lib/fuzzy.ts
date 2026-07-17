@@ -1,6 +1,7 @@
-// Fuzzy hero-name matching for the rapid counter-entry input: type a few letters, press Enter,
-// the best match commits and the box clears for the next name ("hazENTER vindiENTER…"). The ranking
-// blends three signals so it's forgiving in the two ways typing-in-a-hurry fails:
+// Fuzzy name matching for the command palette (lib/palette): type a few letters, press Enter,
+// the best match commits — and enemy entry chains, the box clearing for the next name
+// ("hazENTER vindiENTER…"). The ranking blends three signals so it's forgiving in the two ways
+// typing-in-a-hurry fails:
 //   1. Prefix / word-prefix — "haz" → Haze, "tal" → Grey Talon. The common case as you type.
 //   2. Subsequence — "grytln" → Grey Talon. Skipped letters still resolve.
 //   3. Levenshtein edit distance — "vindicat" → Vindicta, "sevn" → Seven. The classic spell-check

@@ -60,6 +60,12 @@ import {
 import { heroAccent } from "./lib/heroAccent";
 import { heroMatchups } from "./lib/matchups";
 import {
+  buildPaletteCommands,
+  IS_MAC,
+  type PaletteAction,
+  type PaletteMode,
+} from "./lib/palette";
+import {
   bandForTier,
   climbBand,
   RANK_TIERS,
@@ -75,6 +81,7 @@ import {
 import { bestSkillBuild } from "./lib/skills";
 import { parseSteamInput, parseVanityName } from "./lib/steamId";
 import { useSettle } from "./hooks";
+import { CommandPalette } from "./components/CommandPalette";
 import { CommunityRow } from "./components/CommunityRow";
 import { ExportPanel } from "./components/ExportPanel";
 import { EconomyPanel, type LastGameFarm } from "./components/EconomyPanel";
@@ -344,6 +351,17 @@ function AppInner() {
   // shown as a note under the Rank control (friend feedback: the rank flip read as "Steam ID changes
   // the items"). Cleared on a deliberate rank pick or a profile change; also fades out via CSS.
   const [rankAutoSet, setRankAutoSet] = useState<string | null>(null);
+  // A deliberate rank choice, shared by the Rank select and the command palette: stops the
+  // profile pre-selecting, clears its cue, and runs inside the switch view transition.
+  const pickRank = (sel: RankSel) => {
+    tierTouched.current = true;
+    setRankAutoSet(null);
+    switchTransition(() => setRankSel(sel));
+  };
+
+  // Command palette (Ctrl/⌘+K, or the header/counter-picker buttons): 'all' = every control,
+  // 'enemies' = scoped to enemy toggles as the counter picker's search-and-browse.
+  const [palette, setPalette] = useState<PaletteMode | null>(null);
 
   useEffect(() => {
     const v = steamId.trim();
@@ -1172,7 +1190,7 @@ function AppInner() {
   // Items the generated build recommends (core picks across phases) — the set we match
   // community builds against.
   // Compare like-for-like: our core ranks against their core, our situational against
-  // theirs (secondary). The full set still drives preview highlighting.
+  // theirs (secondary). The same split feeds the preview's structured diff (diffBuild).
   const ourCoreIds = useMemo(
     () =>
       build
@@ -1195,18 +1213,6 @@ function AppInner() {
       ),
     ].filter((id) => !core.has(id));
   }, [build]);
-  const ourIdSet = useMemo(
-    () => new Set([...ourCoreIds, ...ourSituationalIds]),
-    [ourCoreIds, ourSituationalIds],
-  );
-  const ourSplit = useMemo(
-    () => ({
-      coreCount: ourCoreIds.length,
-      situCount: ourSituationalIds.length,
-    }),
-    [ourCoreIds, ourSituationalIds],
-  );
-
   // Our recommended max order, shown in the build hover for a like-for-like skill-order
   // comparison (descriptive only — it doesn't influence the match).
   const ourMaxOrder = skillBuild?.maxPriority;
@@ -1228,6 +1234,44 @@ function AppInner() {
     setEnemies((e) =>
       e.includes(id) ? e.filter((x) => x !== id) : [...e, id],
     );
+
+  // Ctrl/⌘+K opens the palette from anywhere (hijacked even inside inputs, the convention for
+  // apps with palettes). Open-only: the toggle-close lives in the palette itself so its exit
+  // transition plays. Ignored while another modal owns the top layer.
+  const modalOpen = showGuide || showLab || showMatch || showExport;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "k") return;
+      e.preventDefault();
+      if (!modalOpen) setPalette((p) => p ?? "all");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [modalOpen]);
+
+  const paletteCommands = useMemo(
+    () =>
+      palette
+        ? buildPaletteCommands(palette, {
+            heroes,
+            heroId,
+            enemies,
+            patches,
+            patchIdx,
+            rankSel,
+            bandChoice,
+          })
+        : [],
+    [palette, heroes, heroId, enemies, patches, patchIdx, rankSel, bandChoice],
+  );
+  // Commands carry data-only actions (lib/palette); this maps a committed one onto the same
+  // handlers the header controls use. Runs only from the palette's commit events.
+  const runPaletteAction = (a: PaletteAction) => {
+    if (a.kind === "hero") pickHero(a.id);
+    else if (a.kind === "rank") pickRank(a.sel);
+    else if (a.kind === "patch") setPatchIdx(a.idx);
+    else toggleEnemy(a.id);
+  };
 
   // Empty patch list = the feed failed and the patches query degraded (see api/deadlock) —
   // windowless queries fall back to the API's default last-30-days, so label it that way.
@@ -1405,17 +1449,13 @@ function AppInner() {
             Rank
             <select
               value={typeof rankSel === "number" ? String(rankSel) : "band"}
-              onChange={(e) => {
-                tierTouched.current = true; // a deliberate choice — profile stops pre-selecting
-                setRankAutoSet(null);
-                switchTransition(() =>
-                  setRankSel(
-                    e.target.value === "band" && bandChoice
-                      ? bandChoice
-                      : Number(e.target.value),
-                  ),
-                );
-              }}
+              onChange={(e) =>
+                pickRank(
+                  e.target.value === "band" && bandChoice
+                    ? bandChoice
+                    : Number(e.target.value),
+                )
+              }
             >
               {bandChoice && (
                 <option value="band">
@@ -1510,6 +1550,14 @@ function AppInner() {
               </div>
             )}
           </label>
+          <button
+            type="button"
+            className="guidebtn palbtn"
+            onClick={() => setPalette("all")}
+            title={`Command palette — switch hero, rank, or patch and add enemies (${IS_MAC ? "⌘K" : "Ctrl+K"})`}
+          >
+            {IS_MAC ? "⌘K" : "Ctrl+K"}
+          </button>
           <button
             type="button"
             className="guidebtn"
@@ -1837,8 +1885,8 @@ function AppInner() {
                 <CommunityRow
                   tag="Top build = closest to ours ✓"
                   rb={communityMatch.best}
-                  our={ourSplit}
-                  ourIds={ourIdSet}
+                  ourCoreIds={ourCoreIds}
+                  ourSituIds={ourSituationalIds}
                   items={items}
                   abilities={abilities}
                   ourMaxOrder={ourMaxOrder}
@@ -1851,8 +1899,8 @@ function AppInner() {
                     <CommunityRow
                       tag="Best win rate"
                       rb={communityMatch.best}
-                      our={ourSplit}
-                      ourIds={ourIdSet}
+                      ourCoreIds={ourCoreIds}
+                      ourSituIds={ourSituationalIds}
                       items={items}
                       abilities={abilities}
                       ourMaxOrder={ourMaxOrder}
@@ -1863,8 +1911,8 @@ function AppInner() {
                     <CommunityRow
                       tag="Most like ours"
                       rb={communityMatch.aligned}
-                      our={ourSplit}
-                      ourIds={ourIdSet}
+                      ourCoreIds={ourCoreIds}
+                      ourSituIds={ourSituationalIds}
                       items={items}
                       abilities={abilities}
                       ourMaxOrder={ourMaxOrder}
@@ -1875,9 +1923,9 @@ function AppInner() {
               )}
             </div>
             <p className="hint">
-              {CAN_HOVER ? "Hover" : "Tap"} a build to preview its items;{" "}
-              {CAN_HOVER ? "click" : "tap"} <code>#id</code> to copy it for the
-              in-game search.{" "}
+              {CAN_HOVER ? "Hover" : "Tap"} a build to see where it agrees with
+              ours and where it differs; {CAN_HOVER ? "click" : "tap"}{" "}
+              <code>#id</code> to copy it for the in-game search.{" "}
               <button
                 type="button"
                 className="guidelink"
@@ -1981,8 +2029,8 @@ function AppInner() {
         <CounterPicker
           heroes={heroes}
           enemies={enemies}
-          onAdd={(id) => setEnemies((e) => (e.includes(id) ? e : [...e, id]))}
           onRemove={(id) => setEnemies((e) => e.filter((x) => x !== id))}
+          onOpen={() => setPalette("enemies")}
         />
       </div>
 
@@ -2142,6 +2190,19 @@ function AppInner() {
           trademarks of Valve Corporation.
         </div>
       </footer>
+
+      {palette && (
+        <CommandPalette
+          commands={paletteCommands}
+          placeholder={
+            palette === "enemies"
+              ? "Add or remove enemies — type, Enter, repeat…"
+              : "Hero, rank, patch, or “vs enemy”…"
+          }
+          onRun={runPaletteAction}
+          onClose={() => setPalette(null)}
+        />
+      )}
 
       {showGuide && <GuideModal onClose={() => setShowGuide(false)} />}
       {showLab && (

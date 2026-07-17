@@ -28,7 +28,9 @@ const browser = await chromium.launch({
 
 - Wait for `main.phases` (build generated), then ~2s more for late fetches.
 - **Selects, in order**: `select[0]` hero (labels are hero names), `select[1]` rank,
-  `select[2]` patch, `select[3]` "+ add enemy…" (comp re-rank).
+  `select[2]` patch. Enemies have no select: click `.addenemy` (or `Control+k`) to open the
+  command palette (`dialog.palette`), type into `.pal-in`, Enter commits (enemy commits keep
+  it open for chaining), Escape closes. Chips: `.enemies .chip`.
 - **Hero switches render the OLD build while loading.** After `selectOption`, poll a fingerprint
   (`main.phases .item .name` joined) until it changes (up to ~30s), else you capture stale data.
 - Item rows: `.item` (`.muted` = situational/optional, non-muted = core with a role chip

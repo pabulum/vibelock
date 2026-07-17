@@ -1,7 +1,9 @@
-// A community-build row in the "Community check" panel, with its on-hover build preview.
+// A community-build row in the "Community check" panel, with its on-hover build preview:
+// a structured, color-coded diff of that build against ours (see diffBuild in lib/communityBuilds).
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { diffBuild } from "../lib/communityBuilds";
 import { maxOrder } from "../lib/skills";
 import type {
   Ability,
@@ -30,8 +32,8 @@ function wrColor(wr: number): string {
 export function CommunityRow({
   tag,
   rb,
-  our,
-  ourIds,
+  ourCoreIds,
+  ourSituIds,
   items,
   abilities,
   ourMaxOrder,
@@ -40,8 +42,8 @@ export function CommunityRow({
 }: {
   tag: string;
   rb: RankedCommunityBuild;
-  our: { coreCount: number; situCount: number };
-  ourIds: Set<number>;
+  ourCoreIds: number[];
+  ourSituIds: number[];
   items: Map<number, Item> | null;
   abilities?: Map<number, Ability> | null;
   ourMaxOrder?: number[];
@@ -90,14 +92,15 @@ export function CommunityRow({
         <span
           className="cmeta"
           title={
-            `${rb.shared} of your ${our.coreCount} core picks are in their ${coreSize}-item core.` +
-            (our.situCount > 0
-              ? ` Flex: ${rb.situShared} of your ${our.situCount} situational picks appear in their situational list (${total - coreSize} items) — secondary, not ranked.`
+            `${rb.shared} of your ${ourCoreIds.length} core picks are in their ${coreSize}-item core.` +
+            (ourSituIds.length > 0
+              ? ` Flex: ${rb.situShared} of your ${ourSituIds.length} situational picks appear in their situational list (${total - coreSize} items) — secondary, not ranked.`
               : "")
           }
         >
-          core {rb.shared}/{our.coreCount}
-          {our.situCount > 0 && ` · flex ${rb.situShared}/${our.situCount}`}
+          core {rb.shared}/{ourCoreIds.length}
+          {ourSituIds.length > 0 &&
+            ` · flex ${rb.situShared}/${ourSituIds.length}`}
         </span>
       </div>
       <div className="cfoot">
@@ -117,7 +120,8 @@ export function CommunityRow({
         <BuildPreview
           build={rb.build}
           items={items}
-          ourIds={ourIds}
+          ourCoreIds={ourCoreIds}
+          ourSituIds={ourSituIds}
           abilities={abilities}
           ourMaxOrder={ourMaxOrder}
           slotOrder={slotOrder}
@@ -130,13 +134,17 @@ export function CommunityRow({
   );
 }
 
-// On-hover preview of a community build's items (slot-colored icons, our shared picks
-// highlighted). Portaled + anchored like the item card so the row can't clip it, and
-// kept off the default view so the page stays glanceable.
+// On-hover preview: the structured diff of a community build against ours, one color per verdict —
+// accent = both builds run it, amber = both run it but at different commitment (▼ our core is
+// situational for them, ▲ their core is situational for us), green = their core picks we skip,
+// red = our picks their menu doesn't list. Their situational-only tail collapses to a count: the
+// kitchen-sink menu is exactly the noise the % match already refuses to rank on. Portaled +
+// anchored like the item card so the row can't clip it.
 function BuildPreview({
   build,
   items,
-  ourIds,
+  ourCoreIds,
+  ourSituIds,
   abilities,
   ourMaxOrder,
   slotOrder,
@@ -146,7 +154,8 @@ function BuildPreview({
 }: {
   build: CommunityBuild;
   items: Map<number, Item>;
-  ourIds: Set<number>;
+  ourCoreIds: number[];
+  ourSituIds: number[];
   abilities?: Map<number, Ability> | null;
   ourMaxOrder?: number[];
   slotOrder: number[];
@@ -174,24 +183,73 @@ function BuildPreview({
     setPos({ left, top });
   }, [anchor]);
 
-  const theirSet = new Set(build.itemIds);
-  // Their items, shared-with-ours first so the overlap reads at a glance.
-  const resolved = build.itemIds
-    .map((id) => items.get(id))
-    .filter((i): i is Item => !!i)
-    .sort(
-      (a, b) =>
-        Number(ourIds.has(b.id)) - Number(ourIds.has(a.id)) ||
-        a.slot.localeCompare(b.slot) ||
-        a.cost - b.cost,
+  const d = diffBuild(ourCoreIds, ourSituIds, build);
+  // Shop order (slot, then cost) within every bucket, core-level entries before flex.
+  const rows = (ids: number[]) =>
+    ids
+      .map((id) => items.get(id))
+      .filter((i): i is Item => !!i)
+      .sort((a, b) => a.slot.localeCompare(b.slot) || a.cost - b.cost);
+
+  const icon = (i: Item, cls: string, title: string, flag?: string) => (
+    <span
+      key={i.id}
+      className={`bp-item ${cls}`}
+      title={`${i.name} — ${title}`}
+      style={{ borderColor: SLOT_COLORS[i.slot] ?? SLOT_COLORS.unknown }}
+    >
+      {i.image ? <img src={i.image} alt="" loading="lazy" /> : null}
+      {flag && (
+        <span className="bp-flag" aria-hidden="true">
+          {flag}
+        </span>
+      )}
+    </span>
+  );
+  const agreeCells = [
+    ...rows(d.agreeCore).map((i) => icon(i, "agree", "core in both builds")),
+    ...rows(d.agreeFlex).map((i) =>
+      icon(i, "agree dim", "situational in both builds"),
+    ),
+  ];
+  const differCells = [
+    ...rows(d.demoted).map((i) =>
+      icon(i, "differ", "core for us, situational for them", "▼"),
+    ),
+    ...rows(d.promoted).map((i) =>
+      icon(i, "differ", "situational for us, core for them", "▲"),
+    ),
+  ];
+  const addedCells = rows(d.added).map((i) =>
+    icon(i, "added", "in their core, not in our build"),
+  );
+  const missingCells = [
+    ...rows(d.missingCore).map((i) =>
+      icon(i, "missing", "our core pick, not in their build"),
+    ),
+    ...rows(d.missingFlex).map((i) =>
+      icon(i, "missing dim", "our situational pick, not in their build"),
+    ),
+  ];
+  const section = (label: string, kind: string, cells: ReactNode[]) =>
+    cells.length > 0 && (
+      <>
+        <div className={`bp-sub ${kind}`}>
+          {label} ({cells.length})
+        </div>
+        <div className="bp-grid">{cells}</div>
+      </>
     );
-  // Items we recommend that this build doesn't list at all.
-  const missing = [...ourIds]
-    .filter((id) => !theirSet.has(id))
-    .map((id) => items.get(id))
-    .filter((i): i is Item => !!i)
-    .sort((a, b) => a.slot.localeCompare(b.slot) || a.cost - b.cost);
-  const shared = ourIds.size - missing.length;
+  const counts = [
+    [agreeCells.length, "agree"],
+    [differCells.length, "differ on role"],
+    [addedCells.length, "theirs only"],
+    [missingCells.length, "ours only"],
+  ] as const;
+  const summary = counts
+    .filter(([n]) => n > 0)
+    .map(([n, label]) => `${n} ${label}`)
+    .join(" · ");
 
   // Their skill priority (which ability is maxed 1st→last), shown only in de-biased mode
   // (when ourMaxOrder is provided) so we can mark where their order diverges from ours.
@@ -203,17 +261,6 @@ function BuildPreview({
     const i = slotOrder.indexOf(id);
     return ABILITY_COLORS[(i >= 0 ? i : 0) % ABILITY_COLORS.length];
   };
-
-  const icon = (i: Item, cls: string) => (
-    <span
-      key={i.id}
-      className={`bp-item ${cls}`}
-      title={i.name}
-      style={{ borderColor: SLOT_COLORS[i.slot] ?? SLOT_COLORS.unknown }}
-    >
-      {i.image ? <img src={i.image} alt="" loading="lazy" /> : null}
-    </span>
-  );
 
   const card = (
     <div
@@ -230,16 +277,15 @@ function BuildPreview({
         <span className="bp-name">{build.name}</span>
         <span className="bp-id">#{build.id}</span>
       </div>
-      <div className="bp-grid">
-        {resolved.map((i) => icon(i, ourIds.has(i.id) ? "shared" : ""))}
-      </div>
-      {missing.length > 0 && (
-        <>
-          <div className="bp-sub">Only in our build ({missing.length})</div>
-          <div className="bp-grid">
-            {missing.map((i) => icon(i, "missing"))}
-          </div>
-        </>
+      {section("In both builds", "agree", agreeCells)}
+      {section("Differ on role", "differ", differCells)}
+      {section("Only in their core", "added", addedCells)}
+      {section("Only in ours", "missing", missingCells)}
+      {d.addedFlexCount > 0 && (
+        <div className="bp-tail">
+          + {d.addedFlexCount} more situational option
+          {d.addedFlexCount === 1 ? "" : "s"} in their menu
+        </div>
       )}
       {theirMaxOrder.length > 0 && abilities && (
         <>
@@ -276,10 +322,7 @@ function BuildPreview({
           </div>
         </>
       )}
-      <div className="bp-foot">
-        {shared} of your {ourIds.size} picks shared
-        {missing.length > 0 ? ` · ${missing.length} only in ours` : ""}
-      </div>
+      <div className="bp-foot">{summary || "no items to compare"}</div>
     </div>
   );
 
