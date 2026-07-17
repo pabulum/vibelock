@@ -170,6 +170,28 @@ test("hovering a community build shows the structured diff", async () => {
   expect(api.unmatched).toEqual([]);
 });
 
+test("share panel paints the card and offers the app link", async () => {
+  const screen = await render(<App />);
+  await expect
+    .element(screen.getByRole("heading", { name: /^Lane/ }), BAKE)
+    .toBeVisible();
+
+  await screen.getByRole("button", { name: "⤴ Share" }).click();
+
+  // The card paints asynchronously (icon loads settle first, failures degrade to
+  // placeholder tiles) — poll for the finished canvas.
+  await expect
+    .poll(() => screen.container.querySelector("canvas.share-preview"), BAKE)
+    .not.toBeNull();
+
+  // No baked og/manifest.json under the test server, so the link falls back from the
+  // shim to the plain app URL — still carrying the full selection.
+  const url = screen.container.querySelector(".share-url")?.textContent ?? "";
+  expect(url).toContain("hero=abrams");
+  expect(url).not.toContain("/og/");
+  expect(screen.container.querySelector(".banner.error")).toBeNull();
+});
+
 test("switching hero re-bakes the build", async () => {
   const screen = await render(<App />);
 

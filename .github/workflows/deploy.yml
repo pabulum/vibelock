@@ -34,6 +34,10 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      # Per-hero link-preview pages (og/<hero>.png + .html shims + manifest.json): OG crawlers
+      # don't run JS, so hero-specific unfurls need static pages baked next to the app. Reuses
+      # the Chromium installed for the smoke tests to screenshot the cards.
+      - run: node scripts/bake-og-cards.mjs
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

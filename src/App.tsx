@@ -84,6 +84,8 @@ import { useSettle } from "./hooks";
 import { CommandPalette } from "./components/CommandPalette";
 import { CommunityRow } from "./components/CommunityRow";
 import { ExportPanel } from "./components/ExportPanel";
+import { SharePanel } from "./components/SharePanel";
+import { shareCardModel, shareLinks } from "./lib/shareCard";
 import { EconomyPanel, type LastGameFarm } from "./components/EconomyPanel";
 import { GuideModal } from "./components/GuideModal";
 import { LabModal } from "./components/LabModal";
@@ -331,6 +333,7 @@ function AppInner() {
     [wpStats],
   );
   const [showExport, setShowExport] = useState(false);
+  const [showShare, setShowShare] = useState(false);
 
   // Steam identity — the single source shared by the header profile control and the export panel
   // (author stamp), persisted locally. Accepts an account id, a steamID64, or a profile URL
@@ -1004,25 +1007,36 @@ function AppInner() {
     null;
   const build = activeArchetype?.build ?? null;
 
-  // Mirror the live selection into the URL (replaceState, so links stay shareable without spamming
-  // history). Gated on a resolved hero so it can't overwrite the deep-link params before the
-  // deep-link effect above has consumed them.
+  // The live selection as URL state — mirrored into the address bar below, and the state the
+  // Share panel's links carry. Null until a hero resolves, so it can't overwrite the deep-link
+  // params before the deep-link effect above has consumed them.
+  const liveUrlState: UrlState | null = useMemo(
+    () =>
+      hero
+        ? {
+            hero: slugify(hero.name),
+            ...(typeof rankSel === "number"
+              ? { tier: rankSel }
+              : { band: rankSel }),
+            patchTs: patches[patchIdx]?.ts,
+            backfill: backfillOn,
+            build: archKey,
+            enemies: enemies
+              .map((id) => heroes.find((h) => h.id === id)?.name)
+              .filter((n): n is string => !!n)
+              .map(slugify),
+          }
+        : null,
+    [hero, rankSel, patchIdx, patches, backfillOn, archKey, enemies, heroes],
+  );
+
+  // Mirror the live selection into the URL (replaceState, so links stay shareable without
+  // spamming history).
   useEffect(() => {
-    if (!hero) return;
-    const state: UrlState = {
-      hero: slugify(hero.name),
-      ...(typeof rankSel === "number" ? { tier: rankSel } : { band: rankSel }),
-      patchTs: patches[patchIdx]?.ts,
-      backfill: backfillOn,
-      build: archKey,
-      enemies: enemies
-        .map((id) => heroes.find((h) => h.id === id)?.name)
-        .filter((n): n is string => !!n)
-        .map(slugify),
-    };
-    const url = `${window.location.pathname}${encodeUrlState(state)}${window.location.hash}`;
+    if (!liveUrlState) return;
+    const url = `${window.location.pathname}${encodeUrlState(liveUrlState)}${window.location.hash}`;
     window.history.replaceState(null, "", url);
-  }, [hero, rankSel, patchIdx, patches, backfillOn, archKey, enemies, heroes]);
+  }, [liveUrlState]);
 
   // Reflect the selected hero — and its in-game role flavor line — in the tab title. Nice for
   // bookmarks and shared deep links. Falls back to the brand title while assets load, and to just
@@ -1243,7 +1257,8 @@ function AppInner() {
   // Ctrl/⌘+K opens the palette from anywhere (hijacked even inside inputs, the convention for
   // apps with palettes). Open-only: the toggle-close lives in the palette itself so its exit
   // transition plays. Ignored while another modal owns the top layer.
-  const modalOpen = showGuide || showLab || showMatch || showExport;
+  const modalOpen =
+    showGuide || showLab || showMatch || showExport || showShare;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "k") return;
@@ -1769,6 +1784,15 @@ function AppInner() {
               title="Add this build to your in-game build list so the shop guides you through it"
             >
               ⬇ Export to in-game build
+            </button>{" "}
+            ·{" "}
+            <button
+              type="button"
+              className="guidelink"
+              onClick={() => setShowShare(true)}
+              title="Copy a summary-card image for Discord, or a link that unfurls with this hero's card"
+            >
+              ⤴ Share
             </button>
           </div>
         </div>
@@ -2265,6 +2289,32 @@ function AppInner() {
           steamId={steamId}
           onSteamIdChange={setSteamId}
           onClose={() => setShowExport(false)}
+        />
+      )}
+
+      {showShare && build && hero && liveUrlState && (
+        <SharePanel
+          model={shareCardModel(displayBuild ?? build, {
+            heroName: hero.name,
+            heroImage: hero.image,
+            archLabel:
+              archetypeSet?.flex && activeArchetype
+                ? activeArchetype.label
+                : undefined,
+            patchLabel,
+            enemyNames: enemies
+              .map((id) => heroes.find((h) => h.id === id)?.name)
+              .filter((n): n is string => !!n),
+            siteLabel: `${window.location.host}${import.meta.env.BASE_URL.replace(/\/$/, "")}`,
+          })}
+          fundamentals={fundamentals?.rows}
+          heroSlug={liveUrlState.hero}
+          links={shareLinks(
+            liveUrlState,
+            window.location.origin,
+            import.meta.env.BASE_URL,
+          )}
+          onClose={() => setShowShare(false)}
         />
       )}
     </div>

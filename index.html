@@ -10,8 +10,9 @@
       content="Pick a hero and rank floor for a phased, annotated Deadlock item build — core and situational picks, with the win-rate numbers behind every choice."
     />
 
-    <!-- Link previews (Open Graph / Twitter). Static, so every URL — including deep links — shares
-         this one generic card; per-build preview images would need server-side rendering. -->
+    <!-- Link previews (Open Graph / Twitter): the generic fallback card. Deep links shared from
+         the app's Share button use the per-hero og/<hero>.html shims baked at deploy
+         (scripts/bake-og-cards.mjs) instead, which carry hero-specific cards. -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Vibelock" />
     <meta property="og:title" content="Vibelock — data-driven Deadlock builds" />
