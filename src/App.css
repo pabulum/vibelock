@@ -3171,3 +3171,83 @@ dialog.palette:not([open])::backdrop {
 .lastgamelink:hover {
   text-decoration: underline;
 }
+
+/* --- Game-clock scrubber (prototype, gated by the Clock toggle) --------------------------------
+   Everything scrubber-related lives in this one block; delete it together with
+   components/TimeScrubber.tsx, lib/timeline.ts, and the `scrub*` lines in App.tsx to remove
+   the feature. */
+.scrubber {
+  grid-column: 1 / -1;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 14px 4px;
+}
+.scrubline {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.scrubclock {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 56px;
+  text-align: right;
+}
+.scrubtrack {
+  position: relative;
+  flex: 1;
+  padding-bottom: 18px;
+}
+.scrubtrack input[type="range"] {
+  display: block;
+  width: 100%;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+  cursor: ew-resize;
+}
+.scrubticks {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 15px;
+}
+.scrubtick {
+  position: absolute;
+  border-left: 1px solid var(--line);
+  padding-left: 4px;
+  font-size: 10px;
+  line-height: 15px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.scrubread {
+  margin: 4px 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.scrubread b {
+  color: var(--text);
+  font-weight: 600;
+}
+/* Row highlight while scrubbing: owned-by-now rows stay full, future rows recede, and the next
+   buy gets the accent ring. The wrapper div only exists while the scrubber is on (see ScrubWrap),
+   so the toggle-off DOM is untouched. */
+.scrubwrap.later {
+  opacity: 0.35;
+  filter: saturate(0.6);
+  transition: opacity 0.2s ease;
+}
+.scrubwrap.own {
+  transition: opacity 0.2s ease;
+}
+.scrubwrap.next .item {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.phase.scrub-now {
+  border-color: var(--accent);
+}

@@ -89,6 +89,8 @@ import { GuideModal } from "./components/GuideModal";
 import { LabModal } from "./components/LabModal";
 import { MatchModal } from "./components/MatchModal";
 import { wpStatsQueryOptions, type WpStats } from "./api/wpStats";
+import { ScrubWrap, TimeScrubber } from "./components/TimeScrubber";
+import { phaseAtS, timelineAt } from "./lib/timeline";
 import { CounterAddRow, ItemRow } from "./components/ItemRow";
 import { CAN_HOVER } from "./components/usePinnablePopover";
 import {
@@ -291,6 +293,9 @@ function AppInner() {
   const [archKey, setArchKey] = useState<ArchetypeKey>("all");
   const [showGuide, setShowGuide] = useState(false);
   const [showLab, setShowLab] = useState(false);
+  // Game-clock scrubber (prototype, off by default): scrubT is the scrubbed game second.
+  const [scrubOn, setScrubOn] = useState(false);
+  const [scrubT, setScrubT] = useState(600);
   const [showMatch, setShowMatch] = useState(false);
   // Whether the match modal should open onto the player's most recent game (the "analyze last game"
   // link) vs the blank recent-games list (the header "Match" button).
@@ -1359,6 +1364,9 @@ function AppInner() {
     [shownBuild],
   );
   const lowPopulation = build !== null && build.population.matches < 400;
+  // Scrubber snapshot at the scrubbed minute (null = scrubber off): the core ids the plan expects
+  // owned by then, the next buy, and the expected spend. Cheap (~50 rows), so no memo.
+  const scrub = scrubOn && shownBuild ? timelineAt(shownBuild, scrubT) : null;
 
   // The one error banner: the first query with a live error wins, mapped to a friendly line.
   // Asset failures are fatal (nothing to render); the rest surface while their panels keep
@@ -1500,6 +1508,17 @@ function AppInner() {
               type="checkbox"
               checked={backfillOn}
               onChange={(e) => setBackfillOn(e.target.checked)}
+            />
+          </label>
+          <label
+            className="checkctl"
+            title="Prototype: a game-clock scrubber above the build. Drag to a minute to see what you should own by then, the expected soul spend, and what a typical lead is worth at that point."
+          >
+            Clock
+            <input
+              type="checkbox"
+              checked={scrubOn}
+              onChange={(e) => setScrubOn(e.target.checked)}
             />
           </label>
           <label
@@ -2063,6 +2082,14 @@ function AppInner() {
 
       {shownBuild && (
         <main className="phases" ref={buildRef}>
+          {scrub && (
+            <TimeScrubber
+              build={shownBuild}
+              wpStats={wpStats}
+              t={scrubT}
+              onScrub={setScrubT}
+            />
+          )}
           {shownBuild.phases.map((phase) => {
             // Strong counter picks that file under this phase but aren't already in the build
             // get mixed into the situational list (capped); ones already shown get a portrait
@@ -2074,7 +2101,11 @@ function AppInner() {
             const lead = wpStats ? leadNote(wpStats, phase.column) : null;
             return (
               <section
-                className="phase"
+                className={
+                  scrub && phaseAtS(scrubT) === phase.column
+                    ? "phase scrub-now"
+                    : "phase"
+                }
                 key={phase.column}
                 // Named per column so a hero/rank switch cross-fades each column independently
                 // inside the view transition (see switchTransition).
@@ -2110,8 +2141,27 @@ function AppInner() {
                 <h3 className="grouphdr core">Build</h3>
                 {phase.core.length ? (
                   phase.core.map((b) => (
+                    <ScrubWrap key={b.item.id} scrub={scrub} id={b.item.id}>
+                      <ItemRow
+                        b={b}
+                        items={items}
+                        baseline={shownBuild.population.baselineWinRate}
+                        counter={counterByItem.get(b.item.id)}
+                        enemiesById={enemiesById}
+                        imbue={imbueByItem.get(b.item.id)}
+                        trending={trendingByItem.get(b.item.id)}
+                        lab={labOf?.(b.item.id)}
+                      />
+                    </ScrubWrap>
+                  ))
+                ) : (
+                  <p className="empty">No clear staple here.</p>
+                )}
+
+                <h3 className="grouphdr situational">Situational swaps</h3>
+                {phase.situational.map((b) => (
+                  <ScrubWrap key={b.item.id} scrub={scrub} id={b.item.id}>
                     <ItemRow
-                      key={b.item.id}
                       b={b}
                       items={items}
                       baseline={shownBuild.population.baselineWinRate}
@@ -2120,26 +2170,9 @@ function AppInner() {
                       imbue={imbueByItem.get(b.item.id)}
                       trending={trendingByItem.get(b.item.id)}
                       lab={labOf?.(b.item.id)}
+                      muted
                     />
-                  ))
-                ) : (
-                  <p className="empty">No clear staple here.</p>
-                )}
-
-                <h3 className="grouphdr situational">Situational swaps</h3>
-                {phase.situational.map((b) => (
-                  <ItemRow
-                    key={b.item.id}
-                    b={b}
-                    items={items}
-                    baseline={shownBuild.population.baselineWinRate}
-                    counter={counterByItem.get(b.item.id)}
-                    enemiesById={enemiesById}
-                    imbue={imbueByItem.get(b.item.id)}
-                    trending={trendingByItem.get(b.item.id)}
-                    lab={labOf?.(b.item.id)}
-                    muted
-                  />
+                  </ScrubWrap>
                 ))}
                 {counterAdds.map((c) => (
                   <CounterAddRow
