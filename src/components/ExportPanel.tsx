@@ -2,10 +2,10 @@
 // cached_hero_builds.kv3 so the in-game shop walks them through it top-to-bottom.
 
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { encodeHeroBuild } from "../lib/heroBuildExport";
 import { injectBuildIntoCache } from "../lib/heroBuildCache";
 import { parseSteamInput } from "../lib/steamId";
+import { ModalShell } from "./ModalShell";
 import type { GeneratedBuild, ImbueTarget } from "../types";
 
 // File System Access API — not in the default TS DOM lib, so we type only what we call. Present on
@@ -71,11 +71,6 @@ export function ExportPanel({
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const authorId = parseSteamInput(steamId) ?? undefined;
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
   useEffect(
     () => () => {
       if (downloadUrl) URL.revokeObjectURL(downloadUrl);
@@ -166,130 +161,105 @@ export function ExportPanel({
     }
   };
 
-  return createPortal(
-    <div className="guide-backdrop" onClick={onClose}>
-      <div
-        className="guide export"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Export to in-game build"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="guide-head">
-          <h2>Export to in-game build</h2>
-          <button
-            type="button"
-            className="guide-x"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            ✕
-          </button>
-        </header>
+  return (
+    <ModalShell
+      className="export"
+      label="Export to in-game build"
+      title="Export to in-game build"
+      onClose={onClose}
+    >
+      <p>
+        Adds <strong>{name}</strong> to your Deadlock build list so the in-game
+        shop walks you through it top-to-bottom. Runs entirely in your browser —
+        your save file never leaves your machine.
+      </p>
+      <ol className="export-steps">
+        <li>
+          <strong>Fully quit Deadlock</strong> first (the game overwrites this
+          file on exit).
+        </li>
+        <li>
+          {canEditInPlace
+            ? "Pick your cached_hero_builds.kv3 — we add the build and save it back in place."
+            : "Pick your cached_hero_builds.kv3, then download the updated file and drop it back into the same folder (back up the original first)."}
+        </li>
+        <li>
+          Launch Deadlock → <strong>{build.hero.name}</strong> →{" "}
+          <strong>My Builds</strong>.
+        </li>
+      </ol>
 
-        <div className="guide-body">
-          <p>
-            Adds <strong>{name}</strong> to your Deadlock build list so the
-            in-game shop walks you through it top-to-bottom. Runs entirely in
-            your browser — your save file never leaves your machine.
-          </p>
-          <ol className="export-steps">
-            <li>
-              <strong>Fully quit Deadlock</strong> first (the game overwrites
-              this file on exit).
+      <label className="export-steam">
+        <span>
+          Steam account ID <span className="hint">(optional, recommended)</span>
+        </span>
+        <input
+          type="text"
+          inputMode="numeric"
+          placeholder="e.g. 22202 (Gaben's)"
+          value={steamId}
+          onChange={(e) => onSteamIdChange(e.target.value)}
+        />
+        <span className="hint">
+          The number in your Steam <code>userdata/&lt;id&gt;</code> folder (or
+          your profile). Lets you edit &amp; delete the build in-game — without
+          it, the build can't be removed except by editing the file.
+        </span>
+      </label>
+
+      {canEditInPlace ? (
+        <button
+          type="button"
+          className="export-go"
+          disabled={stage === "working"}
+          onClick={exportInPlace}
+        >
+          {stage === "working" ? "Working…" : "Pick file & add build"}
+        </button>
+      ) : (
+        <label className={`export-go ${stage === "working" ? "busy" : ""}`}>
+          {stage === "working" ? "Working…" : "Choose cached_hero_builds.kv3"}
+          <input
+            type="file"
+            accept=".kv3"
+            style={{ display: "none" }}
+            disabled={stage === "working"}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) exportToDownload(f);
+            }}
+          />
+        </label>
+      )}
+
+      {status && <p className={`export-status ${stage}`}>{status}</p>}
+      {downloadUrl && (
+        <p>
+          <a className="export-go" href={downloadUrl} download={CACHE_FILENAME}>
+            ⬇ Download {CACHE_FILENAME}
+          </a>
+        </p>
+      )}
+
+      <details className="export-where">
+        <summary>Where is that file?</summary>
+        <ul>
+          {CACHE_PATHS.map(([os, p]) => (
+            <li key={os}>
+              <strong>{os}:</strong>{" "}
+              <code>
+                {p}
+                {CACHE_FILENAME}
+              </code>
             </li>
-            <li>
-              {canEditInPlace
-                ? "Pick your cached_hero_builds.kv3 — we add the build and save it back in place."
-                : "Pick your cached_hero_builds.kv3, then download the updated file and drop it back into the same folder (back up the original first)."}
-            </li>
-            <li>
-              Launch Deadlock → <strong>{build.hero.name}</strong> →{" "}
-              <strong>My Builds</strong>.
-            </li>
-          </ol>
-
-          <label className="export-steam">
-            <span>
-              Steam account ID{" "}
-              <span className="hint">(optional, recommended)</span>
-            </span>
-            <input
-              type="text"
-              inputMode="numeric"
-              placeholder="e.g. 22202 (Gaben's)"
-              value={steamId}
-              onChange={(e) => onSteamIdChange(e.target.value)}
-            />
-            <span className="hint">
-              The number in your Steam <code>userdata/&lt;id&gt;</code> folder
-              (or your profile). Lets you edit &amp; delete the build in-game —
-              without it, the build can't be removed except by editing the file.
-            </span>
-          </label>
-
-          {canEditInPlace ? (
-            <button
-              type="button"
-              className="export-go"
-              disabled={stage === "working"}
-              onClick={exportInPlace}
-            >
-              {stage === "working" ? "Working…" : "Pick file & add build"}
-            </button>
-          ) : (
-            <label className={`export-go ${stage === "working" ? "busy" : ""}`}>
-              {stage === "working"
-                ? "Working…"
-                : "Choose cached_hero_builds.kv3"}
-              <input
-                type="file"
-                accept=".kv3"
-                style={{ display: "none" }}
-                disabled={stage === "working"}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) exportToDownload(f);
-                }}
-              />
-            </label>
-          )}
-
-          {status && <p className={`export-status ${stage}`}>{status}</p>}
-          {downloadUrl && (
-            <p>
-              <a
-                className="export-go"
-                href={downloadUrl}
-                download={CACHE_FILENAME}
-              >
-                ⬇ Download {CACHE_FILENAME}
-              </a>
-            </p>
-          )}
-
-          <details className="export-where">
-            <summary>Where is that file?</summary>
-            <ul>
-              {CACHE_PATHS.map(([os, p]) => (
-                <li key={os}>
-                  <strong>{os}:</strong>{" "}
-                  <code>
-                    {p}
-                    {CACHE_FILENAME}
-                  </code>
-                </li>
-              ))}
-            </ul>
-            <p className="hint">
-              Not showing up after launch? Steam Cloud may have reverted it —
-              redo it with Deadlock closed, or turn off Steam Cloud for Deadlock
-              while importing.
-            </p>
-          </details>
-        </div>
-      </div>
-    </div>,
-    document.body,
+          ))}
+        </ul>
+        <p className="hint">
+          Not showing up after launch? Steam Cloud may have reverted it — redo
+          it with Deadlock closed, or turn off Steam Cloud for Deadlock while
+          importing.
+        </p>
+      </details>
+    </ModalShell>
   );
 }

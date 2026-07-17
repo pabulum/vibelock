@@ -226,7 +226,12 @@ export function OvertimeColumn({
     />
   );
   return (
-    <section className="phase overtime">
+    // view-transition-name: hero/rank switches cross-fade this column independently, like the
+    // time-phase columns (see switchTransition in App.tsx).
+    <section
+      className="phase overtime"
+      style={{ viewTransitionName: "phase-overtime" }}
+    >
       <h2>
         Overtime buys <span className="time">build full · 30+ min</span>
       </h2>

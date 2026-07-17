@@ -10,7 +10,11 @@ import type {
   RankedCommunityBuild,
 } from "../types";
 import { ABILITY_COLORS, SLOT_COLORS } from "./colors";
-import { CARD_GAP, usePinnablePopover } from "./usePinnablePopover";
+import {
+  CARD_GAP,
+  SUPPORTS_ANCHOR,
+  usePinnablePopover,
+} from "./usePinnablePopover";
 
 function fmtDate(unixS: number): string {
   return unixS ? new Date(unixS * 1000).toISOString().slice(0, 10) : "—";
@@ -45,7 +49,7 @@ export function CommunityRow({
   agree?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const { anchor, handlers, sticky } = usePinnablePopover(ref);
+  const { anchor, handlers, sticky, anchorName } = usePinnablePopover(ref);
   const [copied, setCopied] = useState(false);
 
   const coreSize = rb.build.coreItemIds.length;
@@ -62,7 +66,12 @@ export function CommunityRow({
   };
 
   return (
-    <div ref={ref} className={`crow ${agree ? "agree" : ""}`} {...handlers}>
+    <div
+      ref={ref}
+      className={`crow ${agree ? "agree" : ""}`}
+      style={SUPPORTS_ANCHOR ? { anchorName } : undefined}
+      {...handlers}
+    >
       <span className="ctag">{tag}</span>
       <span className="cname" title={rb.build.name}>
         {rb.build.name}
@@ -113,6 +122,7 @@ export function CommunityRow({
           ourMaxOrder={ourMaxOrder}
           slotOrder={slotOrder}
           anchor={anchor}
+          anchorName={anchorName}
           sticky={sticky}
         />
       )}
@@ -131,6 +141,7 @@ function BuildPreview({
   ourMaxOrder,
   slotOrder,
   anchor,
+  anchorName,
   sticky = false,
 }: {
   build: CommunityBuild;
@@ -140,14 +151,20 @@ function BuildPreview({
   ourMaxOrder?: number[];
   slotOrder: number[];
   anchor: DOMRect;
+  /** The row's CSS `anchor-name`, for the native anchor-positioned path. */
+  anchorName: string;
   /** Tap-pinned on touch: makes the preview a tappable/scrollable surface (see {@link usePinnablePopover}). */
   sticky?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Native path: top-layer + CSS anchor positioning (see `.buildprev[popover]`); no measuring.
+  useLayoutEffect(() => {
+    if (SUPPORTS_ANCHOR) ref.current?.showPopover();
+  }, []);
   const [pos, setPos] = useState({ left: -9999, top: -9999 });
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (SUPPORTS_ANCHOR || !el) return;
     const { offsetWidth: w, offsetHeight: h } = el;
     const left = Math.max(8, Math.min(anchor.left, window.innerWidth - 8 - w));
     const top =
@@ -198,11 +215,16 @@ function BuildPreview({
     </span>
   );
 
-  return createPortal(
+  const card = (
     <div
       ref={ref}
+      popover={SUPPORTS_ANCHOR ? "manual" : undefined}
       className={`buildprev${sticky ? " sticky" : ""}`}
-      style={{ left: pos.left, top: pos.top }}
+      style={
+        SUPPORTS_ANCHOR
+          ? { positionAnchor: anchorName }
+          : { left: pos.left, top: pos.top }
+      }
     >
       <div className="bp-head">
         <span className="bp-name">{build.name}</span>
@@ -258,7 +280,10 @@ function BuildPreview({
         {shared} of your {ourIds.size} picks shared
         {missing.length > 0 ? ` · ${missing.length} only in ours` : ""}
       </div>
-    </div>,
-    document.body,
+    </div>
   );
+
+  // Native popovers render in the top layer from wherever they sit in the tree — no portal
+  // needed (and staying in the tree keeps them inside the row for the touch-dismiss check).
+  return SUPPORTS_ANCHOR ? card : createPortal(card, document.body);
 }

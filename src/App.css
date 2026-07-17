@@ -1,3 +1,13 @@
+/* --accent is registered so it can *transition*: the per-hero theming (lib/heroAccent, set on
+   :root from App.tsx) retunes it per portrait, and registration makes every accent-tinted
+   detail cross-fade to the new hue instead of snapping. A color fade, not motion — fine under
+   prefers-reduced-motion. */
+@property --accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #6fb1ff;
+}
+
 :root {
   --bg: #0f1216;
   --panel: #171b21;
@@ -6,6 +16,7 @@
   --text: #e6e9ee;
   --muted: #98a2b3;
   --accent: #6fb1ff;
+  transition: --accent 0.5s ease;
   --purple: #9b6dd1; /* Deadlock spirit purple */
   /* Brand type, matching the Open Graph card. Space Grotesk for the wordmark (and available for
      headings); Archivo for the italic hero flavor lines. Both fall back to the system UI stack. */
@@ -190,6 +201,19 @@ body {
   .loadstate .shufmark {
     animation: none;
   }
+}
+
+/* ---- Hero/rank switch view transition --------------------------------------
+   switchTransition (App.tsx) snapshots the page across a hero/rank switch, so the named
+   pieces — the hero portrait and each phase column — cross-fade independently of the rest.
+   The default cross-fade is the right effect; we only tighten the timing. Composes with the
+   settle veil: the new-state snapshot is live, so the veil arming mid-transition shows
+   through it. (Reduced-motion users never enter a transition — gated in JS.) */
+::view-transition-group(*) {
+  animation-duration: 0.22s;
+}
+::view-transition-group(hero-face) {
+  animation-duration: 0.3s;
 }
 
 /* ---- Per-piece "developing" load cue --------------------------------------
@@ -976,6 +1000,31 @@ body {
     Roboto,
     sans-serif;
 }
+/* Native path (Popover API + CSS anchor positioning, see SUPPORTS_ANCHOR): the preview is a
+   top-layer [popover] anchored to its row's `anchor-name` — below the row by default, flipping
+   above / pinning to the right edge via @position-try when it would leave the viewport. The
+   UA [popover] margin/inset/padding are reset so only the anchor() placement applies. */
+.buildprev[popover] {
+  inset: auto;
+  margin: 0;
+  left: anchor(left);
+  top: calc(anchor(bottom) + 10px);
+  position-try-fallbacks: --prev-up, --prev-pin-right, --prev-up-pin-right;
+}
+@position-try --prev-up {
+  top: auto;
+  bottom: calc(anchor(top) + 10px);
+}
+@position-try --prev-pin-right {
+  left: auto;
+  right: 8px;
+}
+@position-try --prev-up-pin-right {
+  top: auto;
+  bottom: calc(anchor(top) + 10px);
+  left: auto;
+  right: 8px;
+}
 /* Tap-pinned on touch (see usePinnablePopover): a real, scrollable surface, not a pass-through
    tooltip — so a tap lands on it (not the row behind) and a tall preview can be read on a phone. */
 .buildprev.sticky {
@@ -1212,6 +1261,44 @@ body {
     Roboto,
     sans-serif;
 }
+/* Native path (Popover API + CSS anchor positioning, see SUPPORTS_ANCHOR): the card is a
+   top-layer [popover] anchored to its row's `anchor-name` — to the row's right by default,
+   flipping to the left and/or bottom-pinning via @position-try when it would leave the
+   viewport (the declarative version of the fallback's measure-flip-clamp layout effect). */
+.itemcard[popover] {
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  left: calc(anchor(right) + 10px);
+  top: anchor(top);
+  /* Anchored flips first; then viewport pins for narrow screens where neither side of a
+     full-width row fits the card (the old JS clamp's `max(8px, …)` equivalent). */
+  position-try-fallbacks:
+    --card-left, --card-pin-bottom, --card-left-pin-bottom, --card-pin-left,
+    --card-pin-left-bottom;
+}
+@position-try --card-left {
+  left: auto;
+  right: calc(anchor(left) + 10px);
+}
+@position-try --card-pin-bottom {
+  top: auto;
+  bottom: 8px;
+}
+@position-try --card-left-pin-bottom {
+  left: auto;
+  right: calc(anchor(left) + 10px);
+  top: auto;
+  bottom: 8px;
+}
+@position-try --card-pin-left {
+  left: 8px;
+}
+@position-try --card-pin-left-bottom {
+  left: 8px;
+  top: auto;
+  bottom: 8px;
+}
 /* Tap-pinned on touch (see ItemHover): make it a real surface — tappable and scrollable — so a
    tall card reads on a phone instead of clipping, and a tap on it doesn't fall through to a row. */
 .itemcard.sticky {
@@ -1432,6 +1519,29 @@ body {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 14px;
+}
+
+/* Scroll-driven entrance: on narrow layouts the columns stack below the fold, and each one
+   rises/fades in as it scrolls into view. Progressive enhancement — @supports skips browsers
+   without scroll timelines, reduced-motion opts out. The range end is an absolute 160px (not a
+   % of the column) so a tall column settles crisp once its top has risen 160px above the fold,
+   rather than staying faded until most of it has scrolled past — a partially-entered column at
+   page load reads as an invitation to scroll, not a rendering bug. The transform is transient
+   (identity once entry completes), so it can't permanently re-root fixed-position children. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .phase {
+      animation: phase-enter ease-out both;
+      animation-timeline: view(block);
+      animation-range: entry 0% entry 160px;
+    }
+  }
+}
+@keyframes phase-enter {
+  from {
+    opacity: 0.2;
+    transform: translateY(14px);
+  }
 }
 
 /* The overtime buy-list is a prioritized shopping list, not a time phase — give it an accent edge
@@ -1916,32 +2026,23 @@ body {
   text-decoration: underline;
 }
 
-/* Methodology & glossary modal. */
-.guide-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 6vh 16px 24px;
-  background: rgba(8, 10, 13, 0.62);
-  -webkit-backdrop-filter: blur(3px);
-  backdrop-filter: blur(3px);
-}
-.guide {
-  /* The card is a fixed-height column: a pinned header + a body that scrolls on its own,
-     so the header can't overlap content and scrolling can't chain to the page behind. */
-  display: flex;
-  flex-direction: column;
-  width: min(680px, 100%);
-  max-height: 100%;
+/* Methodology & glossary modal — a native <dialog> (see ModalShell): the browser owns the
+   top layer, focus trapping, and Escape, and the old .guide-backdrop overlay is now the
+   dialog's ::backdrop. The dialog element itself is the card. */
+dialog.guide {
+  /* Top-anchored like the old overlay: the UA's inset:0 plus auto side margins center it,
+     and the 6vh top margin replaces the backdrop's padding. */
+  margin: 6vh auto auto;
+  width: min(680px, calc(100vw - 32px));
+  max-width: none; /* the width above already accounts for margins; drop the UA cap */
+  max-height: calc(94vh - 24px);
+  padding: 0;
   overflow: hidden;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 14px;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
-  /* Portaled to <body>, so it doesn't inherit the app's font/color — set them here. */
+  /* Top-layer element, so it doesn't inherit the app's font/color — set them here. */
   color: var(--text);
   font:
     14px/1.45 system-ui,
@@ -1949,6 +2050,55 @@ body {
     Segoe UI,
     Roboto,
     sans-serif;
+  /* Enter/exit: @starting-style below fades/rises the card in; on close, allow-discrete holds
+     display and top-layer membership (overlay) until the fade-out ends. ModalShell defers its
+     unmount to match (EXIT_MS). */
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    overlay 0.18s ease allow-discrete,
+    display 0.18s ease allow-discrete;
+}
+dialog.guide[open] {
+  /* The card is a fixed-height column: a pinned header + a body that scrolls on its own,
+     so the header can't overlap content and scrolling can't chain to the page behind.
+     Scoped to [open] so the UA's display:none for closed dialogs still applies. */
+  display: flex;
+  flex-direction: column;
+}
+dialog.guide:not([open]) {
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
+}
+@starting-style {
+  dialog.guide[open] {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  dialog.guide[open]::backdrop {
+    opacity: 0;
+  }
+}
+dialog.guide::backdrop {
+  background: rgba(8, 10, 13, 0.62);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  opacity: 1;
+  transition:
+    opacity 0.18s ease,
+    overlay 0.18s ease allow-discrete,
+    display 0.18s ease allow-discrete;
+}
+dialog.guide:not([open])::backdrop {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  dialog.guide,
+  dialog.guide::backdrop {
+    transition: none;
+  }
 }
 .guide-head {
   flex: 0 0 auto;
@@ -2214,7 +2364,7 @@ body {
 /* ---- The Lab (experimental stats modal; shares the guide-* card shell) ---- */
 
 .guide.lab {
-  width: min(760px, 100%);
+  width: min(760px, calc(100vw - 32px));
 }
 .labtag {
   margin-left: 8px;

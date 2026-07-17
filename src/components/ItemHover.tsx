@@ -10,7 +10,11 @@ import {
 import { createPortal } from "react-dom";
 import { SLOT_COLORS } from "./colors";
 import type { Hero, Item, ItemCounters, ItemRef } from "../types";
-import { CARD_GAP, usePinnablePopover } from "./usePinnablePopover";
+import {
+  CARD_GAP,
+  SUPPORTS_ANCHOR,
+  usePinnablePopover,
+} from "./usePinnablePopover";
 
 // A row/cell that reveals the item's full shop card on hover (or tap, on touch). It *is* the styled
 // element (className/style passed through), so there's no extra wrapper. The card is rendered in a
@@ -37,16 +41,22 @@ export function ItemHover({
   buildsToward?: ItemRef;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const { anchor, handlers, sticky } = usePinnablePopover(ref);
+  const { anchor, handlers, sticky, anchorName } = usePinnablePopover(ref);
 
   return (
-    <div ref={ref} className={className} style={style} {...handlers}>
+    <div
+      ref={ref}
+      className={className}
+      style={SUPPORTS_ANCHOR ? { ...style, anchorName } : style}
+      {...handlers}
+    >
       {children}
       {anchor && (
         <ItemCard
           item={item}
           items={items}
           anchor={anchor}
+          anchorName={anchorName}
           counter={counter}
           enemiesById={enemiesById}
           buildsToward={buildsToward}
@@ -61,6 +71,7 @@ function ItemCard({
   item,
   items,
   anchor,
+  anchorName,
   counter,
   enemiesById,
   buildsToward,
@@ -69,6 +80,8 @@ function ItemCard({
   item: Item;
   items: Map<number, Item> | null;
   anchor: DOMRect;
+  /** The trigger's CSS `anchor-name`, for the native anchor-positioned path. */
+  anchorName: string;
   counter?: ItemCounters;
   enemiesById?: Map<number, Hero>;
   buildsToward?: ItemRef;
@@ -77,11 +90,16 @@ function ItemCard({
   sticky?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  // Render off-screen first, then measure to flip left/right and clamp vertically.
+  // Native path: promote to the top layer on mount; unmounting dismisses it automatically.
+  // Placement (side flip + viewport clamp) is entirely CSS — see `.itemcard[popover]`.
+  useLayoutEffect(() => {
+    if (SUPPORTS_ANCHOR) ref.current?.showPopover();
+  }, []);
+  // Fallback path: render off-screen first, then measure to flip left/right and clamp vertically.
   const [pos, setPos] = useState({ left: -9999, top: -9999 });
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (SUPPORTS_ANCHOR || !el) return;
     const { offsetWidth: w, offsetHeight: h } = el;
     const left =
       anchor.right + CARD_GAP + w <= window.innerWidth
@@ -96,11 +114,16 @@ function ItemCard({
     .map((id) => items?.get(id)?.name)
     .filter((n): n is string => !!n);
 
-  return createPortal(
+  const card = (
     <div
       ref={ref}
+      popover={SUPPORTS_ANCHOR ? "manual" : undefined}
       className={`itemcard${sticky ? " sticky" : ""}`}
-      style={{ left: pos.left, top: pos.top, borderColor: color }}
+      style={
+        SUPPORTS_ANCHOR
+          ? { positionAnchor: anchorName, borderColor: color }
+          : { left: pos.left, top: pos.top, borderColor: color }
+      }
     >
       <div className="ic-head" style={{ background: color }}>
         {item.image && <img src={item.image} alt="" />}
@@ -176,7 +199,10 @@ function ItemCard({
       {buildsToward && (
         <div className="ic-comp">Most build toward: {buildsToward.name}</div>
       )}
-    </div>,
-    document.body,
+    </div>
   );
+
+  // Native popovers render in the top layer from wherever they sit in the tree — no portal
+  // needed (and staying in the tree keeps them inside the trigger for the touch-dismiss check).
+  return SUPPORTS_ANCHOR ? card : createPortal(card, document.body);
 }

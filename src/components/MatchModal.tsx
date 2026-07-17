@@ -8,7 +8,6 @@
 // Only on a miss does the UI offer the explicit Steam fallback, behind a 20-minute cooldown.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   getItems,
   getItemStats,
@@ -27,6 +26,7 @@ import {
 } from "../lib/matchAnalysis";
 import { climbBand, tierToMaxBadge, tierToMinBadge } from "../lib/ranks";
 import { friendlyError } from "../lib/errors";
+import { ModalShell } from "./ModalShell";
 import type { Hero, ItemCounters, MatchHistoryRow, MatchInfo } from "../types";
 
 const mmss = (s: number) =>
@@ -167,19 +167,6 @@ export function MatchModal({
     };
   }, []);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [onClose]);
-
   const heroName = (id: number) =>
     heroes.find((h) => h.id === id)?.name ?? `Hero ${id}`;
 
@@ -319,346 +306,323 @@ export function MatchModal({
     [a],
   );
 
-  return createPortal(
-    <div className="guide-backdrop" onClick={onClose}>
-      <div
-        className="guide lab"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Match analysis"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="guide-head">
-          <h2>
-            Match analysis <span className="labtag">beta</span>
-          </h2>
-          <button
-            type="button"
-            className="guide-x"
-            onClick={onClose}
-            aria-label="Close"
+  return (
+    <ModalShell
+      className="lab"
+      label="Match analysis"
+      title={
+        <>
+          Match analysis <span className="labtag">beta</span>
+        </>
+      }
+      onClose={onClose}
+    >
+      {/* Back to the recent-games list once a match is open (or was requested). */}
+      {(match || notIngested) && recent && recent.length > 0 && (
+        <button type="button" className="matchback" onClick={back}>
+          ← Recent games
+        </button>
+      )}
+
+      <div className="matchinput">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder="match id (post-game screen / history)"
+          inputMode="numeric"
+          aria-label="Match id"
+        />
+        <button type="button" onClick={submit} disabled={busy}>
+          {busy ? "Loading…" : "Analyze"}
+        </button>
+      </div>
+
+      {recent && recent.length > 0 && !match && (
+        <div className="matchrecent">
+          <h3>Recent games</h3>
+          {recent.map((r) => (
+            <button
+              type="button"
+              key={r.match_id}
+              className="matchrow"
+              onClick={() => {
+                setInput(String(r.match_id));
+                void load(r.match_id);
+              }}
+            >
+              <span
+                className={r.match_result === r.player_team ? "mwin" : "mloss"}
+              >
+                {r.match_result === r.player_team ? "WIN" : "LOSS"}
+              </span>
+              <span className="mhero">{heroName(r.hero_id)}</span>
+              <span className="mkda">
+                {r.player_kills}/{r.player_deaths}/{r.player_assists}
+              </span>
+              <span className="mwhen">{ago(r.start_time)}</span>
+            </button>
+          ))}
+          <p className="matchnote">
+            Just played and it&rsquo;s missing? The list comes from Steam and
+            can lag ~an hour behind; paste the match id from the post-game
+            screen instead. To get your games in reliably and fast, run
+            deadlock-api&rsquo;s{" "}
+            <a
+              href="https://deadlock-api.com/ingest-cache"
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              game uploader
+            </a>
+            .
+          </p>
+        </div>
+      )}
+
+      {error && <div className="banner error">⚠ {error}</div>}
+
+      {notIngested && (
+        <div className="banner">
+          This match isn&rsquo;t in the stats database yet — most games arrive
+          within the hour.{" "}
+          {steamWaitMin > 0 ? (
+            <>Steam lookup available in ~{steamWaitMin} min.</>
+          ) : (
+            <button
+              type="button"
+              className="linkbtn"
+              onClick={() => void load(notIngested, true)}
+            >
+              Try a direct Steam lookup (slow; a few per hour)
+            </button>
+          )}{" "}
+          Running deadlock-api&rsquo;s{" "}
+          <a
+            href="https://deadlock-api.com/ingest-cache"
+            target="_blank"
+            rel="noreferrer noopener"
           >
-            ✕
-          </button>
-        </header>
+            game uploader
+          </a>{" "}
+          gets your future games in automatically.
+        </div>
+      )}
 
-        <div className="guide-body">
-          {/* Back to the recent-games list once a match is open (or was requested). */}
-          {(match || notIngested) && recent && recent.length > 0 && (
-            <button type="button" className="matchback" onClick={back}>
-              ← Recent games
+      {match && !a && !busy && (
+        <div className="matchrecent">
+          <h3>Whose game is it?</h3>
+          {match.players.map((p) => (
+            <button
+              type="button"
+              key={p.player_slot}
+              className="matchrow"
+              onClick={() => void analyze(match, p.account_id)}
+            >
+              <span className="mhero">{heroName(p.hero_id)}</span>
+              <span className="mkda">
+                {p.kills}/{p.deaths}/{p.assists}
+              </span>
+              <span className="mwhen">
+                {p.team === match.winning_team ? "won" : "lost"}
+              </span>
             </button>
-          )}
+          ))}
+        </div>
+      )}
 
-          <div className="matchinput">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submit()}
-              placeholder="match id (post-game screen / history)"
-              inputMode="numeric"
-              aria-label="Match id"
-            />
-            <button type="button" onClick={submit} disabled={busy}>
-              {busy ? "Loading…" : "Analyze"}
-            </button>
+      {a && (
+        <>
+          <div className="matchhead">
+            <span className={a.won ? "mwin" : "mloss"}>
+              {a.won ? "WIN" : "LOSS"}
+            </span>
+            <strong>{heroName(a.focus.hero_id)}</strong>
+            <span className="mkda">
+              {a.focus.kills}/{a.focus.deaths}/{a.focus.assists}
+            </span>
+            <span className="mmuted">
+              {Math.round(a.focus.net_worth / 100) / 10}k souls ·{" "}
+              {Math.round(a.durationS / 60)} min
+            </span>
+            {seat !== accountId && (
+              <button
+                type="button"
+                className="linkbtn"
+                onClick={() => {
+                  setAnalysis(null);
+                  setSeat(null);
+                }}
+              >
+                switch player
+              </button>
+            )}
           </div>
 
-          {recent && recent.length > 0 && !match && (
-            <div className="matchrecent">
-              <h3>Recent games</h3>
-              {recent.map((r) => (
-                <button
-                  type="button"
-                  key={r.match_id}
-                  className="matchrow"
-                  onClick={() => {
-                    setInput(String(r.match_id));
-                    void load(r.match_id);
-                  }}
-                >
-                  <span
-                    className={
-                      r.match_result === r.player_team ? "mwin" : "mloss"
-                    }
-                  >
-                    {r.match_result === r.player_team ? "WIN" : "LOSS"}
-                  </span>
-                  <span className="mhero">{heroName(r.hero_id)}</span>
-                  <span className="mkda">
-                    {r.player_kills}/{r.player_deaths}/{r.player_assists}
-                  </span>
-                  <span className="mwhen">{ago(r.start_time)}</span>
-                </button>
-              ))}
-              <p className="matchnote">
-                Just played and it&rsquo;s missing? The list comes from Steam
-                and can lag ~an hour behind; paste the match id from the
-                post-game screen instead. To get your games in reliably and
-                fast, run deadlock-api&rsquo;s{" "}
-                <a
-                  href="https://deadlock-api.com/ingest-cache"
-                  target="_blank"
-                  rel="noreferrer noopener"
-                >
-                  game uploader
-                </a>
-                .
-              </p>
-            </div>
+          {a.wp.points.length >= 2 && (
+            <section>
+              <h3>Win probability</h3>
+              <WpChart a={a} />
+              {a.wp.swings[0] && (
+                <p className="matchnote">
+                  Biggest swing: {mmss(a.wp.swings[0].fromT)}–
+                  {mmss(a.wp.swings[0].toT)} (
+                  {a.wp.swings[0].delta > 0 ? "+" : ""}
+                  {Math.round(a.wp.swings[0].delta * 100)} pts
+                  {a.wp.swings[0].delta > 0 === a.won ? "" : " the wrong way"}
+                  ).
+                </p>
+              )}
+            </section>
           )}
 
-          {error && <div className="banner error">⚠ {error}</div>}
-
-          {notIngested && (
-            <div className="banner">
-              This match isn&rsquo;t in the stats database yet — most games
-              arrive within the hour.{" "}
-              {steamWaitMin > 0 ? (
-                <>Steam lookup available in ~{steamWaitMin} min.</>
-              ) : (
-                <button
-                  type="button"
-                  className="linkbtn"
-                  onClick={() => void load(notIngested, true)}
-                >
-                  Try a direct Steam lookup (slow; a few per hour)
-                </button>
-              )}{" "}
-              Running deadlock-api&rsquo;s{" "}
-              <a
-                href="https://deadlock-api.com/ingest-cache"
-                target="_blank"
-                rel="noreferrer noopener"
-              >
-                game uploader
-              </a>{" "}
-              gets your future games in automatically.
-            </div>
-          )}
-
-          {match && !a && !busy && (
-            <div className="matchrecent">
-              <h3>Whose game is it?</h3>
-              {match.players.map((p) => (
-                <button
-                  type="button"
-                  key={p.player_slot}
-                  className="matchrow"
-                  onClick={() => void analyze(match, p.account_id)}
-                >
-                  <span className="mhero">{heroName(p.hero_id)}</span>
-                  <span className="mkda">
-                    {p.kills}/{p.deaths}/{p.assists}
-                  </span>
-                  <span className="mwhen">
-                    {p.team === match.winning_team ? "won" : "lost"}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {a && (
-            <>
-              <div className="matchhead">
-                <span className={a.won ? "mwin" : "mloss"}>
-                  {a.won ? "WIN" : "LOSS"}
-                </span>
-                <strong>{heroName(a.focus.hero_id)}</strong>
-                <span className="mkda">
-                  {a.focus.kills}/{a.focus.deaths}/{a.focus.assists}
-                </span>
+          {a.fundamentals.length > 0 && (
+            <section>
+              <h3>
+                This game vs your climb{" "}
                 <span className="mmuted">
-                  {Math.round(a.focus.net_worth / 100) / 10}k souls ·{" "}
-                  {Math.round(a.durationS / 60)} min
+                  (same hero, one rank up; one game is noisy)
                 </span>
-                {seat !== accountId && (
-                  <button
-                    type="button"
-                    className="linkbtn"
-                    onClick={() => {
-                      setAnalysis(null);
-                      setSeat(null);
-                    }}
+              </h3>
+              <div className="fundrows">
+                {a.fundamentals.map((r) => (
+                  <div
+                    className="fundrow"
+                    key={r.key}
+                    title={`ladder median: ${r.ladderMedian}`}
                   >
-                    switch player
-                  </button>
-                )}
-              </div>
-
-              {a.wp.points.length >= 2 && (
-                <section>
-                  <h3>Win probability</h3>
-                  <WpChart a={a} />
-                  {a.wp.swings[0] && (
-                    <p className="matchnote">
-                      Biggest swing: {mmss(a.wp.swings[0].fromT)}–
-                      {mmss(a.wp.swings[0].toT)} (
-                      {a.wp.swings[0].delta > 0 ? "+" : ""}
-                      {Math.round(a.wp.swings[0].delta * 100)} pts
-                      {a.wp.swings[0].delta > 0 === a.won
-                        ? ""
-                        : " the wrong way"}
-                      ).
-                    </p>
-                  )}
-                </section>
-              )}
-
-              {a.fundamentals.length > 0 && (
-                <section>
-                  <h3>
-                    This game vs your climb{" "}
-                    <span className="mmuted">
-                      (same hero, one rank up; one game is noisy)
-                    </span>
-                  </h3>
-                  <div className="fundrows">
-                    {a.fundamentals.map((r) => (
-                      <div
-                        className="fundrow"
-                        key={r.key}
-                        title={`ladder median: ${r.ladderMedian}`}
-                      >
-                        <span className="flabel">{r.label}</span>
-                        <span className="fval">{r.value}</span>
-                        <span className="fbar">
-                          <span
-                            className={
-                              r.percentile >= 75
-                                ? "hi"
-                                : r.percentile < 25
-                                  ? "lo"
-                                  : ""
-                            }
-                            style={{ width: `${r.percentile}%` }}
-                          />
-                        </span>
-                        <span className="fpct">p{r.percentile}</span>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              <section>
-                <h3>Where the souls came from</h3>
-                <div className="econrows">
-                  {a.economy.map((r) => (
-                    <div className="econrow" key={r.key}>
-                      <span className="flabel">{r.label}</span>
-                      <span className={`econkind k-${r.kind}`}>
-                        {KIND_LABEL[r.kind]}
-                      </span>
-                      <span className="fbar">
-                        <span
-                          className={`k-${r.kind}`}
-                          style={{ width: `${(r.share / maxShare) * 100}%` }}
-                        />
-                      </span>
-                      <span className="fval">
-                        {(r.gold / 1000).toFixed(1)}k
-                      </span>
-                      <span className="fpct">{Math.round(r.perMin)}/min</span>
+                    <span className="flabel">{r.label}</span>
+                    <span className="fval">{r.value}</span>
+                    <span className="fbar">
                       <span
                         className={
-                          "epct" +
-                          (r.percentile === undefined
-                            ? ""
-                            : r.percentile >= 60
-                              ? " hi"
-                              : r.percentile < 35
-                                ? " lo"
-                                : "")
+                          r.percentile >= 75
+                            ? "hi"
+                            : r.percentile < 25
+                              ? "lo"
+                              : ""
                         }
-                        title={
-                          r.percentile !== undefined
-                            ? "vs players on this hero one rank up"
-                            : undefined
-                        }
-                      >
-                        {r.percentile !== undefined ? `p${r.percentile}` : ""}
-                      </span>
+                        style={{ width: `${r.percentile}%` }}
+                      />
+                    </span>
+                    <span className="fpct">p{r.percentile}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section>
+            <h3>Where the souls came from</h3>
+            <div className="econrows">
+              {a.economy.map((r) => (
+                <div className="econrow" key={r.key}>
+                  <span className="flabel">{r.label}</span>
+                  <span className={`econkind k-${r.kind}`}>
+                    {KIND_LABEL[r.kind]}
+                  </span>
+                  <span className="fbar">
+                    <span
+                      className={`k-${r.kind}`}
+                      style={{ width: `${(r.share / maxShare) * 100}%` }}
+                    />
+                  </span>
+                  <span className="fval">{(r.gold / 1000).toFixed(1)}k</span>
+                  <span className="fpct">{Math.round(r.perMin)}/min</span>
+                  <span
+                    className={
+                      "epct" +
+                      (r.percentile === undefined
+                        ? ""
+                        : r.percentile >= 60
+                          ? " hi"
+                          : r.percentile < 35
+                            ? " lo"
+                            : "")
+                    }
+                    title={
+                      r.percentile !== undefined
+                        ? "vs players on this hero one rank up"
+                        : undefined
+                    }
+                  >
+                    {r.percentile !== undefined ? `p${r.percentile}` : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="matchnote">
+              <em>steady farm</em> — lane, camps, breakables, denies — arrives
+              whether or not fights go your way (lane is the least win-tied
+              source of all). <em>Fights &amp; objectives</em> are contested and
+              ride on the game going your way. Neither is a grade. Percentiles
+              are vs players on this hero one rank up, where available.
+            </p>
+          </section>
+
+          <section>
+            <h3>Deaths</h3>
+            <p className="matchdeaths">
+              {a.deaths.total} total —{" "}
+              {a.deaths.byPhase
+                .filter((b) => b.count > 0)
+                .map((b) => `${b.count} in ${b.label}`)
+                .join(", ") || "clean game"}
+              {a.deaths.goldLost
+                ? ` · ${(a.deaths.goldLost / 1000).toFixed(1)}k souls lost to deaths`
+                : ""}
+            </p>
+
+            {(() => {
+              const lines = deathInsights(
+                a.deaths,
+                a.deaths.nemesis
+                  ? heroName(a.deaths.nemesis.heroId)
+                  : undefined,
+              );
+              if (!lines.length) return null;
+              return (
+                <div className="climbtips">
+                  <span className="climbhdr">What the deaths say</span>
+                  {lines.map((l) => (
+                    <div className="deathread" key={l}>
+                      {l}
                     </div>
                   ))}
                 </div>
-                <p className="matchnote">
-                  <em>steady farm</em> — lane, camps, breakables, denies —
-                  arrives whether or not fights go your way (lane is the least
-                  win-tied source of all). <em>Fights &amp; objectives</em> are
-                  contested and ride on the game going your way. Neither is a
-                  grade. Percentiles are vs players on this hero one rank up,
-                  where available.
-                </p>
-              </section>
+              );
+            })()}
 
-              <section>
-                <h3>Deaths</h3>
-                <p className="matchdeaths">
-                  {a.deaths.total} total —{" "}
-                  {a.deaths.byPhase
-                    .filter((b) => b.count > 0)
-                    .map((b) => `${b.count} in ${b.label}`)
-                    .join(", ") || "clean game"}
-                  {a.deaths.goldLost
-                    ? ` · ${(a.deaths.goldLost / 1000).toFixed(1)}k souls lost to deaths`
-                    : ""}
-                </p>
-
-                {(() => {
-                  const lines = deathInsights(
-                    a.deaths,
-                    a.deaths.nemesis
-                      ? heroName(a.deaths.nemesis.heroId)
-                      : undefined,
-                  );
-                  if (!lines.length) return null;
-                  return (
-                    <div className="climbtips">
-                      <span className="climbhdr">What the deaths say</span>
-                      {lines.map((l) => (
-                        <div className="deathread" key={l}>
-                          {l}
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-
-                {/* The nemesis is the one death read with a build answer — same counters engine as
+            {/* The nemesis is the one death read with a build answer — same counters engine as
                     the build page, conditioned on that single enemy. */}
-                {a.deaths.nemesis && nemesisItems.length > 0 && (
-                  <div className="nemesis">
-                    <span className="climbhdr">
-                      Build against {heroName(a.deaths.nemesis.heroId)}
+            {a.deaths.nemesis && nemesisItems.length > 0 && (
+              <div className="nemesis">
+                <span className="climbhdr">
+                  Build against {heroName(a.deaths.nemesis.heroId)}
+                </span>
+                {nemesisItems.map((c) => (
+                  <div className="nemrow" key={c.item.id}>
+                    <span className="nemitem">{c.item.name}</span>
+                    <span className="nemedge">
+                      +{(c.topDelta * 100).toFixed(1)} pt
                     </span>
-                    {nemesisItems.map((c) => (
-                      <div className="nemrow" key={c.item.id}>
-                        <span className="nemitem">{c.item.name}</span>
-                        <span className="nemedge">
-                          +{(c.topDelta * 100).toFixed(1)} pt
-                        </span>
-                        <span className="nemn">
-                          n={c.marks[0]?.sample.toLocaleString()}
-                          {c.marks[0]?.lowSample ? " ⚠" : ""}
-                        </span>
-                      </div>
-                    ))}
-                    <p className="matchnote">
-                      Win-rate gain for {heroName(a.focus.hero_id)} players who
-                      bought these <em>against that hero</em>, above the
-                      matchup&rsquo;s own lean. Raw rates — lean on the bigger
-                      samples.
-                    </p>
+                    <span className="nemn">
+                      n={c.marks[0]?.sample.toLocaleString()}
+                      {c.marks[0]?.lowSample ? " ⚠" : ""}
+                    </span>
                   </div>
-                )}
-              </section>
-            </>
-          )}
-        </div>
-      </div>
-    </div>,
-    document.body,
+                ))}
+                <p className="matchnote">
+                  Win-rate gain for {heroName(a.focus.hero_id)} players who
+                  bought these <em>against that hero</em>, above the
+                  matchup&rsquo;s own lean. Raw rates — lean on the bigger
+                  samples.
+                </p>
+              </div>
+            )}
+          </section>
+        </>
+      )}
+    </ModalShell>
   );
 }

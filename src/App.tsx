@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import "./App.css";
@@ -56,6 +57,7 @@ import {
   economyRows,
   heroFarmProfile,
 } from "./lib/matchAnalysis";
+import { heroAccent } from "./lib/heroAccent";
 import { heroMatchups } from "./lib/matchups";
 import {
   bandForTier,
@@ -109,6 +111,24 @@ import type {
 } from "./types";
 
 const COUNTER_ADDS_PER_PHASE = 3; // cap on counter-only picks folded into a phase's swaps
+
+/** Runs a hero/rank switch inside a view transition, so the identity swap (portrait, phase
+ * columns — the elements carrying `view-transition-name`s) cross-fades instead of popping.
+ * This *composes with* the settle veil rather than replacing it: the transition covers the
+ * instant, synchronous part of the switch (the ~250ms snapshot cross-fade), while the veil
+ * still arms afterwards for the async part (the re-bake) and pulses when the data lands.
+ * Straight call-through when unsupported or when the user prefers reduced motion. */
+function switchTransition(update: () => void) {
+  if (
+    !document.startViewTransition ||
+    matchMedia("(prefers-reduced-motion: reduce)").matches
+  ) {
+    update();
+    return;
+  }
+  // flushSync so the DOM is fully updated inside the transition's capture callback.
+  document.startViewTransition(() => flushSync(update));
+}
 
 /** Fundamentals rows the "Combat & survival" card still shows. Everything soul-shaped moved to the
  * Economy panel (souls/min as its headline; last hits / jungle / denies replaced by the real
@@ -248,7 +268,7 @@ function AppInner() {
   const heroTouched = useRef(false);
   const pickHero = (id: number) => {
     heroTouched.current = true;
-    setHeroId(id);
+    switchTransition(() => setHeroId(id));
   };
   // Rank selection: a floor tier ("Emissary+") or a band ("around my rank" — profile-anchored, or
   // whatever resolved band a shared link carried). Default Eternus floor until a profile pre-selects.
@@ -387,6 +407,26 @@ function AppInner() {
     () => heroes.find((h) => h.id === heroId) ?? null,
     [heroes, heroId],
   );
+  // Per-hero accent: retune --accent from the selected hero's portrait (one-time canvas
+  // sample per portrait, cached — see lib/heroAccent). Set on :root so every accent-tinted
+  // detail follows; the @property registration in App.css makes the change cross-fade.
+  // Fail-soft: no portrait / colorless art / CORS surprise ⇒ the default accent stays.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!hero?.image) {
+      root.style.removeProperty("--accent");
+      return;
+    }
+    let live = true;
+    heroAccent(hero.image).then((color) => {
+      if (!live) return;
+      if (color) root.style.setProperty("--accent", color);
+      else root.style.removeProperty("--accent");
+    });
+    return () => {
+      live = false;
+    };
+  }, [hero]);
   const { minBadge, maxBadge } = rankSelToBadges(rankSel);
   const rankLabel = rankSelLabel(rankSel);
   // Descriptive soul-income shape for this hero at this rank (population median from the Lab's farm
@@ -1368,10 +1408,12 @@ function AppInner() {
               onChange={(e) => {
                 tierTouched.current = true; // a deliberate choice — profile stops pre-selecting
                 setRankAutoSet(null);
-                setRankSel(
-                  e.target.value === "band" && bandChoice
-                    ? bandChoice
-                    : Number(e.target.value),
+                switchTransition(() =>
+                  setRankSel(
+                    e.target.value === "band" && bandChoice
+                      ? bandChoice
+                      : Number(e.target.value),
+                  ),
                 );
               }}
             >
@@ -1620,7 +1662,13 @@ function AppInner() {
           {(hero ?? build.hero).image && (
             // The unmissable "you are looking at THIS hero" anchor — a friend read Abrams
             // numbers mid-match while playing someone else; a name alone is too quiet.
-            <img className="metaface" src={(hero ?? build.hero).image} alt="" />
+            // Named for the switch view transition: the portrait cross-fades in place.
+            <img
+              className="metaface"
+              style={{ viewTransitionName: "hero-face" }}
+              src={(hero ?? build.hero).image}
+              alt=""
+            />
           )}
           <div className="metabody">
             <div className="metatitle">
@@ -1977,7 +2025,13 @@ function AppInner() {
               .slice(0, COUNTER_ADDS_PER_PHASE);
             const lead = wpStats ? leadNote(wpStats, phase.column) : null;
             return (
-              <section className="phase" key={phase.column}>
+              <section
+                className="phase"
+                key={phase.column}
+                // Named per column so a hero/rank switch cross-fades each column independently
+                // inside the view transition (see switchTransition).
+                style={{ viewTransitionName: `phase-${phase.column}` }}
+              >
                 <h2>
                   {phase.label} <span className="time">{phase.timeLabel}</span>
                 </h2>

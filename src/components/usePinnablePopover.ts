@@ -2,6 +2,21 @@
 
 import { useEffect, useState } from "react";
 
+// Whether the browser can place the cards natively: the Popover API (top-layer rendering, so no
+// portal) plus CSS anchor positioning with @position-try fallbacks (declarative flip/clamp, so no
+// measure-then-position JS). When false, the cards keep the original path: a portal to <body>
+// anchored to the trigger's DOMRect, measured and clamped in a layout effect.
+export const SUPPORTS_ANCHOR =
+  typeof HTMLElement !== "undefined" &&
+  "showPopover" in HTMLElement.prototype &&
+  typeof CSS !== "undefined" &&
+  CSS.supports("anchor-name: --a") &&
+  CSS.supports("position-try-fallbacks: flip-block");
+
+// Each trigger/card pair needs its own anchor name (several rows can exist at once, and on touch
+// a card stays pinned while other triggers render). A module counter keeps them unique and short.
+let anchorSeq = 0;
+
 // Touch/coarse-pointer devices can't hover, so the portaled popovers — the shop card and the
 // community-build preview, which together are the *learning* layer (what an item does, its stats
 // and build paths, how a build overlaps ours) — would be unreachable on a phone. We detect that
@@ -32,6 +47,9 @@ export function usePinnablePopover<T extends HTMLElement>(ref: {
   current: T | null;
 }) {
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  // This instance's CSS anchor name (native path only). The trigger declares it via
+  // `anchor-name`; the card points back with `position-anchor`.
+  const [anchorName] = useState(() => `--vl-pop-${++anchorSeq}`);
   const open = () =>
     ref.current && setAnchor(ref.current.getBoundingClientRect());
   const close = () => setAnchor(null);
@@ -62,5 +80,5 @@ export function usePinnablePopover<T extends HTMLElement>(ref: {
   const handlers = CAN_HOVER
     ? { onMouseEnter: open, onMouseLeave: close }
     : { onClick: () => (anchor ? close() : open()) };
-  return { anchor, handlers, sticky: !CAN_HOVER };
+  return { anchor, handlers, sticky: !CAN_HOVER, anchorName };
 }
