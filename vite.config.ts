@@ -14,25 +14,17 @@ import { playwright } from "@vitest/browser-playwright";
 // since output is rendered as text/attributes (no dangerouslySetInnerHTML anywhere), this doesn't
 // open a script vector.
 //
-// The in-game build export (lib/heroBuildCache) lazy-loads Pyodide (CPython in WASM) to read
-// Deadlock's binary KV3 save file in the browser. That widens the policy only for that feature
-// (it activates only when the export panel is opened):
-//   - cdn.jsdelivr.net: the Pyodide loader (script-src) + the WASM runtime and C-extension wheels
-//     it pulls (lz4/zstandard/… — connect-src).
-//   - pypi.org + files.pythonhosted.org: micropip fetches the pure-Python `keyvalues3` wheel.
-//   - 'wasm-unsafe-eval': WASM compilation. blob:: Pyodide's worker/url plumbing.
-// Two follow-ups would tighten this back down: self-host the `keyvalues3` wheel (drops the two
-// PyPI hosts), and/or port just the KV3 *reader* to TS (drops Pyodide + jsdelivr entirely).
-const PYO_HOSTS =
-  "https://cdn.jsdelivr.net https://pypi.org https://files.pythonhosted.org";
+// The in-game build export reads Deadlock's binary KV3 save file with a pure-TS reader (lib/kv3),
+// so the policy stays first-party-only: no CDN scripts, no WASM, no blob: workers. (It used to run
+// the reader under Pyodide, which needed jsdelivr + PyPI hosts + 'wasm-unsafe-eval'.)
 const CSP = [
   "default-src 'self'",
   // raw.githubusercontent.com serves wp-stats.json (the Lab), baked nightly onto the data branch.
-  `connect-src 'self' https://api.deadlock-api.com https://raw.githubusercontent.com ${PYO_HOSTS}`,
+  "connect-src 'self' https://api.deadlock-api.com https://raw.githubusercontent.com",
   "img-src 'self' https://assets-bucket.deadlock-api.com data:",
   "style-src 'self' 'unsafe-inline'",
-  "script-src 'self' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net",
-  "worker-src 'self' blob:",
+  "script-src 'self'",
+  "worker-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'none'",

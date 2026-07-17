@@ -37,9 +37,9 @@ const CACHE_PATHS: Array<[string, string]> = [
 
 /**
  * On Chromium it edits the file in place (pick once → written back); elsewhere it downloads an
- * updated copy to drop into the cfg folder. All client-side: Pyodide reads the binary KV3 in the
- * browser ({@link injectBuildIntoCache}), the build is serialized to a protobuf
- * ({@link encodeHeroBuild}), and the result is written as text KV3.
+ * updated copy to drop into the cfg folder. All client-side: the build is serialized to a protobuf
+ * ({@link encodeHeroBuild}), the binary KV3 is read in the browser, and the result is written as
+ * text KV3 ({@link injectBuildIntoCache}).
  */
 export function ExportPanel({
   build,
@@ -103,10 +103,10 @@ export function ExportPanel({
         ],
       });
       const file = await handle.getFile();
-      const out = await injectBuildIntoCache(
+      setStatus("Adding your build…");
+      const out = injectBuildIntoCache(
         new Uint8Array(await file.arrayBuffer()),
         blob,
-        setStatus,
       );
       const writable = await handle.createWritable();
       await writable.write(out);
@@ -137,13 +137,13 @@ export function ExportPanel({
         skillOrder,
         imbues,
       });
-      const out = await injectBuildIntoCache(
+      setStatus("Adding your build…");
+      const out = injectBuildIntoCache(
         new Uint8Array(await file.arrayBuffer()),
         blob,
-        setStatus,
       );
-      // Copy into a plain ArrayBuffer so the Blob part is unambiguously typed (the FS read can be
-      // backed by a SharedArrayBuffer-like view, which Blob's types reject).
+      // Copy into a plain ArrayBuffer so the Blob part is unambiguously typed (the source view may
+      // not be ArrayBuffer-backed as far as Blob's types are concerned).
       const buf = new ArrayBuffer(out.byteLength);
       new Uint8Array(buf).set(out);
       setDownloadUrl(
