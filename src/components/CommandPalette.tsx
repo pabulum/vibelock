@@ -12,8 +12,8 @@ import {
   type PaletteCommand,
 } from "../lib/palette";
 
-// Keep in sync with dialog.palette's transition duration in App.css (see ModalShell for why
-// unmount is deferred).
+// Keep in sync with dialog.palette's transition duration in features/AppModals.css (see ModalShell
+// for why unmount is deferred).
 const EXIT_MS = 120;
 
 export function CommandPalette({
@@ -86,8 +86,8 @@ export function CommandPalette({
       e.preventDefault();
       commit(results[hi]);
     } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-      // The global listener only opens (see App); the toggle-close lives here so the
-      // exit transition plays instead of an abrupt unmount.
+      // The global listener only opens (see features/useModals); the toggle-close lives here so
+      // the exit transition plays instead of an abrupt unmount.
       e.preventDefault();
       ref.current?.close();
     }

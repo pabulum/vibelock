@@ -227,7 +227,7 @@ export function OvertimeColumn({
   );
   return (
     // view-transition-name: hero/rank switches cross-fade this column independently, like the
-    // time-phase columns (see switchTransition in App.tsx).
+    // time-phase columns (see switchTransition in lib/viewTransition).
     <section
       className="phase overtime"
       style={{ viewTransitionName: "phase-overtime" }}

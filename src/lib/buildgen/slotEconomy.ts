@@ -157,7 +157,7 @@ export function markTransient(
  * picks transient ("{@link SOLD_FOR_SLOTS}"), weakest-first ({@link sellPriority}), until it fits.
  * "Build-complete" picks (tier > {@link SELL_FOR_SLOTS_MAX_TIER}) are
  * never sold for room — you'd only do that giga-late, which we don't assume — so if every standing pick left
- * is a keeper the build is honestly left over the cap (App.tsx warns). Idempotent: it clears *its own* prior
+ * is a keeper the build is honestly left over the cap (features/BuildMeta warns). Idempotent: it clears *its own* prior
  * flags first (leaving builds-into / cheap-early alone), so it's safe to re-run after a comp re-rank shuffles
  * core membership. Returns the final standing-slot count. Run after {@link markTransient}.
  */

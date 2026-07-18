@@ -1,12 +1,12 @@
 // Shared native-<dialog> shell for the app's modals (Guide, Lab, Match, Export): the browser
 // owns the top layer, focus trapping, and Escape; @starting-style CSS (see `dialog.guide` in
-// App.css) animates enter/exit. Replaces the old portal + .guide-backdrop overlay.
+// features/AppModals.css) animates enter/exit. Replaces the old portal + .guide-backdrop overlay.
 
 import { useEffect, useRef, type ReactNode } from "react";
 
 // How long the exit transition runs (keep in sync with the `dialog.guide` transition duration in
-// App.css). Unmounting the instant `close` fires would cut the @starting-style exit short, so the
-// parent's onClose is deferred by this much.
+// features/AppModals.css). Unmounting the instant `close` fires would cut the @starting-style exit
+// short, so the parent's onClose is deferred by this much.
 const EXIT_MS = 180;
 
 /** The modal card: a `<dialog>` styled as the `.guide` column (pinned header + scrolling body).
