@@ -3,6 +3,7 @@
 // features/AppModals.css) animates enter/exit. Replaces the old portal + .guide-backdrop overlay.
 
 import { useEffect, useRef, type ReactNode } from "react";
+import { useScrollLock } from "./useScrollLock";
 
 // How long the exit transition runs (keep in sync with the `dialog.guide` transition duration in
 // features/AppModals.css). Unmounting the instant `close` fires would cut the @starting-style exit
@@ -31,15 +32,12 @@ export function ModalShell({
   const ref = useRef<HTMLDialogElement>(null);
   const closing = useRef(false);
 
+  // Freeze the page behind the modal so wheel/touch can't scroll it. (showModal makes the rest of
+  // the page inert, but the *document* scrollbar still responds to the wheel without this.) Shared
+  // counter, not a per-modal capture/restore — see useScrollLock for why overlays must share one.
+  useScrollLock();
   useEffect(() => {
     ref.current?.showModal();
-    // Freeze the page behind the modal so wheel/touch can't scroll it. (showModal makes the rest
-    // of the page inert, but the *document* scrollbar still responds to the wheel without this.)
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
   }, []);
 
   return (

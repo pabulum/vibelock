@@ -36,7 +36,9 @@ export type PaletteAction =
   | { kind: "hero"; id: number }
   | { kind: "rank"; sel: RankSel }
   | { kind: "patch"; idx: number }
-  | { kind: "enemy"; id: number }
+  /** Toggle an enemy. `chain` (set on the main palette's "vs …" adds) also flips the palette into
+   * enemies mode, so one "vs Haze" starts a run of bare-name counter picks — Esc exits. */
+  | { kind: "enemy"; id: number; chain?: boolean }
   /** Flip the open palette into another mode in place (the "vs — add enemies…" command). */
   | { kind: "mode"; mode: PaletteMode }
   /** Scroll to and flash this item's row in the build. */
@@ -180,7 +182,10 @@ export function buildPaletteCommands(
       group: "Counters",
       image: h.image,
       keepOpen: true,
-      action: { kind: "enemy", id: h.id },
+      // chain: adding the first counter drops you into enemies mode, so the next bare name is
+      // another counter pick rather than a hero switch — the same run the "+ add enemies" button
+      // gives, reachable straight from the global palette.
+      action: { kind: "enemy", id: h.id, chain: true },
     });
   }
   // Items: what's in the shown build jumps to its row; everything else in the shop is a

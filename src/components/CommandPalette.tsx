@@ -5,12 +5,13 @@
 // (enemy toggles chain: "haz⏎ vind⏎ …"). Fully mouse-driven too: click to commit, hover to
 // highlight, and the browse view (empty query) lists every command under group headers.
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import {
   searchPalette,
   type PaletteAction,
   type PaletteCommand,
 } from "../lib/palette";
+import { useScrollLock } from "./useScrollLock";
 
 // Keep in sync with dialog.palette's transition duration in features/AppModals.css (see ModalShell
 // for why unmount is deferred).
@@ -36,23 +37,18 @@ export function CommandPalette({
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
 
+  // Freeze the page behind the palette (shared counter — see useScrollLock; the palette opens
+  // modals whose overlapping close would strand a per-overlay lock in the "hidden" state).
+  useScrollLock();
   useEffect(() => {
     ref.current?.showModal();
     // Focus the query field explicitly: React's autoFocus fires while the closed dialog is
     // still display:none, and showModal's own focus pick lands on the dialog itself.
     inputRef.current?.focus();
-    // Freeze the page behind the palette (same reasoning as ModalShell).
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
   }, []);
 
-  const results = useMemo(
-    () => searchPalette(commands, query),
-    [commands, query],
-  );
+  // React Compiler memoizes this on [commands, query] — no useMemo needed (see CLAUDE.md).
+  const results = searchPalette(commands, query);
   // Clamp rather than store-and-sync: an enemy toggle rebuilds `commands` under a live
   // highlight, and the ranked list can shrink past it.
   const hi = Math.min(highlight, Math.max(0, results.length - 1));

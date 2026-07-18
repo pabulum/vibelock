@@ -78,7 +78,10 @@ describe('buildPaletteCommands (all mode)', () => {
     expect(byId.get('rank:8')?.action).toEqual({ kind: 'rank', sel: 8 });
     expect(byId.get('patch:1')?.action).toEqual({ kind: 'patch', idx: 1 });
     expect(byId.get('rm:4')?.action).toEqual({ kind: 'enemy', id: 4 });
-    expect(byId.get('vs:3')?.action).toEqual({ kind: 'enemy', id: 3 });
+    // A "vs …" add carries `chain` so committing it also flips the palette into enemies mode;
+    // a removal doesn't (it leaves you where you were).
+    expect(byId.get('vs:3')?.action).toEqual({ kind: 'enemy', id: 3, chain: true });
+    expect(byId.get('rm:4')?.action).not.toHaveProperty('chain');
   });
 
   it('keeps enemy toggles open for chaining; selection commands close', () => {

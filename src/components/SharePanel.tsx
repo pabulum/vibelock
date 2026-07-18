@@ -61,17 +61,26 @@ export function SharePanel({
   const holderRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Resolve the link once: the shim only when its page was actually baked.
+  // Resolve the link the button hands out: the per-hero shim when its page was actually baked
+  // (unfurls with a hero card in Discord), else the plain app URL (generic card). Awaited fresh at
+  // click time in copyLink too — otherwise a fast "Copy link" before this resolves would copy the
+  // app URL and the paste would unfurl generic, which read as "link previews are broken".
+  const resolveShareUrl = async (): Promise<string> => {
+    if (!links.shim || !heroSlug) return links.app;
+    const slugs = await bakedShims(import.meta.env.BASE_URL);
+    return slugs.has(heroSlug) ? links.shim : links.app;
+  };
+
+  // Reflect the resolved URL in the displayed link.
   useEffect(() => {
-    if (!links.shim || !heroSlug) return;
     let live = true;
-    bakedShims(import.meta.env.BASE_URL).then((slugs) => {
-      if (live && slugs.has(heroSlug)) setShareUrl(links.shim!);
-    });
+    resolveShareUrl().then((u) => live && setShareUrl(u));
     return () => {
       live = false;
     };
-  }, [links.shim, heroSlug]);
+    // resolveShareUrl closes over links/heroSlug; re-run when those change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [links.shim, links.app, heroSlug]);
 
   // (Re)paint the card whenever the fundamentals toggle flips. Drawing is async (icon loads);
   // a stale paint is dropped rather than raced into the DOM.
@@ -116,10 +125,14 @@ export function SharePanel({
   };
 
   const copyLink = async () => {
+    // Resolve at click time, not from the (possibly still-pending) shareUrl state, so the copied
+    // link is the hero shim whenever it exists — the plain app URL unfurls a generic card.
+    const url = await resolveShareUrl();
+    setShareUrl(url);
     try {
-      await navigator.clipboard.writeText(shareUrl);
+      await navigator.clipboard.writeText(url);
       setStatus(
-        shareUrl === links.shim
+        url === links.shim
           ? "Link copied — it unfurls with this hero's card."
           : "Link copied.",
       );

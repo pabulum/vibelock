@@ -2,13 +2,28 @@
 // and the guide / lab / match / export / share modals. Grouped so App's render tree ends with a
 // single <AppModals/> rather than a long tail of conditional dialogs.
 import "./AppModals.css";
+import { lazy, Suspense } from "react";
 import { CommandPalette } from "../components/CommandPalette";
 import { VerdictCard } from "../components/VerdictCard";
-import { GuideModal } from "../components/GuideModal";
-import { LabModal } from "../components/LabModal";
-import { MatchModal } from "../components/MatchModal";
-import { ExportPanel } from "../components/ExportPanel";
-import { SharePanel } from "../components/SharePanel";
+// The five heavy modals are code-split: none is needed for first paint, and each pulls its own
+// weight (Lab's charts, Match's analysis, Export's KV3 writer, Share's canvas painter). They load
+// on first open behind a null fallback — the native <dialog> just appears a beat later. The
+// palette and verdict card stay eager so Ctrl+K / "why isn't X here" open instantly.
+const GuideModal = lazy(() =>
+  import("../components/GuideModal").then((m) => ({ default: m.GuideModal })),
+);
+const LabModal = lazy(() =>
+  import("../components/LabModal").then((m) => ({ default: m.LabModal })),
+);
+const MatchModal = lazy(() =>
+  import("../components/MatchModal").then((m) => ({ default: m.MatchModal })),
+);
+const ExportPanel = lazy(() =>
+  import("../components/ExportPanel").then((m) => ({ default: m.ExportPanel })),
+);
+const SharePanel = lazy(() =>
+  import("../components/SharePanel").then((m) => ({ default: m.SharePanel })),
+);
 import { shareCardModel, shareLinks } from "../lib/shareCard";
 import type { ItemVerdict } from "../lib/buildGenerator";
 import type {
@@ -126,60 +141,64 @@ export function AppModals(props: {
         <VerdictCard item={whyItem} verdict={whyVerdict} onClose={onCloseWhy} />
       )}
 
-      {showGuide && <GuideModal onClose={onCloseGuide} />}
-      {showLab && <LabModal heroId={heroId} onClose={onCloseLab} />}
-      {showMatch && (
-        <MatchModal
-          accountId={accountId}
-          heroes={heroes}
-          autoLoadLatest={matchAutoLatest}
-          autoLoadMatchId={lastHeroMatchId}
-          onClose={onCloseMatch}
-        />
-      )}
+      {/* Lazy modals: only the mounted one suspends, so one boundary with a null fallback covers
+          all five — the dialog appears once its chunk lands (the click already happened). */}
+      <Suspense fallback={null}>
+        {showGuide && <GuideModal onClose={onCloseGuide} />}
+        {showLab && <LabModal heroId={heroId} onClose={onCloseLab} />}
+        {showMatch && (
+          <MatchModal
+            accountId={accountId}
+            heroes={heroes}
+            autoLoadLatest={matchAutoLatest}
+            autoLoadMatchId={lastHeroMatchId}
+            onClose={onCloseMatch}
+          />
+        )}
 
-      {showExport && build && (
-        <ExportPanel
-          build={displayBuild ?? build}
-          skillOrder={skillBuild?.order}
-          imbues={imbueByItem}
-          name={`Vibelock — ${build.hero.name}${
-            archetypeSet?.flex && activeArchetype
-              ? ` · ${activeArchetype.label}`
-              : ""
-          } (${build.rankLabel})`}
-          description={`Top-to-bottom build from Vibelock · ${build.rankLabel} · ${patchLabel} · ${build.population.matches.toLocaleString()} matches. Core phases + a Situational (optional) row; each item's note says why it's picked. Made with vibelock.`}
-          steamId={steamId}
-          onSteamIdChange={setSteamId}
-          onClose={onCloseExport}
-        />
-      )}
-
-      {showShare && build && hero && liveUrlState && (
-        <SharePanel
-          model={shareCardModel(displayBuild ?? build, {
-            heroName: hero.name,
-            heroImage: hero.image,
-            archLabel:
+        {showExport && build && (
+          <ExportPanel
+            build={displayBuild ?? build}
+            skillOrder={skillBuild?.order}
+            imbues={imbueByItem}
+            name={`Vibelock — ${build.hero.name}${
               archetypeSet?.flex && activeArchetype
-                ? activeArchetype.label
-                : undefined,
-            patchLabel,
-            enemyNames: enemies
-              .map((id) => heroes.find((h) => h.id === id)?.name)
-              .filter((n): n is string => !!n),
-            siteLabel: `${window.location.host}${import.meta.env.BASE_URL.replace(/\/$/, "")}`,
-          })}
-          fundamentals={fundamentalsRows}
-          heroSlug={liveUrlState.hero}
-          links={shareLinks(
-            liveUrlState,
-            window.location.origin,
-            import.meta.env.BASE_URL,
-          )}
-          onClose={onCloseShare}
-        />
-      )}
+                ? ` · ${activeArchetype.label}`
+                : ""
+            } (${build.rankLabel})`}
+            description={`Top-to-bottom build from Vibelock · ${build.rankLabel} · ${patchLabel} · ${build.population.matches.toLocaleString()} matches. Core phases + a Situational (optional) row; each item's note says why it's picked. Made with vibelock.`}
+            steamId={steamId}
+            onSteamIdChange={setSteamId}
+            onClose={onCloseExport}
+          />
+        )}
+
+        {showShare && build && hero && liveUrlState && (
+          <SharePanel
+            model={shareCardModel(displayBuild ?? build, {
+              heroName: hero.name,
+              heroImage: hero.image,
+              archLabel:
+                archetypeSet?.flex && activeArchetype
+                  ? activeArchetype.label
+                  : undefined,
+              patchLabel,
+              enemyNames: enemies
+                .map((id) => heroes.find((h) => h.id === id)?.name)
+                .filter((n): n is string => !!n),
+              siteLabel: `${window.location.host}${import.meta.env.BASE_URL.replace(/\/$/, "")}`,
+            })}
+            fundamentals={fundamentalsRows}
+            heroSlug={liveUrlState.hero}
+            links={shareLinks(
+              liveUrlState,
+              window.location.origin,
+              import.meta.env.BASE_URL,
+            )}
+            onClose={onCloseShare}
+          />
+        )}
+      </Suspense>
     </>
   );
 }
