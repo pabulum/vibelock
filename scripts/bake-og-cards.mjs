@@ -130,7 +130,13 @@ function shimHtml(hero, slug) {
       // this, which is the whole point of the shim.
       location.replace("../" + (location.search || "?hero=${slug}") + location.hash);
     </script>
-    <meta http-equiv="refresh" content="0; url=${esc(app)}" />
+    <!-- No-JS fallback ONLY inside noscript: link-preview crawlers (Discord, Slack,
+         Facebook) honor a bare meta-refresh as a redirect and would scrape the SPA's
+         generic index.html card instead of the tags above. Inside noscript, browsers
+         with JS disabled still redirect and crawlers read this page's own tags. -->
+    <noscript>
+      <meta http-equiv="refresh" content="0; url=${esc(app)}" />
+    </noscript>
   </head>
   <body>
     <p>Redirecting to <a href="${esc(app)}">${esc(hero.name)} on Vibelock</a>…</p>
@@ -141,7 +147,9 @@ function shimHtml(hero, slug) {
 
 const heroes = (
   await (
-    await fetch("https://api.deadlock-api.com/v1/assets/heroes?only_active=true")
+    await fetch(
+      "https://api.deadlock-api.com/v1/assets/heroes?only_active=true",
+    )
   ).json()
 )
   .filter((h) => h.name)
