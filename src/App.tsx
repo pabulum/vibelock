@@ -27,7 +27,12 @@ import {
   type TimeWindow,
 } from "./api/deadlock";
 import { assembleArchetypes, pickSignatures } from "./lib/archetypes";
-import { phaseTempo, rerankBuildForComp, SLOT_CAP } from "./lib/buildGenerator";
+import {
+  itemVerdict,
+  phaseTempo,
+  rerankBuildForComp,
+  SLOT_CAP,
+} from "./lib/buildGenerator";
 import { matchCommunityBuilds } from "./lib/communityBuilds";
 import { computeItemCounters } from "./lib/counters";
 import { friendlyError } from "./lib/errors";
@@ -63,6 +68,7 @@ import {
   buildPaletteCommands,
   IS_MAC,
   type PaletteAction,
+  type PaletteItem,
   type PaletteMode,
 } from "./lib/palette";
 import {
@@ -90,9 +96,8 @@ import { EconomyPanel, type LastGameFarm } from "./components/EconomyPanel";
 import { GuideModal } from "./components/GuideModal";
 import { LabModal } from "./components/LabModal";
 import { MatchModal } from "./components/MatchModal";
+import { VerdictCard } from "./components/VerdictCard";
 import { wpStatsQueryOptions, type WpStats } from "./api/wpStats";
-import { ScrubWrap, TimeScrubber } from "./components/TimeScrubber";
-import { phaseAtS, timelineAt } from "./lib/timeline";
 import { CounterAddRow, ItemRow } from "./components/ItemRow";
 import { CAN_HOVER } from "./components/usePinnablePopover";
 import {
@@ -110,6 +115,7 @@ import type {
   ArchetypeKey,
   BuildItem,
   BuildPhase,
+  Item,
   ItemCounters,
   ItemRef,
   Hero,
@@ -220,6 +226,22 @@ function closingGlyph(resid: number | undefined) {
   );
 }
 
+/** Scroll the build row for `id` into view and flash it — the palette's item jump. Direct DOM on
+ * purpose: the rows already exist (data-item-row, see ItemHover), and a React state round-trip
+ * would re-render every row just to toggle one class for 1.5s. */
+function flashItemRow(id: number) {
+  const el = document.querySelector<HTMLElement>(`[data-item-row="${id}"]`);
+  if (!el) return;
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
+  el.classList.remove("rowflash");
+  void el.offsetWidth; // restart the animation when the same row is jumped to twice
+  el.classList.add("rowflash");
+  el.addEventListener("animationend", () => el.classList.remove("rowflash"), {
+    once: true,
+  });
+}
+
 function windowFor(patches: Patch[], idx: number): TimeWindow {
   if (!patches[idx]) return {};
   return {
@@ -290,14 +312,14 @@ function AppInner() {
   // Pre-patch backfill toggle (lib/patchBlend). Default on — a young patch alone starves the
   // build's support/significance gates; off = the selected window raw, exactly the old behavior.
   const [backfillOn, setBackfillOn] = useState<boolean>(url0.backfill ?? true);
+  // Line-aware generation (survivorship gate + down-payment + line collapse — see
+  // BuildOptions.lineAware). Experimental, off by default; only the palette flips it.
+  const [lineAware, setLineAware] = useState(false);
   const [enemies, setEnemies] = useState<number[]>([]);
 
   const [archKey, setArchKey] = useState<ArchetypeKey>("all");
   const [showGuide, setShowGuide] = useState(false);
   const [showLab, setShowLab] = useState(false);
-  // Game-clock scrubber (prototype, off by default): scrubT is the scrubbed game second.
-  const [scrubOn, setScrubOn] = useState(false);
-  const [scrubT, setScrubT] = useState(600);
   const [showMatch, setShowMatch] = useState(false);
   // Whether the match modal should open onto the player's most recent game (the "analyze last game"
   // link) vs the blank recent-games list (the header "Match" button).
@@ -370,6 +392,11 @@ function AppInner() {
   // Command palette (Ctrl/⌘+K, or the header/counter-picker buttons): 'all' = every control,
   // 'enemies' = scoped to enemy toggles as the counter picker's search-and-browse.
   const [palette, setPalette] = useState<PaletteMode | null>(null);
+  // An item-jump commit waits here until the palette dialog has closed — the page behind a modal
+  // dialog is scroll-frozen, so scrolling to the row only works after the unmount unfreezes it.
+  const pendingJump = useRef<number | null>(null);
+  // The item whose "why isn't this in the build?" verdict card is open (palette's why-not commit).
+  const [whyItem, setWhyItem] = useState<Item | null>(null);
 
   useEffect(() => {
     const v = steamId.trim();
@@ -819,6 +846,7 @@ function AppInner() {
       rankLabel,
       dataWindow,
       priorKey,
+      lineAware,
     ],
     enabled: !!hero && !!items,
     placeholderData: keepPreviousData,
@@ -963,15 +991,18 @@ function AppInner() {
         sellTimes,
         { all: base, gun, spirit },
         sig,
-        { synergyOf, jointGamesOf },
+        { synergyOf, jointGamesOf, lineAware },
       );
       // Share of the build's win-rate evidence borrowed from the pre-patch window (see
       // lib/patchBlend): ~0.85 the day after a patch, fading to ~0 as the patch matures.
       // Surfaced in the meta line so "is this build trustworthy yet?" is a number, not a vibe.
+      // The flows ride along so the why-not verdict (lib/buildgen/verdict) can re-run the
+      // generator's gates for any item against the same data the build was generated from.
       return {
         set,
         movers,
         adoption,
+        flows: { all: base, gun, spirit },
         backfillShare: canBackfill ? baseBlend.borrowedShare : null,
       };
     },
@@ -1258,7 +1289,7 @@ function AppInner() {
   // apps with palettes). Open-only: the toggle-close lives in the palette itself so its exit
   // transition plays. Ignored while another modal owns the top layer.
   const modalOpen =
-    showGuide || showLab || showMatch || showExport || showShare;
+    showGuide || showLab || showMatch || showExport || showShare || !!whyItem;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "k") return;
@@ -1268,30 +1299,6 @@ function AppInner() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [modalOpen]);
-
-  const paletteCommands = useMemo(
-    () =>
-      palette
-        ? buildPaletteCommands(palette, {
-            heroes,
-            heroId,
-            enemies,
-            patches,
-            patchIdx,
-            rankSel,
-            bandChoice,
-          })
-        : [],
-    [palette, heroes, heroId, enemies, patches, patchIdx, rankSel, bandChoice],
-  );
-  // Commands carry data-only actions (lib/palette); this maps a committed one onto the same
-  // handlers the header controls use. Runs only from the palette's commit events.
-  const runPaletteAction = (a: PaletteAction) => {
-    if (a.kind === "hero") pickHero(a.id);
-    else if (a.kind === "rank") pickRank(a.sel);
-    else if (a.kind === "patch") setPatchIdx(a.idx);
-    else toggleEnemy(a.id);
-  };
 
   // Empty patch list = the feed failed and the patches query degraded (see api/deadlock) —
   // windowless queries fall back to the API's default last-30-days, so label it that way.
@@ -1379,9 +1386,90 @@ function AppInner() {
     [shownBuild],
   );
   const lowPopulation = build !== null && build.population.matches < 400;
-  // Scrubber snapshot at the scrubbed minute (null = scrubber off): the core ids the plan expects
-  // owned by then, the next buy, and the expected spend. Cheap (~50 rows), so no memo.
-  const scrub = scrubOn && shownBuild ? timelineAt(shownBuild, scrubT) : null;
+
+  const paletteCommands = useMemo(() => {
+    if (!palette) return [];
+    // The Items groups are assembled only while the palette is up: what the shown build lists
+    // anywhere becomes a jump target, the rest of the catalog a search-only why-not verdict.
+    const seen = new Set<number>();
+    const buildItems: PaletteItem[] = [];
+    const pushItem = (it: Item) => {
+      if (seen.has(it.id)) return;
+      seen.add(it.id);
+      buildItems.push({ id: it.id, name: it.name, image: it.image });
+    };
+    if (shownBuild) {
+      for (const p of shownBuild.phases)
+        for (const b of [...p.core, ...p.situational]) pushItem(b.item);
+      for (const b of shownBuild.overtimeBuys) pushItem(b.item);
+    }
+    const otherItems: PaletteItem[] = (itemListQ.data ?? [])
+      .filter((i) => !seen.has(i.id))
+      .map((i) => ({ id: i.id, name: i.name, image: i.image }));
+    return buildPaletteCommands(palette, {
+      heroes,
+      heroId,
+      enemies,
+      patches,
+      patchIdx,
+      rankSel,
+      bandChoice,
+      buildItems,
+      otherItems,
+      hasBuild: !!shownBuild,
+      backfillOn,
+      lineAwareOn: lineAware,
+    });
+  }, [
+    palette,
+    heroes,
+    heroId,
+    enemies,
+    patches,
+    patchIdx,
+    rankSel,
+    bandChoice,
+    shownBuild,
+    itemListQ.data,
+    backfillOn,
+    lineAware,
+  ]);
+  // Commands carry data-only actions (lib/palette); this maps a committed one onto the same
+  // handlers the header controls use. Runs only from the palette's commit events.
+  const runPaletteAction = (a: PaletteAction) => {
+    if (a.kind === "hero") pickHero(a.id);
+    else if (a.kind === "rank") pickRank(a.sel);
+    else if (a.kind === "patch") setPatchIdx(a.idx);
+    else if (a.kind === "enemy") toggleEnemy(a.id);
+    else if (a.kind === "mode") setPalette(a.mode);
+    else if (a.kind === "jump") pendingJump.current = a.id;
+    else if (a.kind === "why") setWhyItem(items?.get(a.id) ?? null);
+    else if (a.kind === "toggle") {
+      if (a.toggle === "backfill") setBackfillOn((v) => !v);
+      else setLineAware((v) => !v);
+    } else if (a.kind === "panel") {
+      if (a.panel === "share") setShowShare(true);
+      else if (a.panel === "export") setShowExport(true);
+      else if (a.panel === "lab") setShowLab(true);
+      else if (a.panel === "guide") setShowGuide(true);
+      else {
+        setMatchAutoLatest(false);
+        setShowMatch(true);
+      }
+    }
+  };
+
+  // The flow the shown build was generated from (the active archetype's slice), for the why-not
+  // verdict — scoring against a different flow would report gates that never ran.
+  const flows = buildQ.data?.flows;
+  const activeFlow = flows ? (flows[archKey] ?? flows.all) : null;
+  const whyVerdict = useMemo(
+    () =>
+      whyItem && activeFlow && shownBuild && items
+        ? itemVerdict(whyItem.id, activeFlow, shownBuild, items)
+        : null,
+    [whyItem, activeFlow, shownBuild, items],
+  );
 
   // The one error banner: the first query with a live error wins, mapped to a friendly line.
   // Asset failures are fatal (nothing to render); the rest surface while their panels keep
@@ -1523,17 +1611,6 @@ function AppInner() {
               type="checkbox"
               checked={backfillOn}
               onChange={(e) => setBackfillOn(e.target.checked)}
-            />
-          </label>
-          <label
-            className="checkctl"
-            title="Prototype: a game-clock scrubber above the build. Drag to a minute to see what you should own by then, the expected soul spend, and what a typical lead is worth at that point."
-          >
-            Clock
-            <input
-              type="checkbox"
-              checked={scrubOn}
-              onChange={(e) => setScrubOn(e.target.checked)}
             />
           </label>
           <label
@@ -2106,14 +2183,6 @@ function AppInner() {
 
       {shownBuild && (
         <main className="phases" ref={buildRef}>
-          {scrub && (
-            <TimeScrubber
-              build={shownBuild}
-              wpStats={wpStats}
-              t={scrubT}
-              onScrub={setScrubT}
-            />
-          )}
           {shownBuild.phases.map((phase) => {
             // Strong counter picks that file under this phase but aren't already in the build
             // get mixed into the situational list (capped); ones already shown get a portrait
@@ -2125,11 +2194,7 @@ function AppInner() {
             const lead = wpStats ? leadNote(wpStats, phase.column) : null;
             return (
               <section
-                className={
-                  scrub && phaseAtS(scrubT) === phase.column
-                    ? "phase scrub-now"
-                    : "phase"
-                }
+                className="phase"
                 key={phase.column}
                 // Named per column so a hero/rank switch cross-fades each column independently
                 // inside the view transition (see switchTransition).
@@ -2165,27 +2230,8 @@ function AppInner() {
                 <h3 className="grouphdr core">Build</h3>
                 {phase.core.length ? (
                   phase.core.map((b) => (
-                    <ScrubWrap key={b.item.id} scrub={scrub} id={b.item.id}>
-                      <ItemRow
-                        b={b}
-                        items={items}
-                        baseline={shownBuild.population.baselineWinRate}
-                        counter={counterByItem.get(b.item.id)}
-                        enemiesById={enemiesById}
-                        imbue={imbueByItem.get(b.item.id)}
-                        trending={trendingByItem.get(b.item.id)}
-                        lab={labOf?.(b.item.id)}
-                      />
-                    </ScrubWrap>
-                  ))
-                ) : (
-                  <p className="empty">No clear staple here.</p>
-                )}
-
-                <h3 className="grouphdr situational">Situational swaps</h3>
-                {phase.situational.map((b) => (
-                  <ScrubWrap key={b.item.id} scrub={scrub} id={b.item.id}>
                     <ItemRow
+                      key={b.item.id}
                       b={b}
                       items={items}
                       baseline={shownBuild.population.baselineWinRate}
@@ -2194,9 +2240,26 @@ function AppInner() {
                       imbue={imbueByItem.get(b.item.id)}
                       trending={trendingByItem.get(b.item.id)}
                       lab={labOf?.(b.item.id)}
-                      muted
                     />
-                  </ScrubWrap>
+                  ))
+                ) : (
+                  <p className="empty">No clear staple here.</p>
+                )}
+
+                <h3 className="grouphdr situational">Situational swaps</h3>
+                {phase.situational.map((b) => (
+                  <ItemRow
+                    key={b.item.id}
+                    b={b}
+                    items={items}
+                    baseline={shownBuild.population.baselineWinRate}
+                    counter={counterByItem.get(b.item.id)}
+                    enemiesById={enemiesById}
+                    imbue={imbueByItem.get(b.item.id)}
+                    trending={trendingByItem.get(b.item.id)}
+                    lab={labOf?.(b.item.id)}
+                    muted
+                  />
                 ))}
                 {counterAdds.map((c) => (
                   <CounterAddRow
@@ -2257,7 +2320,22 @@ function AppInner() {
               : "Hero, rank, patch, or “vs enemy”…"
           }
           onRun={runPaletteAction}
-          onClose={() => setPalette(null)}
+          onClose={() => {
+            setPalette(null);
+            // Flush a committed item jump only now: the palette dialog scroll-freezes the page,
+            // so the scroll must wait for the unmount (and its overflow cleanup) to land.
+            const jump = pendingJump.current;
+            pendingJump.current = null;
+            if (jump !== null) setTimeout(() => flashItemRow(jump), 50);
+          }}
+        />
+      )}
+
+      {whyItem && whyVerdict && (
+        <VerdictCard
+          item={whyItem}
+          verdict={whyVerdict}
+          onClose={() => setWhyItem(null)}
         />
       )}
 

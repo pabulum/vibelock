@@ -288,6 +288,7 @@ export function ItemRow({
       counter={counter}
       enemiesById={enemiesById}
       buildsToward={b.buildsToward}
+      rowId={b.item.id}
     >
       <div className="icon" style={{ background: color }}>
         {b.item.image ? <img src={b.item.image} alt="" loading="lazy" /> : null}

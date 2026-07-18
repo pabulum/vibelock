@@ -3211,82 +3211,67 @@ dialog.palette:not([open])::backdrop {
   text-decoration: underline;
 }
 
-/* --- Game-clock scrubber (prototype, gated by the Clock toggle) --------------------------------
-   Everything scrubber-related lives in this one block; delete it together with
-   components/TimeScrubber.tsx, lib/timeline.ts, and the `scrub*` lines in App.tsx to remove
-   the feature. */
-.scrubber {
-  grid-column: 1 / -1;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px 14px 4px;
+
+/* Palette item jump: one accent pulse on the row the jump landed on (class toggled by
+   flashItemRow in App.tsx). Pure highlight — no transform — so it's reduced-motion safe. */
+.item.rowflash {
+  animation: rowflash 1.5s ease-out;
 }
-.scrubline {
+@keyframes rowflash {
+  0%,
+  35% {
+    box-shadow: inset 0 0 0 2px var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, var(--panel2));
+  }
+  100% {
+    box-shadow: inset 0 0 0 2px transparent;
+    background: var(--panel2);
+  }
+}
+
+/* --- Generator-verdict card ("why isn't X here" — components/VerdictCard) --- */
+.guide.verdict {
+  width: min(520px, calc(100vw - 32px));
+}
+.verdict-title {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
 }
-.scrubclock {
-  font-family: var(--font-display);
-  font-variant-numeric: tabular-nums;
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--accent);
-  min-width: 56px;
-  text-align: right;
+.verdict-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  flex: none;
 }
-.scrubtrack {
-  position: relative;
-  flex: 1;
-  padding-bottom: 18px;
+.verdict-icon img {
+  width: 22px;
+  height: 22px;
 }
-.scrubtrack input[type="range"] {
-  display: block;
-  width: 100%;
-  margin: 2px 0 0;
-  accent-color: var(--accent);
-  cursor: ew-resize;
+.verdict-head {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
 }
-.scrubticks {
-  position: absolute;
-  inset: auto 0 0 0;
-  height: 15px;
-}
-.scrubtick {
-  position: absolute;
-  border-left: 1px solid var(--line);
-  padding-left: 4px;
-  font-size: 10px;
-  line-height: 15px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.scrubread {
-  margin: 4px 0 6px;
+.verdict-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
   font-size: 12px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-.scrubread b {
-  color: var(--text);
-  font-weight: 600;
-}
-/* Row highlight while scrubbing: owned-by-now rows stay full, future rows recede, and the next
-   buy gets the accent ring. The wrapper div only exists while the scrubber is on (see ScrubWrap),
-   so the toggle-off DOM is untouched. */
-.scrubwrap.later {
-  opacity: 0.35;
-  filter: saturate(0.6);
-  transition: opacity 0.2s ease;
-}
-.scrubwrap.own {
-  transition: opacity 0.2s ease;
-}
-.scrubwrap.next .item {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
-}
-.phase.scrub-now {
-  border-color: var(--accent);
+.verdict-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
 }

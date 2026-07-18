@@ -30,6 +30,17 @@ const state: PaletteState = {
   patchIdx: 0,
   rankSel: 11,
   bandChoice: { lo: 7, hi: 9 },
+  buildItems: [
+    { id: 101, name: 'Toxic Bullets' },
+    { id: 102, name: 'Extra Health' },
+  ],
+  otherItems: [
+    { id: 201, name: 'Echo Shard' },
+    { id: 202, name: 'Metal Skin' },
+  ],
+  hasBuild: true,
+  backfillOn: true,
+  lineAwareOn: false,
 };
 
 describe('buildPaletteCommands (all mode)', () => {
@@ -78,11 +89,77 @@ describe('buildPaletteCommands (all mode)', () => {
   });
 });
 
+describe('buildPaletteCommands (items & actions)', () => {
+  const cmds = buildPaletteCommands('all', state);
+  const byId = new Map(cmds.map((c) => [c.id, c]));
+
+  it('lists build items as jump commands and the rest as search-only why-nots', () => {
+    expect(byId.get('item:101')?.label).toBe('Toxic Bullets');
+    expect(byId.get('item:101')?.action).toEqual({ kind: 'jump', id: 101 });
+    expect(byId.get('item:101')?.searchOnly).toBeFalsy();
+    expect(byId.get('why:201')?.label).toBe("why isn't Echo Shard here");
+    expect(byId.get('why:201')?.action).toEqual({ kind: 'why', id: 201 });
+    expect(byId.get('why:201')?.searchOnly).toBe(true);
+    // No why-not twin for an item that's already in the build.
+    expect(byId.has('why:101')).toBe(false);
+  });
+
+  it('offers the in-place enemies-mode switch, kept open for chaining', () => {
+    const mode = byId.get('mode:enemies');
+    expect(mode?.action).toEqual({ kind: 'mode', mode: 'enemies' });
+    expect(mode?.keepOpen).toBe(true);
+    // Reachable by every word a player might type for it.
+    for (const q of ['vs', 'counter', 'enemies'])
+      expect(
+        searchPalette(cmds, q).some((c) => c.id === 'mode:enemies'),
+      ).toBe(true);
+  });
+
+  it('lists the header panels and generation toggles as actions', () => {
+    for (const id of [
+      'panel:share',
+      'panel:export',
+      'panel:lab',
+      'panel:match',
+      'panel:guide',
+    ])
+      expect(byId.get(id)?.group).toBe('Actions');
+    expect(byId.get('toggle:backfill')?.active).toBe(true);
+    expect(byId.get('toggle:backfill')?.keepOpen).toBe(true);
+    expect(byId.get('toggle:lineAware')?.active).toBeFalsy();
+    expect(byId.get('toggle:lineAware')?.hint).toBe('turn on');
+  });
+
+  it('drops share/export and the why-nots when no build is baked', () => {
+    const bare = buildPaletteCommands('all', { ...state, hasBuild: false });
+    expect(bare.some((c) => c.id === 'panel:share')).toBe(false);
+    expect(bare.some((c) => c.id === 'panel:export')).toBe(false);
+    expect(bare.some((c) => c.id.startsWith('why:'))).toBe(false);
+    // The rest of the actions stay.
+    expect(bare.some((c) => c.id === 'panel:guide')).toBe(true);
+  });
+});
+
 describe('searchPalette', () => {
   const cmds = buildPaletteCommands('all', state);
 
-  it('returns the browse (assembly) order on an empty query', () => {
-    expect(searchPalette(cmds, '  ')).toBe(cmds);
+  it('returns the assembly order minus search-only commands on an empty query', () => {
+    const browse = searchPalette(cmds, '  ');
+    expect(browse.map((c) => c.id)).toEqual(
+      cmds.filter((c) => !c.searchOnly).map((c) => c.id),
+    );
+    expect(browse.some((c) => c.id.startsWith('why:'))).toBe(false);
+  });
+
+  it('finds a build item by bare name and a missing item via its why-not label', () => {
+    expect(searchPalette(cmds, 'toxic')[0]?.id).toBe('item:101');
+    expect(searchPalette(cmds, 'echo')[0]?.id).toBe('why:201');
+  });
+
+  it('lists the why-not group on its namespace word', () => {
+    const whys = searchPalette(cmds, 'why');
+    expect(whys.length).toBe(2);
+    expect(whys.every((c) => c.id.startsWith('why:'))).toBe(true);
   });
 
   it('ranks the hero switch above its enemy-add twin on a bare name', () => {
@@ -100,13 +177,23 @@ describe('searchPalette', () => {
   });
 
   it('lists whole groups on their namespace word', () => {
+    // 12 floors + the band option lead; a coincidental subsequence match (e.g. the Share
+    // action) may trail in the lower fuzzy band, so only the head of the list is asserted.
     const ranks = searchPalette(cmds, 'rank');
-    expect(ranks.length).toBe(13); // 12 floors + the band option
-    expect(ranks.every((c) => c.id.startsWith('rank:'))).toBe(true);
+    expect(ranks.length).toBeGreaterThanOrEqual(13);
+    expect(
+      ranks.slice(0, 13).every((c) => c.id.startsWith('rank:')),
+    ).toBe(true);
     // Both patches match on the "Patch:" prefix; the "(latest)" suffix makes patch:0 the
-    // longer label, so the shorter-name tiebreak may order it second — membership is what counts.
+    // longer label, so the shorter-name tiebreak may order it second — membership is what
+    // counts. The backfill toggle (word "patch" in its label) may trail in the word band.
     const patches = searchPalette(cmds, 'patch');
-    expect(patches.map((c) => c.id).sort()).toEqual(['patch:0', 'patch:1']);
+    expect(
+      patches
+        .slice(0, 2)
+        .map((c) => c.id)
+        .sort(),
+    ).toEqual(['patch:0', 'patch:1']);
   });
 
   it('matches a patch by its date fragment', () => {

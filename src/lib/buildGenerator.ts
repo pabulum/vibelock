@@ -79,6 +79,8 @@ export {
 } from "./buildgen/winState";
 export type { LabWinState, PhaseTempo, WinState } from "./buildgen/winState";
 export { isWeakVsComp, rerankBuildForComp } from "./buildgen/compRerank";
+export { itemVerdict } from "./buildgen/verdict";
+export type { ItemVerdict, VerdictStats } from "./buildgen/verdict";
 
 /**
  * Pure: turns one (unlocked) flow response into a phased build. `buyTimes`/`sellTimes`

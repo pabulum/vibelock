@@ -28,6 +28,7 @@ export function ItemHover({
   counter,
   enemiesById,
   buildsToward,
+  rowId,
 }: {
   item: Item;
   items: Map<number, Item> | null;
@@ -39,6 +40,8 @@ export function ItemHover({
   enemiesById?: Map<number, Hero>;
   /** The item this builds toward (shown as an upgrade-path line in the hover card). */
   buildsToward?: ItemRef;
+  /** Marks the element as a jump target (`data-item-row`) for the palette's item jump. */
+  rowId?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const { anchor, handlers, sticky, anchorName } = usePinnablePopover(ref);
@@ -48,6 +51,7 @@ export function ItemHover({
       ref={ref}
       className={className}
       style={SUPPORTS_ANCHOR ? { ...style, anchorName } : style}
+      data-item-row={rowId}
       {...handlers}
     >
       {children}

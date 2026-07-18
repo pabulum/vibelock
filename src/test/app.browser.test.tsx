@@ -143,6 +143,98 @@ test("the counter picker's palette chains enemy adds and chips remove them", asy
   expect(api.unmatched).toEqual([]);
 });
 
+test("the palette flips into enemies mode in place for chained adds", async () => {
+  const screen = await render(<App />);
+  await expect
+    .element(screen.getByRole("heading", { name: /^Lane/ }), BAKE)
+    .toBeVisible();
+
+  await userEvent.keyboard("{Control>}k{/Control}");
+  const input = screen.getByRole("combobox", { name: "Search commands" });
+  await expect.element(input).toBeVisible();
+  await input.fill("counter");
+  await screen.getByRole("option", { name: /add enemies \(counters\)/ }).click();
+
+  // Same dialog, flipped in place: query cleared, now scoped to bare-name enemy toggles.
+  await expect.element(input).toHaveValue("");
+  await expect
+    .element(screen.getByPlaceholder(/Add or remove enemies/))
+    .toBeVisible();
+  await input.fill("haze");
+  await userEvent.keyboard("{Enter}");
+  await userEvent.keyboard("{Escape}");
+  await expect
+    .poll(() => screen.container.querySelector("dialog.palette"))
+    .toBeNull();
+  await expect
+    .element(screen.getByRole("button", { name: "Haze ✕" }))
+    .toBeVisible();
+  expect(api.unmatched).toEqual([]);
+});
+
+test("the palette jumps to a build item's row and flashes it", async () => {
+  const screen = await render(<App />);
+  await expect
+    .element(screen.getByRole("heading", { name: /^Lane/ }), BAKE)
+    .toBeVisible();
+
+  await userEvent.keyboard("{Control>}k{/Control}");
+  const input = screen.getByRole("combobox", { name: "Search commands" });
+  await expect.element(input).toBeVisible();
+  // The browse view's Items group lists the build's rows — take the first one's name, so the
+  // test tracks the fixtures instead of hardcoding an item.
+  const itemsHdr = [
+    ...screen.container.querySelectorAll("dialog.palette .pal-hdr"),
+  ].find((h) => h.textContent === "Items");
+  expect(itemsHdr).toBeDefined();
+  const name = itemsHdr!.nextElementSibling?.querySelector(".pal-lbl")
+    ?.textContent;
+  expect(name).toBeTruthy();
+
+  await input.fill(name!);
+  await userEvent.keyboard("{Enter}");
+  await expect
+    .poll(() => screen.container.querySelector("dialog.palette"), BAKE)
+    .toBeNull();
+  // The jump lands after the dialog unmounts (page scroll unfreezes) and flashes the row.
+  const flashed = await expect
+    .poll(() => screen.container.querySelector(".item.rowflash"), BAKE)
+    .not.toBeNull()
+    .then(() => screen.container.querySelector(".item.rowflash"));
+  expect(flashed?.textContent).toContain(name);
+  expect(api.unmatched).toEqual([]);
+});
+
+test("the palette opens a verdict card for an item outside the build", async () => {
+  const screen = await render(<App />);
+  await expect
+    .element(screen.getByRole("heading", { name: /^Lane/ }), BAKE)
+    .toBeVisible();
+
+  await userEvent.keyboard("{Control>}k{/Control}");
+  const input = screen.getByRole("combobox", { name: "Search commands" });
+  await expect.element(input).toBeVisible();
+  // "why isn't <item> here" commands are search-only — absent from browse, listed on "why".
+  expect(
+    screen.container.querySelector('dialog.palette [id^="pal-why:"]'),
+  ).toBeNull();
+  await input.fill("why isn");
+  await userEvent.keyboard("{Enter}");
+
+  // The commit closes the palette and opens the verdict card with a real gate verdict.
+  await expect
+    .poll(() => document.querySelector("dialog.guide.verdict"), BAKE)
+    .not.toBeNull();
+  expect(
+    document.querySelector(".verdict-head")?.textContent?.length ?? 0,
+  ).toBeGreaterThan(0);
+  await userEvent.keyboard("{Escape}");
+  await expect
+    .poll(() => document.querySelector("dialog.guide.verdict"))
+    .toBeNull();
+  expect(api.unmatched).toEqual([]);
+});
+
 test("hovering a community build shows the structured diff", async () => {
   const screen = await render(<App />);
   await expect
