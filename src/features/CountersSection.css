@@ -1,0 +1,117 @@
+@layer components {
+/* The counters section — enemy matchups (Tough/Favored vs) sitting directly above the manual
+   enemy picker, grouped full-width just above the build they re-rank. Its children (.matchups,
+   .enemies) self-gutter to the 22px page edge, so this is a thin semantic wrapper only. */
+.counters {
+  margin-top: 6px;
+}
+
+.matchups {
+  padding: 8px 22px 2px;
+}
+.matchups .mrow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 6px;
+}
+.matchups .mrow .lbl {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  width: 74px;
+  flex: 0 0 74px;
+}
+.matchups .lbl.tough {
+  color: #e08a8a;
+}
+.matchups .lbl.fav {
+  color: #7fc081;
+}
+.mchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 9px 3px 3px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.mchip img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.mchip .mwr {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+}
+.mchip.tough:hover {
+  border-color: #6e4040;
+}
+.mchip.fav:hover {
+  border-color: #466e44;
+}
+.mchip.active {
+  border-color: var(--accent);
+  background: #1b2735;
+}
+.mchip .madd {
+  color: var(--accent);
+  font-size: 11px;
+}
+.matchups .hint {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.enemies {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 22px 4px;
+}
+.enemies .lbl {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+/* The enemy picker's single entry point — opens the command palette in enemies mode.
+   Chip-shaped and dashed: an empty slot in the row of enemy chips, waiting to be filled. */
+.addenemy {
+  background: var(--panel2);
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.addenemy:hover {
+  color: var(--text);
+  border-color: #e39ab0;
+}
+
+/* One-line explainer shown above the build when enemies are selected; the counter
+   data itself lives inline on the build rows. */
+.counters-note {
+  margin: 6px 22px 4px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid #e39ab0;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+}

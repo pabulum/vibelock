@@ -1,0 +1,67 @@
+@layer components {
+/* "Patch movers" strip — items whose win rate verifiably moved across the patch boundary.
+   Same slim row grammar as the enemies/your-heroes strips. */
+.movers {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 22px 0;
+}
+.movers .lbl {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  cursor: help;
+}
+.movers .mover {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: help;
+}
+.movers .mover b {
+  font-weight: 600;
+}
+.movers .up b {
+  color: #7ecf9e;
+}
+.movers .down b {
+  color: #e08989;
+}
+.movers .newitem b {
+  color: var(--accent);
+}
+.movers .none {
+  color: var(--muted);
+  border-style: dashed;
+}
+/* Adoption ("Trending") movers: a second label + chips for rising-pick-rate items. A breakout is
+   rising and winning (accent ring); hype is rising but unproven (muted, dashed). */
+.movers .lbl.trending {
+  margin-left: 6px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+.movers .breakout {
+  border-color: #6d9bd1;
+}
+.movers .breakout b {
+  color: #8fc0ff;
+}
+.movers .hype {
+  border-style: dashed;
+  color: var(--muted);
+}
+.movers .hype b {
+  color: var(--muted);
+}
+
+}

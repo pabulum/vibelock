@@ -1,0 +1,98 @@
+@layer components {
+/* The build header: hero portrait + name as a real title, the stat line tucked under it —
+   not a face floating beside a wall of muted prose. */
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 22px 4px;
+  color: var(--muted);
+}
+/* The selected hero's card — the unmissable "you are looking at THIS hero" anchor. Native
+   280:380 card aspect, uncropped: any square/circle crop beheads some hero on the roster. */
+.metaface {
+  flex: 0 0 auto;
+  width: 57px;
+  height: 76px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: linear-gradient(165deg, var(--panel2) 0%, var(--panel) 80%);
+  border: 1px solid var(--line);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+.metabody {
+  min-width: 0;
+}
+.metatitle {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 3px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--text);
+  line-height: 1.15;
+}
+.metaarch {
+  font: 600 11px/1.6 var(--font-tagline);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--purple);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 8px;
+  align-self: center;
+}
+.identity {
+  padding: 8px 22px 2px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-style: italic;
+}
+
+.archetypes {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 22px 2px;
+}
+.archetypes .lbl {
+  align-self: center;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.archtab {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.archtab:hover {
+  border-color: #3c4654;
+}
+.archtab.active {
+  border-color: var(--accent);
+  background: #1b2735;
+}
+.archtab .atlabel {
+  font-weight: 700;
+  font-size: 13px;
+}
+.archtab .atmeta {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+}

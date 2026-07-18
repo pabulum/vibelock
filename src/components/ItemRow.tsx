@@ -1,6 +1,7 @@
 // A build/item row (and the counter-add variant): win-rate delta vs baseline, pick rate,
 // sample, plus the tag line (counter bubbles, imbue target, swap/rush clues, win-state).
 
+import "./ItemRow.css";
 import {
   classifyWinState,
   WIN_STATE_GAP,

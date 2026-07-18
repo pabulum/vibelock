@@ -1,0 +1,161 @@
+@layer components {
+.controls {
+  display: flex;
+  gap: 14px;
+}
+.controls label {
+  display: flex;
+  flex-direction: column;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  gap: 4px;
+}
+.controls select {
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 7px 10px;
+  font-size: 14px;
+  min-width: 150px;
+}
+/* The backfill checkbox rides the same label column as the selects; sized/centered to
+   sit on the select row's midline rather than dangling tiny under its caption. */
+.controls .checkctl {
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+.controls .checkctl input {
+  width: 18px;
+  height: 18px;
+  margin: 7px auto;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+/* One-time cue when a Steam profile auto-selects the rank band — without it the silent re-slice
+ * reads as "Steam ID changes the items". Fades itself out; pointer-events off so the stale chip
+ * never blocks the controls (state is also cleared on a deliberate rank pick / profile change). */
+.controls .rankctl {
+  position: relative;
+}
+.autoset {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 6;
+  margin-top: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #21303f;
+  color: var(--accent);
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: autosetfade 6s ease forwards;
+}
+@keyframes autosetfade {
+  0% {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  8% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.controls .idctl {
+  position: relative;
+}
+.controls .idctl input {
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 7px 10px;
+  font-size: 14px;
+  width: 130px;
+}
+/* Name-search results under the Steam id input. */
+.idresults {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 6;
+  min-width: 220px;
+  margin-top: 4px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.idresults button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.idresults button:hover {
+  background: var(--panel2);
+}
+.idresults img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+.idresults i {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 11px;
+  margin-left: auto;
+}
+.idresults .idempty {
+  padding: 6px 8px;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* "How it works" trigger that sits alongside the header controls. */
+.guidebtn {
+  align-self: flex-end;
+  margin-bottom: 1px;
+  padding: 7px 12px;
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.guidebtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+}

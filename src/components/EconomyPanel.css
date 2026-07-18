@@ -1,0 +1,203 @@
+@layer components {
+/* --- Economy panel: souls/min headline, then the steady-vs-swingy source breakdown --- */
+
+/* Headline: the one number that most separates ranks, framed as this card's thesis rather than a
+   row lost among six others. Sits above a divider so the breakdown reads as its explanation. */
+.ecohead {
+  display: grid;
+  grid-template-columns: 72px 46px 1fr 30px 52px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 9px;
+  margin-bottom: 9px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+}
+.ecohead .fval {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.ecohead .fbar {
+  height: 6px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.ecohead .fbar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.ecohead .fbar > span.hi {
+  background: #7ecf9e;
+}
+.ecohead .fbar > span.lo {
+  background: #e08989;
+}
+.ecohead .fpct {
+  text-align: right;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.ecohead .ecovs {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  text-align: right;
+}
+
+.economy .econlead {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+}
+.economy .econlead strong,
+.economy .econlead em {
+  font-style: normal;
+  color: #7ecf9e;
+}
+.economy .econgather {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* A source group (steady / swingy): a coloured header, then its rows. The group IS the framing, so
+   rows carry no per-row kind chip — one label per bucket instead of one per line. */
+.ecogroup + .ecogroup {
+  margin-top: 9px;
+}
+.ecogrouphdr {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding-bottom: 2px;
+}
+.ecogrouphdr.k-steady {
+  color: #7ecf9e;
+}
+.ecogrouphdr.k-swingy {
+  color: #d8a05a;
+}
+.ecorow {
+  display: grid;
+  /* Label column fits "Bosses & objectives" on one line — it wrapped to two at 116px. */
+  grid-template-columns: 132px 1fr 58px;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 12.5px;
+}
+/* With the last-game overlay there's a fourth column: your own rate, same units as the median. */
+.economy.has-you .ecorow {
+  grid-template-columns: 132px 1fr 58px 62px;
+}
+/* Column headers over the median/you numbers — the two columns are otherwise indistinguishable. */
+.ecorow.ecohdr {
+  padding: 0 0 3px;
+}
+.ecorow.ecohdr .fpop,
+.ecorow.ecohdr .fyou {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+/* Bullet chart: the filled bar is YOUR rate (so it means the same thing as the souls/min bar above
+   it), read against a tick at the hero's median. Bar past the tick = above median. */
+.ecorow .fbar {
+  position: relative;
+  height: 6px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.ecorow .fbar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--muted);
+}
+.ecorow .fbar > .ftick {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 10px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text);
+  opacity: 0.75;
+}
+.ecorow .fbar > span.k-steady {
+  background: #7ecf9e;
+}
+.ecorow .fbar > span.k-swingy {
+  background: #d8a05a;
+}
+.ecorow .fpop {
+  text-align: right;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+/* Your last game: the rate leads (same units as the median beside it), the percentile trails muted
+   and small — a locator, not a grade, so it gets no good/bad colour. */
+.ecorow .fyou {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 4px;
+  white-space: nowrap;
+}
+.ecorow .fyoun {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+/* Above / below the hero's median. A direction, not a verdict — the note says as much. */
+.ecorow .fyoun.hi {
+  color: #7ecf9e;
+}
+.ecorow .fyoun.lo {
+  color: #e08989;
+}
+.ecorow .fyoup {
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 560px) {
+  .matchrow {
+    grid-template-columns: 40px 1fr 64px;
+  }
+  .matchrow .mwhen {
+    display: none;
+  }
+  .econrow {
+    grid-template-columns: 96px 1fr 44px 50px 28px;
+  }
+  .econrow .econkind {
+    display: none;
+  }
+  .ecorow {
+    grid-template-columns: 96px 1fr 50px;
+  }
+  .economy.has-you .ecorow {
+    grid-template-columns: 96px 1fr 50px 56px;
+  }
+  .ecohead {
+    grid-template-columns: 66px 44px 1fr 28px;
+  }
+  .ecohead .ecovs {
+    display: none;
+  }
+}
+
+}

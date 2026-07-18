@@ -1,0 +1,209 @@
+@layer components {
+.phases {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(230px, 1fr));
+  gap: 16px;
+  padding: 14px 22px;
+}
+@media (max-width: 1380px) {
+  .phases {
+    grid-template-columns: repeat(3, minmax(230px, 1fr));
+  }
+}
+@media (max-width: 1100px) {
+  .phases {
+    grid-template-columns: repeat(2, minmax(230px, 1fr));
+  }
+}
+@media (max-width: 620px) {
+  .phases {
+    grid-template-columns: 1fr;
+  }
+}
+
+.phase {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+/* Scroll-driven entrance: on narrow layouts the columns stack below the fold, and each one
+   rises/fades in as it scrolls into view. Progressive enhancement — @supports skips browsers
+   without scroll timelines, reduced-motion opts out. The range end is an absolute 160px (not a
+   % of the column) so a tall column settles crisp once its top has risen 160px above the fold,
+   rather than staying faded until most of it has scrolled past — a partially-entered column at
+   page load reads as an invitation to scroll, not a rendering bug. The transform is transient
+   (identity once entry completes), so it can't permanently re-root fixed-position children. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .phase {
+      animation: phase-enter ease-out both;
+      animation-timeline: view(block);
+      animation-range: entry 0% entry 160px;
+    }
+  }
+}
+@keyframes phase-enter {
+  from {
+    opacity: 0.2;
+    transform: translateY(14px);
+  }
+}
+
+/* The overtime buy-list is a prioritized shopping list, not a time phase — give it an accent edge
+   and a faint tint so it reads as the culmination of the Lane→Late progression. */
+.phase.overtime {
+  border-color: color-mix(in srgb, var(--accent, #9b6dd1) 55%, var(--line));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent, #9b6dd1) 7%, var(--panel)),
+    var(--panel) 120px
+  );
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--accent, #9b6dd1) 20%, transparent);
+}
+.phase.overtime h2 .time {
+  color: color-mix(in srgb, var(--accent, #9b6dd1) 80%, var(--muted));
+}
+/* The sell side of the overtime swap: which standing slots to free (weakest first) for the buys
+   below. A quiet callout box, not an item row — these are names to recognize, not picks to weigh. */
+.ot-sell {
+  margin: 2px 0 10px;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+}
+
+.phase h2 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.phase h2 .time {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.budget {
+  margin: -4px 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.catbar {
+  display: flex;
+  height: 14px;
+  margin: 0 0 12px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--panel2);
+  font-variant-numeric: tabular-nums;
+}
+.catseg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  font-size: 9px;
+  font-weight: 700;
+  color: #0d1117;
+  white-space: nowrap;
+}
+.catseg + .catseg {
+  box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.3);
+}
+
+/* Per-phase tempo lines: ahead-of-pace / behind-of-pace advice. */
+.tempo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 2px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #141922;
+}
+.tline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.tlbl {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.tline.ahead .tlbl {
+  color: #79c98f;
+}
+.tline.behind .tlbl {
+  color: #d98b6a;
+}
+.tact {
+  color: var(--muted);
+  font-weight: 600;
+  margin-left: 2px;
+}
+.tact.risky {
+  color: #e0a85a;
+}
+.tchip {
+  padding: 1px 7px;
+  border-radius: 10px;
+  border-left: 2px solid var(--line);
+  background: #1a1f27;
+  color: #c2ccd8;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.grouphdr {
+  margin: 14px 0 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  border-top: 1px dashed var(--line);
+  padding-top: 10px;
+}
+.grouphdr.core {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+  color: #cdd6e3;
+}
+
+/* Phase-header lead note (from the baked WP surface) and chip closing-power glyphs. */
+.wpnote {
+  color: var(--muted);
+  cursor: help;
+}
+
+/* Palette item jump: one accent pulse on the row the jump landed on (class toggled by
+   flashItemRow in App.tsx). Pure highlight — no transform — so it's reduced-motion safe. */
+.item.rowflash {
+  animation: rowflash 1.5s ease-out;
+}
+@keyframes rowflash {
+  0%,
+  35% {
+    box-shadow: inset 0 0 0 2px var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, var(--panel2));
+  }
+  100% {
+    box-shadow: inset 0 0 0 2px transparent;
+    background: var(--panel2);
+  }
+}
+
+}

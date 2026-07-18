@@ -1,0 +1,914 @@
+@layer components {
+/* Methodology & glossary modal — a native <dialog> (see ModalShell): the browser owns the
+   top layer, focus trapping, and Escape, and the old .guide-backdrop overlay is now the
+   dialog's ::backdrop. The dialog element itself is the card. */
+dialog.guide {
+  /* Top-anchored like the old overlay: the UA's inset:0 plus auto side margins center it,
+     and the 6vh top margin replaces the backdrop's padding. */
+  margin: 6vh auto auto;
+  width: min(680px, calc(100vw - 32px));
+  max-width: none; /* the width above already accounts for margins; drop the UA cap */
+  max-height: calc(94vh - 24px);
+  padding: 0;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  /* Top-layer element, so it doesn't inherit the app's font/color — set them here. */
+  color: var(--text);
+  font:
+    14px/1.45 system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    sans-serif;
+  /* Enter/exit: @starting-style below fades/rises the card in; on close, allow-discrete holds
+     display and top-layer membership (overlay) until the fade-out ends. ModalShell defers its
+     unmount to match (EXIT_MS). */
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    overlay 0.18s ease allow-discrete,
+    display 0.18s ease allow-discrete;
+}
+dialog.guide[open] {
+  /* The card is a fixed-height column: a pinned header + a body that scrolls on its own,
+     so the header can't overlap content and scrolling can't chain to the page behind.
+     Scoped to [open] so the UA's display:none for closed dialogs still applies. */
+  display: flex;
+  flex-direction: column;
+}
+dialog.guide:not([open]) {
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
+}
+@starting-style {
+  dialog.guide[open] {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  dialog.guide[open]::backdrop {
+    opacity: 0;
+  }
+}
+dialog.guide::backdrop {
+  background: rgba(8, 10, 13, 0.62);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  opacity: 1;
+  transition:
+    opacity 0.18s ease,
+    overlay 0.18s ease allow-discrete,
+    display 0.18s ease allow-discrete;
+}
+dialog.guide:not([open])::backdrop {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  dialog.guide,
+  dialog.guide::backdrop {
+    transition: none;
+  }
+}
+.guide-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  border-radius: 14px 14px 0 0;
+}
+.guide-head h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.guide-x {
+  padding: 4px 9px;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+.guide-x:hover {
+  color: var(--text);
+  background: var(--panel2);
+}
+.guide-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px 20px 20px;
+}
+
+/* --- Ctrl+K command palette — a native <dialog> like the guide modal, but the query input is
+   the header and the ranked command list is the body (see components/CommandPalette). Snappier
+   transitions than the guide (0.12s, keep in sync with EXIT_MS): a palette is a reflex, not a
+   destination. --- */
+dialog.palette {
+  margin: 12vh auto auto;
+  width: min(540px, calc(100vw - 32px));
+  max-width: none;
+  padding: 0;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  color: var(--text);
+  font:
+    13.5px/1.45 system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    sans-serif;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease,
+    overlay 0.12s ease allow-discrete,
+    display 0.12s ease allow-discrete;
+}
+dialog.palette[open] {
+  display: flex;
+  flex-direction: column;
+}
+dialog.palette:not([open]) {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+}
+@starting-style {
+  dialog.palette[open] {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+  dialog.palette[open]::backdrop {
+    opacity: 0;
+  }
+}
+dialog.palette::backdrop {
+  background: rgba(8, 10, 13, 0.5);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  opacity: 1;
+  transition:
+    opacity 0.12s ease,
+    overlay 0.12s ease allow-discrete,
+    display 0.12s ease allow-discrete;
+}
+dialog.palette:not([open])::backdrop {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  dialog.palette,
+  dialog.palette::backdrop {
+    transition: none;
+  }
+}
+.pal-in {
+  flex: 0 0 auto;
+  width: 100%;
+  background: transparent;
+  color: var(--text);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 13px 16px;
+  font: inherit;
+  font-size: 15px;
+}
+.pal-in:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+.pal-in::placeholder {
+  color: var(--muted);
+}
+.pal-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(52vh, 460px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 5px;
+}
+.pal-hdr {
+  padding: 9px 10px 3px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.pal-opt {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  background: none;
+  border: 0;
+  border-radius: 7px;
+  padding: 6px 10px;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.pal-opt.on {
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel2));
+}
+.pal-opt img,
+.pal-ico {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 4px;
+  object-fit: cover;
+}
+.pal-ico {
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  color: var(--muted);
+}
+.pal-lbl {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pal-check {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 12px;
+}
+.pal-hint {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+.pal-empty {
+  padding: 14px 12px;
+  color: var(--muted);
+}
+.pal-foot {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--line);
+  padding: 6px 12px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+/* --- Export-to-in-game panel (reuses the guide modal shell) --- */
+.guide.export {
+  max-width: 540px;
+}
+.export-steps {
+  margin: 12px 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.export-steps strong {
+  color: var(--text);
+}
+.export-go {
+  display: inline-block;
+  margin: 4px 0;
+  padding: 9px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--accent, #5fa84a);
+  color: #08130a;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.export-go:hover {
+  filter: brightness(1.08);
+}
+.export-go:disabled,
+.export-go.busy {
+  opacity: 0.6;
+  cursor: default;
+}
+.export-steam {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 14px 0;
+  font-size: 13px;
+}
+.export-steam input {
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel, #1a1d24);
+  color: var(--text);
+  font: inherit;
+  max-width: 220px;
+}
+.export-status {
+  margin: 12px 0 4px;
+  font-size: 13px;
+}
+.export-status.working {
+  color: var(--muted);
+}
+.export-status.done {
+  color: #5fa84a;
+}
+.export-status.error {
+  color: #d9534f;
+}
+.export-where {
+  margin-top: 16px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.export-where summary {
+  cursor: pointer;
+}
+.export-where code {
+  font-size: 11.5px;
+  word-break: break-all;
+}
+
+/* --- Share panel (reuses the guide modal shell + .export-go buttons) --- */
+.guide.share {
+  /* Wide enough that the 1200px card previews at a readable size. */
+  width: min(760px, calc(100vw - 32px));
+}
+.share-holder {
+  min-height: 120px;
+}
+/* The rendered card canvas (1200×630 at 2×), scaled down to the panel width. */
+.share-preview {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.share-fun {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.share-url {
+  margin: 10px 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--muted);
+  word-break: break-all;
+}
+.guide-body section {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+.guide-body section:last-child {
+  border-bottom: 0;
+  padding-bottom: 2px;
+}
+.guide-body h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+.guide-body p {
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+.guide-body p:last-child {
+  margin-bottom: 0;
+}
+.guide-body a {
+  color: var(--accent);
+}
+.guide-body ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.guide-body ul li {
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+.guide-body ul li:last-child {
+  margin-bottom: 8px;
+}
+.guide-body ul li .statetag {
+  margin-right: 6px;
+}
+.guide-body .fine {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Two-column term list; collapses to stacked rows on narrow screens. */
+.glossary {
+  margin: 2px 0 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 11px 18px;
+  align-items: baseline;
+}
+.glossary dt {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.glossary dt .statetag,
+.glossary dt .weakcomp {
+  font-weight: 700;
+}
+.glossary dd {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+@media (max-width: 560px) {
+  .glossary {
+    grid-template-columns: 1fr;
+    gap: 3px 0;
+  }
+  .glossary dd {
+    margin: 0 0 9px;
+  }
+}
+
+/* ---- The Lab (experimental stats modal; shares the guide-* card shell) ---- */
+
+.guide.lab {
+  width: min(760px, calc(100vw - 32px));
+}
+.labtag {
+  margin-left: 8px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--purple);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: 2px;
+}
+.labbtn {
+  color: var(--purple);
+}
+.labintro,
+.labmeta {
+  color: var(--muted);
+}
+.labmeta {
+  margin-top: 18px;
+  font-size: 12px;
+}
+
+/* Closing-power rows: name | signed value | diverging bar around a center line. */
+.labheroes {
+  display: grid;
+  grid-template-columns: max-content max-content 1fr;
+  gap: 3px 10px;
+  margin-top: 10px;
+}
+.labhero {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+.labhero.current .labname {
+  color: var(--accent);
+  font-weight: 600;
+}
+.labname {
+  font-size: 13px;
+}
+.labval {
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  text-align: right;
+}
+.labbar {
+  position: relative;
+  height: 10px;
+  background: var(--panel2);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.labbar::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+.labbar i {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 3px;
+  opacity: 0.85;
+}
+
+.labtablewrap {
+  margin-top: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.labtable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.labtable th {
+  position: sticky;
+  top: 0;
+  background: var(--panel2);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: right;
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+.labtable th:first-child,
+.labtable td:first-child {
+  text-align: left;
+}
+.labtable td {
+  padding: 4px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 45%, transparent);
+  text-align: right;
+  white-space: nowrap;
+}
+.labtier {
+  color: var(--muted);
+}
+
+/* Lab closing-power row extras: hero WR context + converter/snowballer style chip. */
+.labwr {
+  margin-left: 6px;
+  color: var(--muted);
+  font-style: normal;
+  font-size: 11px;
+}
+.labstyle {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.labstyle.up {
+  color: #54c66b;
+  border: 1px solid color-mix(in srgb, #54c66b 45%, transparent);
+}
+.labstyle.down {
+  color: #d89a5a;
+  border: 1px solid color-mix(in srgb, #d89a5a 45%, transparent);
+}
+
+/* --- Match analysis modal (components/MatchModal) --- */
+/* Reuses the guide/lab modal shell and the fundamentals-row grid; adds the match lookup,
+   the WP line chart, and the soul-economy rows. */
+
+.matchinput {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  margin-bottom: 14px;
+}
+.matchback {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12.5px;
+  padding: 2px 0;
+  margin-bottom: 2px;
+}
+.matchback:hover {
+  color: var(--accent);
+}
+.matchinput input {
+  flex: 1;
+  max-width: 320px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 7px 10px;
+  font-size: 13px;
+}
+.matchinput button {
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 7px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.matchinput button:hover {
+  border-color: var(--accent);
+}
+
+.matchrecent h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 12px 0 6px;
+}
+.matchrow {
+  display: grid;
+  grid-template-columns: 44px 1fr 76px 78px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.matchrow:hover {
+  border-color: var(--accent);
+}
+.matchrow .mhero {
+  font-weight: 600;
+}
+.mwin,
+.mloss {
+  font-weight: 700;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+}
+.mwin {
+  color: #7ecf9e;
+}
+.mloss {
+  color: #e08989;
+}
+.mkda,
+.mwhen {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.matchnote {
+  color: var(--muted);
+  font-size: 11.5px;
+  margin: 6px 0 0;
+}
+.matchhead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  margin: 6px 0 4px;
+}
+.matchhead .mmuted,
+.mmuted {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+}
+.matchdeaths {
+  font-size: 12.5px;
+  margin: 2px 0 0;
+}
+.linkbtn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: inherit;
+  padding: 0;
+  text-decoration: underline;
+}
+
+/* WP line chart: one series (no legend), dashed 50% midline, death ticks on the baseline. */
+.wpchart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  touch-action: none;
+}
+.wpmid {
+  stroke: var(--line);
+  stroke-dasharray: 4 4;
+  stroke-width: 1;
+}
+.wpline {
+  stroke: var(--accent);
+  stroke-width: 2;
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.wparea {
+  fill: var(--accent);
+  opacity: 0.1;
+  stroke: none;
+}
+.wpdeath {
+  stroke: #e08989;
+  stroke-width: 2;
+}
+.wpdot {
+  fill: var(--accent);
+  stroke: var(--bg);
+  stroke-width: 2;
+}
+.wpread {
+  color: var(--muted);
+  font-size: 11.5px;
+  margin-top: 4px;
+  min-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Soul-economy rows: fundamentals grid plus a kind chip; bar lengths are share-of-largest. */
+.econrow {
+  display: grid;
+  grid-template-columns: 118px 74px 1fr 48px 56px 30px;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 12.5px;
+}
+.econrow .epct {
+  text-align: right;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.econrow .epct.hi {
+  color: #7ecf9e;
+}
+.econrow .epct.lo {
+  color: #e08989;
+}
+.econrow .fbar {
+  height: 6px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.econrow .fbar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--muted);
+}
+.econkind {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.econkind.k-steady {
+  color: #7ecf9e;
+}
+.econrow .fbar > span.k-steady {
+  background: #7ecf9e;
+}
+.econrow .fbar > span.k-swingy {
+  background: #d8a05a;
+}
+.econrow .fbar > span.k-passive {
+  background: var(--muted);
+}
+.econrow .fval,
+.econrow .fpct {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.econrow .fpct {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* Death read + the "build against your nemesis" list (MatchModal). */
+.deathread {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+  line-height: 1.45;
+}
+.nemesis {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.nemrow {
+  display: grid;
+  grid-template-columns: 1fr 60px 90px;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+  padding: 2px 0;
+}
+.nemitem {
+  font-weight: 600;
+}
+.nemedge {
+  text-align: right;
+  color: #7ecf9e;
+  font-variant-numeric: tabular-nums;
+}
+.nemn {
+  text-align: right;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Generator-verdict card ("why isn't X here" — components/VerdictCard) --- */
+.guide.verdict {
+  width: min(520px, calc(100vw - 32px));
+}
+.verdict-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.verdict-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.verdict-icon img {
+  width: 22px;
+  height: 22px;
+}
+.verdict-head {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.verdict-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.verdict-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+}

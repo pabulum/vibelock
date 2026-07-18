@@ -10,6 +10,7 @@
 // Each layer degrades independently: no account ⇒ no headline/overlay; no baked cell for the hero ⇒
 // a "gathering data" note instead of the breakdown; the whole panel hides only when it'd be empty.
 
+import "./EconomyPanel.css";
 import type { FundamentalRow } from "../lib/fundamentals";
 import type { EconomyKind, HeroFarmProfile } from "../lib/matchAnalysis";
 

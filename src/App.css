@@ -8,215 +8,221 @@
   initial-value: #6fb1ff;
 }
 
-:root {
-  --bg: #0f1216;
-  --panel: #171b21;
-  --panel2: #1d222a;
-  --line: #2a313b;
-  --text: #e6e9ee;
-  --muted: #98a2b3;
-  --accent: #6fb1ff;
-  transition: --accent 0.5s ease;
-  --purple: #9b6dd1; /* Deadlock spirit purple */
-  /* Brand type, matching the Open Graph card. Space Grotesk for the wordmark (and available for
+/* Cascade layers: base < components < responsive. Component styles live next to their
+   components (features/*.css, components/*.css) in the components layer; the narrow-screen
+   overrides win last via the responsive layer regardless of import order. */
+@layer base, components, responsive;
+
+@layer base {
+  :root {
+    --bg: #0f1216;
+    --panel: #171b21;
+    --panel2: #1d222a;
+    --line: #2a313b;
+    --text: #e6e9ee;
+    --muted: #98a2b3;
+    --accent: #6fb1ff;
+    transition: --accent 0.5s ease;
+    --purple: #9b6dd1; /* Deadlock spirit purple */
+    /* Brand type, matching the Open Graph card. Space Grotesk for the wordmark (and available for
      headings); Archivo for the italic hero flavor lines. Both fall back to the system UI stack. */
-  --font-display: "Space Grotesk", system-ui, sans-serif;
-  --font-tagline: "Archivo", system-ui, sans-serif;
-}
+    --font-display: "Space Grotesk", system-ui, sans-serif;
+    --font-tagline: "Archivo", system-ui, sans-serif;
+  }
 
-* {
-  box-sizing: border-box;
-}
+  * {
+    box-sizing: border-box;
+  }
 
-body {
-  margin: 0;
-}
+  body {
+    margin: 0;
+  }
 
-.app {
-  min-height: 100vh;
-  background: var(--bg);
-  color: var(--text);
-  font:
-    14px/1.45 system-ui,
-    -apple-system,
-    Segoe UI,
-    Roboto,
-    sans-serif;
-  padding: 0 0 40px;
-}
+  .app {
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font:
+      14px/1.45 system-ui,
+      -apple-system,
+      Segoe UI,
+      Roboto,
+      sans-serif;
+    padding: 0 0 40px;
+  }
 
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 22px;
-  background: rgba(15, 18, 22, 0.92);
-  backdrop-filter: blur(6px);
-  border-bottom: 1px solid var(--line);
-}
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 22px;
+    background: rgba(15, 18, 22, 0.92);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line);
+  }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-}
-.brandname {
-  flex: 0 0 auto;
-  font-family: var(--font-display);
-}
-/* Selected hero's flavor line — small, italic, muted. */
-.tagline {
-  min-width: 0;
-  font-family: var(--font-tagline);
-  font-size: 12px;
-  font-weight: 400;
-  font-style: italic;
-  color: var(--muted);
-  letter-spacing: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.tagline::before {
-  content: "“";
-}
-.tagline::after {
-  content: "”";
-}
-@media (max-width: 760px) {
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+  }
+  .brandname {
+    flex: 0 0 auto;
+    font-family: var(--font-display);
+  }
+  /* Selected hero's flavor line — small, italic, muted. */
   .tagline {
-    display: none;
+    min-width: 0;
+    font-family: var(--font-tagline);
+    font-size: 12px;
+    font-weight: 400;
+    font-style: italic;
+    color: var(--muted);
+    letter-spacing: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-}
+  .tagline::before {
+    content: "“";
+  }
+  .tagline::after {
+    content: "”";
+  }
+  @media (max-width: 760px) {
+    .tagline {
+      display: none;
+    }
+  }
 
-/* Shuffling brand mark: an angular crystal-shard gem masked over a real item icon. */
-.shufmark {
-  position: relative;
-  flex: 0 0 auto;
-  display: block;
-  background: linear-gradient(135deg, #241b35, #2b2444);
-  /* Asymmetric beveled-shard silhouette — deliberately off the usual square/circle. */
-  clip-path: polygon(28% 0%, 100% 8%, 86% 72%, 58% 100%, 0% 84%, 10% 30%);
-  filter: drop-shadow(0 0 6px rgba(155, 109, 209, 0.4));
-}
-.shufmark img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  animation: shufin 0.55s ease;
-}
-.shufmark-fallback {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  color: var(--accent);
-  font-size: 0.66em;
-}
-@keyframes shufin {
-  from {
-    opacity: 0;
-    transform: scale(1.3) rotate(-10deg);
+  /* Shuffling brand mark: an angular crystal-shard gem masked over a real item icon. */
+  .shufmark {
+    position: relative;
+    flex: 0 0 auto;
+    display: block;
+    background: linear-gradient(135deg, #241b35, #2b2444);
+    /* Asymmetric beveled-shard silhouette — deliberately off the usual square/circle. */
+    clip-path: polygon(28% 0%, 100% 8%, 86% 72%, 58% 100%, 0% 84%, 10% 30%);
+    filter: drop-shadow(0 0 6px rgba(155, 109, 209, 0.4));
   }
-  to {
-    opacity: 1;
-    transform: scale(1) rotate(0);
+  .shufmark img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    animation: shufin 0.55s ease;
   }
-}
+  .shufmark-fallback {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    color: var(--accent);
+    font-size: 0.66em;
+  }
+  @keyframes shufin {
+    from {
+      opacity: 0;
+      transform: scale(1.3) rotate(-10deg);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) rotate(0);
+    }
+  }
 
-/* Indeterminate loading strip riding the bottom edge of the sticky header. A faint always-on track
+  /* Indeterminate loading strip riding the bottom edge of the sticky header. A faint always-on track
    (the strip's own background) reads as "active", and a brighter comet sweeps across it on a tight,
    steady cadence — the old single 2.3s ease-in-out pass left long dead gaps that read as "stalled". */
-.loadstrip {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 3px;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--purple) 22%, transparent);
-}
-.loadstrip::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  width: 40%;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--purple),
-    color-mix(in srgb, var(--purple) 60%, white) 55%,
-    var(--purple),
-    transparent
-  );
-  animation: loadslide 1.15s linear infinite;
-}
-@keyframes loadslide {
-  0% {
-    transform: translateX(-105%);
+  .loadstrip {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    height: 3px;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--purple) 22%, transparent);
   }
-  100% {
-    transform: translateX(255%);
+  .loadstrip::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 40%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--purple),
+      color-mix(in srgb, var(--purple) 60%, white) 55%,
+      var(--purple),
+      transparent
+    );
+    animation: loadslide 1.15s linear infinite;
   }
-}
+  @keyframes loadslide {
+    0% {
+      transform: translateX(-105%);
+    }
+    100% {
+      transform: translateX(255%);
+    }
+  }
 
-/* Centered cold-load state — the shuffling mark bobbing over a label. */
-.loadstate {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  padding: 64px 22px;
-  color: var(--muted);
-}
-.loadstate .shufmark {
-  animation: loadbob 1.7s ease-in-out infinite;
-}
-.loadstate .loadlabel {
-  font-size: 13px;
-  letter-spacing: 0.04em;
-}
-@keyframes loadbob {
-  0%,
-  100% {
-    transform: translateY(0);
+  /* Centered cold-load state — the shuffling mark bobbing over a label. */
+  .loadstate {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 64px 22px;
+    color: var(--muted);
   }
-  50% {
-    transform: translateY(-5px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .shufmark img,
-  .loadstrip::before,
   .loadstate .shufmark {
-    animation: none;
+    animation: loadbob 1.7s ease-in-out infinite;
   }
-}
+  .loadstate .loadlabel {
+    font-size: 13px;
+    letter-spacing: 0.04em;
+  }
+  @keyframes loadbob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-5px);
+    }
+  }
 
-/* ---- Hero/rank switch view transition --------------------------------------
+  @media (prefers-reduced-motion: reduce) {
+    .shufmark img,
+    .loadstrip::before,
+    .loadstate .shufmark {
+      animation: none;
+    }
+  }
+
+  /* ---- Hero/rank switch view transition --------------------------------------
    switchTransition (App.tsx) snapshots the page across a hero/rank switch, so the named
    pieces — the hero portrait and each phase column — cross-fade independently of the rest.
    The default cross-fade is the right effect; we only tighten the timing. Composes with the
    settle veil: the new-state snapshot is live, so the veil arming mid-transition shows
    through it. (Reduced-motion users never enter a transition — gated in JS.) */
-::view-transition-group(*) {
-  animation-duration: 0.22s;
-}
-::view-transition-group(hero-face) {
-  animation-duration: 0.3s;
-}
+  ::view-transition-group(*) {
+    animation-duration: 0.22s;
+  }
+  ::view-transition-group(hero-face) {
+    animation-duration: 0.3s;
+  }
 
-/* ---- Per-piece "developing" load cue --------------------------------------
+  /* ---- Per-piece "developing" load cue --------------------------------------
    While a query is in flight, each content box wears a frosted scrim: a
    panel-colored cover textured with a soft-light-blended grain, faded in via
    `--settle` (0 = crisp ↔ ~0.82 = covered), set in JS on the *section* and
@@ -227,3051 +233,230 @@ body {
    (the old approach) it can't smear the content reordering behind it into
    digital artifacts. When the data lands the scrim eases off and `--flash`
    pulses a purple glow once — the "just landed" punch. */
-.skills,
-.phase,
-.crow,
-.mchip,
-.movers,
-.meta,
-.fundamentals {
-  position: relative;
-}
-.skills::after,
-.phase::after,
-.crow::after,
-.mchip::after,
-.movers::after,
-.meta::after,
-.fundamentals::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none; /* clicks/hovers pass straight through to the content */
-  border-radius: inherit;
-  opacity: var(--settle, 0); /* 0 ⇒ invisible, nothing painted */
-  /* Panel fill + grayscale grain, blended together (not against the backdrop) so it reads as a
+  .skills,
+  .phase,
+  .crow,
+  .mchip,
+  .movers,
+  .meta,
+  .fundamentals {
+    position: relative;
+  }
+  .skills::after,
+  .phase::after,
+  .crow::after,
+  .mchip::after,
+  .movers::after,
+  .meta::after,
+  .fundamentals::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none; /* clicks/hovers pass straight through to the content */
+    border-radius: inherit;
+    opacity: var(--settle, 0); /* 0 ⇒ invisible, nothing painted */
+    /* Panel fill + grayscale grain, blended together (not against the backdrop) so it reads as a
      frosted surface. Tune the fill's alpha / the last colormatrix value to make the glass
      lighter or heavier without ever reintroducing a backdrop blur. */
-  background-color: color-mix(in srgb, var(--panel) 94%, transparent);
-  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0.33 0.33 0.33 0 -0.1 0.33 0.33 0.33 0 -0.1 0.33 0.33 0.33 0 -0.1 0 0 0 0 0.4'/></filter><rect width='160' height='160' filter='url(%23g)'/></svg>");
-  background-size: 160px 160px;
-  background-repeat: repeat;
-  background-blend-mode: soft-light;
-}
-/* Purple "just landed" glow — a soft bloom (no hard frame), pulsed once by --flash on completion. */
-.skills::before,
-.phase::before,
-.crow::before,
-.mchip::before,
-.movers::before,
-.meta::before,
-.fundamentals::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  pointer-events: none;
-  border-radius: inherit;
-  opacity: var(--flash, 0);
-  box-shadow:
-    0 0 20px 1px rgba(155, 109, 209, 0.4),
-    inset 0 0 26px rgba(155, 109, 209, 0.26);
-}
-
-.controls {
-  display: flex;
-  gap: 14px;
-}
-.controls label {
-  display: flex;
-  flex-direction: column;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  gap: 4px;
-}
-.controls select {
-  background: var(--panel2);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 7px 10px;
-  font-size: 14px;
-  min-width: 150px;
-}
-/* The backfill checkbox rides the same label column as the selects; sized/centered to
-   sit on the select row's midline rather than dangling tiny under its caption. */
-.controls .checkctl {
-  flex: 0 0 auto;
-  cursor: pointer;
-}
-.controls .checkctl input {
-  width: 18px;
-  height: 18px;
-  margin: 7px auto;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-/* One-time cue when a Steam profile auto-selects the rank band — without it the silent re-slice
- * reads as "Steam ID changes the items". Fades itself out; pointer-events off so the stale chip
- * never blocks the controls (state is also cleared on a deliberate rank pick / profile change). */
-.controls .rankctl {
-  position: relative;
-}
-.autoset {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 6;
-  margin-top: 4px;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: #21303f;
-  color: var(--accent);
-  font-size: 11px;
-  text-transform: none;
-  letter-spacing: 0;
-  white-space: nowrap;
-  pointer-events: none;
-  animation: autosetfade 6s ease forwards;
-}
-@keyframes autosetfade {
-  0% {
-    opacity: 0;
-    transform: translateY(-2px);
+    background-color: color-mix(in srgb, var(--panel) 94%, transparent);
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0.33 0.33 0.33 0 -0.1 0.33 0.33 0.33 0 -0.1 0.33 0.33 0.33 0 -0.1 0 0 0 0 0.4'/></filter><rect width='160' height='160' filter='url(%23g)'/></svg>");
+    background-size: 160px 160px;
+    background-repeat: repeat;
+    background-blend-mode: soft-light;
   }
-  8% {
-    opacity: 1;
-    transform: translateY(0);
+  /* Purple "just landed" glow — a soft bloom (no hard frame), pulsed once by --flash on completion. */
+  .skills::before,
+  .phase::before,
+  .crow::before,
+  .mchip::before,
+  .movers::before,
+  .meta::before,
+  .fundamentals::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+    border-radius: inherit;
+    opacity: var(--flash, 0);
+    box-shadow:
+      0 0 20px 1px rgba(155, 109, 209, 0.4),
+      inset 0 0 26px rgba(155, 109, 209, 0.26);
   }
-  80% {
-    opacity: 1;
+
+  /* The match modal still stacks its tips under a divider, so the block style stays. */
+  .climbtips {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
   }
-  100% {
-    opacity: 0;
+  .climbhdr {
+    display: block;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 5px;
+    flex: none;
   }
-}
-
-.controls .idctl {
-  position: relative;
-}
-.controls .idctl input {
-  background: var(--panel2);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 7px 10px;
-  font-size: 14px;
-  width: 130px;
-}
-/* Name-search results under the Steam id input. */
-.idresults {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 6;
-  min-width: 220px;
-  margin-top: 4px;
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-}
-.idresults button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  background: none;
-  border: 0;
-  border-radius: 6px;
-  color: var(--text);
-  font-size: 13px;
-  text-transform: none;
-  letter-spacing: 0;
-  cursor: pointer;
-  text-align: left;
-}
-.idresults button:hover {
-  background: var(--panel2);
-}
-.idresults img {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-}
-.idresults i {
-  font-style: normal;
-  color: var(--muted);
-  font-size: 11px;
-  margin-left: auto;
-}
-.idresults .idempty {
-  padding: 6px 8px;
-  color: var(--muted);
-  font-size: 12px;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-/* The counters section — enemy matchups (Tough/Favored vs) sitting directly above the manual
-   enemy picker, grouped full-width just above the build they re-rank. Its children (.matchups,
-   .enemies) self-gutter to the 22px page edge, so this is a thin semantic wrapper only. */
-.counters {
-  margin-top: 6px;
-}
-
-/* "Patch movers" strip — items whose win rate verifiably moved across the patch boundary.
-   Same slim row grammar as the enemies/your-heroes strips. */
-.movers {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 22px 0;
-}
-.movers .lbl {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  cursor: help;
-}
-.movers .mover {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 3px 10px;
-  font-size: 12px;
-  color: var(--text);
-  cursor: help;
-}
-.movers .mover b {
-  font-weight: 600;
-}
-.movers .up b {
-  color: #7ecf9e;
-}
-.movers .down b {
-  color: #e08989;
-}
-.movers .newitem b {
-  color: var(--accent);
-}
-.movers .none {
-  color: var(--muted);
-  border-style: dashed;
-}
-/* Adoption ("Trending") movers: a second label + chips for rising-pick-rate items. A breakout is
-   rising and winning (accent ring); hype is rising but unproven (muted, dashed). */
-.movers .lbl.trending {
-  margin-left: 6px;
-  padding-left: 12px;
-  border-left: 1px solid var(--line);
-}
-.movers .breakout {
-  border-color: #6d9bd1;
-}
-.movers .breakout b {
-  color: #8fc0ff;
-}
-.movers .hype {
-  border-style: dashed;
-  color: var(--muted);
-}
-.movers .hype b {
-  color: var(--muted);
-}
-
-/* "Your fundamentals" card — per-metric percentile bars vs the selected ladder. Same header
-   grammar as the community card; bars are the whole message so the rows stay dense. */
-.fundamentals {
-  padding: 10px 22px 2px;
-  max-width: 520px;
-  cursor: help;
-}
-.fundamentals h2 {
-  font-size: 13px;
-  font-weight: 700;
-  margin: 0 0 6px;
-}
-.fundamentals h2 .sub {
-  font-weight: 400;
-  font-size: 11.5px;
-  color: var(--muted);
-}
-.fundrow {
-  display: grid;
-  grid-template-columns: 92px 56px 1fr 34px;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 0;
-  font-size: 12.5px;
-}
-.fundrow .flabel {
-  color: var(--muted);
-}
-.fundrow .fval {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.fundrow .fbar {
-  height: 6px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.fundrow .fbar > span {
-  display: block;
-  height: 100%;
-  background: var(--muted);
-  border-radius: 999px;
-}
-.fundrow .fbar > span.hi {
-  background: #7ecf9e;
-}
-.fundrow .fbar > span.lo {
-  background: #e08989;
-}
-.fundrow .fpct {
-  color: var(--muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Climb tips (lib/fundamentals.climbAdvice): the 1–2 weakest controllable levers as concrete "do
-   this next game" advice. Its own dashboard card — the advice spans farm AND survival, so it
-   belonged inside neither the Economy nor the Combat panel. */
-.climbcard .climbtip {
-  margin-bottom: 6px;
-}
-.climbcard .lastgamelink {
-  margin-top: 2px;
-}
-/* The match modal still stacks its tips under a divider, so the block style stays. */
-.climbtips {
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
-}
-.climbhdr {
-  display: block;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  margin-bottom: 5px;
-  flex: none;
-}
-.climbtip {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-  margin-bottom: 4px;
-  font-size: 12px;
-}
-.climbaction {
-  flex: none;
-  font-weight: 600;
-  color: var(--accent);
-  white-space: nowrap;
-}
-.climbdetail {
-  color: var(--muted);
-}
-.climbnote {
-  font-size: 12px;
-  color: var(--muted);
-  margin: 0;
-}
-
-/* "Your heroes" quick-pick strip — the player's most-played heroes as portrait chips,
-   shown once a Steam id resolves to a profile. Mirrors the enemies row's layout. */
-.myheroes {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 22px 0;
-}
-.myheroes .lbl {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-.myheroes .chip {
-  background: var(--panel2);
-  color: var(--text);
-  border-color: var(--line);
-  padding: 3px 10px 3px 4px;
-}
-.myheroes .chip:hover {
-  background: var(--panel);
-}
-.myheroes .chip.active {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.myheroes .chip.try {
-  border-style: dashed;
-}
-.myheroes .lbl + .chip.try {
-  margin-left: 0;
-}
-.myheroes .chip img {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  object-fit: cover;
-  background: var(--panel);
-}
-.myheroes .lbl {
-  cursor: help;
-}
-/* Expected-tonight win rate on the chip (what-to-queue ordering). */
-.myheroes .chip i {
-  font-style: normal;
-  font-size: 11px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Pre-build dashboard: a plain two-column grid, paired by subject.
-     row 1  Economy | Combat & survival   — the two "how you're doing" reads
-     row 2  Skill order | Community check — the two "what to build" reads
-   Deliberately NOT a wrap row (cards hung at ragged depths) and no row-spanning feature column: a
-   spanned Economy left a big hole beside it whenever it had no farm data to show, and forcing the
-   community card full-width made it an awkward page-wide band. Equal columns keep every card the
-   same width, so uneven heights read as a dashboard rather than a pile. One column below 900px.
-   Cards carry no outer margin — the page gutter and gaps live here. */
-.dash {
-  padding: 8px 22px 4px;
-}
-/* Two balanced columns, NOT a grid: grid rows force every card in a row to share the tallest one's
-   height, which punched a ~270px hole under the short Combat card whenever Economy had a full
-   breakdown to show. Multi-column packs each card directly under the previous one and balances the
-   column heights itself, so there are no interior gaps and the balance adapts to whatever the cards
-   actually contain (Economy collapses to a couple of lines when a hero has no farm data yet).
-   `break-inside: avoid` keeps a card whole rather than splitting it across the columns. */
-@media (min-width: 900px) {
-  .dash {
-    column-count: 2;
-    column-gap: 14px;
+  .climbtip {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    margin-bottom: 4px;
+    font-size: 12px;
   }
-}
-.dash > * {
-  break-inside: avoid;
-  margin: 0 0 14px;
-}
-/* Shared card frame for the dashboard panels. */
-.dash > .skills,
-.dash > .fundamentals,
-.dash > .economy,
-.dash > .climbcard,
-.dash > .community {
-  /* Bottom margin is the inter-card gap in the column flow — it must match `.dash > *` above, and
-     it's repeated here because these class selectors would otherwise out-specify it back to 0. */
-  margin: 0 0 14px;
-  padding: 14px 16px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  min-width: 0;
-}
-.dash > .economy > h2,
-.dash > .climbcard > h2,
-.dash > .community > h2 {
-  font-size: 13px;
-  font-weight: 700;
-  margin: 0 0 6px;
-}
-.dash > .economy > h2 .sub,
-.dash > .community > h2 .sub {
-  font-weight: 400;
-  font-size: 11.5px;
-  color: var(--muted);
-}
-/* The "To climb" tips used to live here beside the bars; they're their own strip above the dash now
-   (they're holistic advice, not a combat stat), so this card is simply a heading plus its rows. */
-.dash > .fundamentals {
-  cursor: help;
-  /* The standalone card caps itself at 520px; as a grid item it should fill its column instead. */
-  max-width: none;
-}
-@media (max-width: 760px) {
-  .dash {
-    padding-left: 14px;
-    padding-right: 14px;
+  .climbaction {
+    flex: none;
+    font-weight: 600;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .climbdetail {
+    color: var(--muted);
+  }
+  .climbnote {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  .warn {
+    color: #e0b341;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #3a2730;
+    color: #f0c2cf;
+    border: 1px solid #5a3a45;
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .chip:hover {
+    background: #4a313c;
+  }
+
+  .banner {
+    margin: 16px 22px;
+    padding: 12px 16px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .banner.error {
+    border-color: #5a2b2b;
+    background: #241718;
+    color: #f0b8b8;
+  }
+
+  /* "Weak into this comp" flag (negative comp edge, no countering portrait). */
+  .weakcomp {
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: #3a2424;
+    color: #e08a8a;
+    font-size: 10.5px;
+    font-weight: 700;
+    vertical-align: 1px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .empty {
+    color: var(--muted);
+    font-size: 12px;
+    margin: 2px 0 6px;
+  }
+
+  /* Inline "learn more →" links left behind in the trimmed hints and footer. */
+  .guidelink {
+    padding: 0;
+    background: none;
+    border: 0;
+    color: var(--accent);
+    font: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .guidelink:hover {
+    text-decoration: underline;
   }
 }
 
-/* The build header: hero portrait + name as a real title, the stat line tucked under it —
-   not a face floating beside a wall of muted prose. */
-.meta {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px 22px 4px;
-  color: var(--muted);
-}
-/* The selected hero's card — the unmissable "you are looking at THIS hero" anchor. Native
-   280:380 card aspect, uncropped: any square/circle crop beheads some hero on the roster. */
-.metaface {
-  flex: 0 0 auto;
-  width: 57px;
-  height: 76px;
-  border-radius: 8px;
-  object-fit: cover;
-  background: linear-gradient(165deg, var(--panel2) 0%, var(--panel) 80%);
-  border: 1px solid var(--line);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
-}
-.metabody {
-  min-width: 0;
-}
-.metatitle {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin-bottom: 3px;
-  font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-  color: var(--text);
-  line-height: 1.15;
-}
-.metaarch {
-  font: 600 11px/1.6 var(--font-tagline);
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  color: var(--purple);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 0 8px;
-  align-self: center;
-}
-.warn {
-  color: #e0b341;
-}
-
-.identity {
-  padding: 8px 22px 2px;
-  color: var(--muted);
-  font-size: 12.5px;
-  font-style: italic;
-}
-
-.matchups {
-  padding: 8px 22px 2px;
-}
-.matchups .mrow {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 7px;
-  margin-bottom: 6px;
-}
-.matchups .mrow .lbl {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  width: 74px;
-  flex: 0 0 74px;
-}
-.matchups .lbl.tough {
-  color: #e08a8a;
-}
-.matchups .lbl.fav {
-  color: #7fc081;
-}
-.mchip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--panel2);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 3px 9px 3px 3px;
-  font-size: 12.5px;
-  cursor: pointer;
-}
-.mchip img {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-.mchip .mwr {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  font-size: 11.5px;
-}
-.mchip.tough:hover {
-  border-color: #6e4040;
-}
-.mchip.fav:hover {
-  border-color: #466e44;
-}
-.mchip.active {
-  border-color: var(--accent);
-  background: #1b2735;
-}
-.mchip .madd {
-  color: var(--accent);
-  font-size: 11px;
-}
-.matchups .hint {
-  margin: 4px 0 0;
-  font-size: 11.5px;
-  color: var(--muted);
-}
-
-.archetypes {
-  display: flex;
-  align-items: stretch;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px 22px 2px;
-}
-.archetypes .lbl {
-  align-self: center;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-.archtab {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  background: var(--panel2);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 6px 12px;
-  cursor: pointer;
-  text-align: left;
-}
-.archtab:hover {
-  border-color: #3c4654;
-}
-.archtab.active {
-  border-color: var(--accent);
-  background: #1b2735;
-}
-.archtab .atlabel {
-  font-weight: 700;
-  font-size: 13px;
-}
-.archtab .atmeta {
-  font-size: 11px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.community {
-  padding: 10px 22px 2px;
-}
-.community h2 {
-  font-size: 13px;
-  font-weight: 700;
-  margin: 0 0 6px;
-}
-.community h2 .sub {
-  font-weight: 400;
-  font-size: 11.5px;
-  color: var(--muted);
-}
-/* Cap the hint's line length so it doesn't drive the (max-content) card width — the build
-   cards should decide how wide the community card is (one card narrow, two side by side). */
-.community .hint {
-  max-width: 46ch;
-}
-.crows {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.crow {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
-  /* The community card is now a full-width grid band, so the builds grow to share it rather than
-     being pinned to a fixed width — capped so two cards read as a pair instead of stretching into
-     banners, and dropping to one per row only when the viewport genuinely can't fit two. */
-  flex: 1 1 300px;
-  min-width: 0;
-  max-width: 520px;
-  padding: 7px 11px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel2);
-  font-size: 12.5px;
-}
-.crow.agree {
-  border-color: var(--accent);
-  background: #1b2735;
-}
-.crow .ctag {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  flex: 0 0 auto;
-}
-.crow.agree .ctag {
-  color: var(--accent);
-}
-.crow .cname {
-  font-weight: 600;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.crow .cstats {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.crow .cfoot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 1px;
-}
-.crow .cwr {
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-}
-.crow .cmeta {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  font-size: 11.5px;
-}
-.crow .cid {
-  flex: 0 0 auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11.5px;
-  color: var(--accent);
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 2px 7px;
-  cursor: pointer;
-}
-.crow .cid:hover {
-  border-color: var(--accent);
-  background: #1b2735;
-}
-
-/* Hover preview of a community build's items (portaled to body). */
-.buildprev {
-  position: fixed;
-  z-index: 50;
-  width: min(268px, calc(100vw - 16px));
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 9px 10px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-  pointer-events: none;
-  color: var(--text);
-  /* Portaled to document.body, so it's outside .app and won't inherit its font. */
-  font:
-    12.5px/1.4 system-ui,
-    -apple-system,
-    Segoe UI,
-    Roboto,
-    sans-serif;
-}
-/* Native path (Popover API + CSS anchor positioning, see SUPPORTS_ANCHOR): the preview is a
-   top-layer [popover] anchored to its row's `anchor-name` — below the row by default, flipping
-   above / pinning to the right edge via @position-try when it would leave the viewport. The
-   UA [popover] margin/inset/padding are reset so only the anchor() placement applies. */
-.buildprev[popover] {
-  inset: auto;
-  margin: 0;
-  left: anchor(left);
-  top: calc(anchor(bottom) + 10px);
-  position-try-fallbacks: --prev-up, --prev-pin-right, --prev-up-pin-right;
-}
-@position-try --prev-up {
-  top: auto;
-  bottom: calc(anchor(top) + 10px);
-}
-@position-try --prev-pin-right {
-  left: auto;
-  right: 8px;
-}
-@position-try --prev-up-pin-right {
-  top: auto;
-  bottom: calc(anchor(top) + 10px);
-  left: auto;
-  right: 8px;
-}
-/* Tap-pinned on touch (see usePinnablePopover): a real, scrollable surface, not a pass-through
-   tooltip — so a tap lands on it (not the row behind) and a tall preview can be read on a phone. */
-.buildprev.sticky {
-  pointer-events: auto;
-  max-height: calc(100vh - 16px);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-}
-.buildprev .bp-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 7px;
-}
-.buildprev .bp-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.buildprev .bp-id {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  color: var(--accent);
-  flex: 0 0 auto;
-}
-.buildprev .bp-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-/* Diff verdict colors (see BuildPreview): border stays the slot color, the ring says how the
-   two builds relate — accent = both run it, amber = both run it at different commitment,
-   green = their core pick we skip, red = our pick their menu lacks. `.dim` marks the
-   flex-level half of a bucket so core-level (dis)agreements read first. */
-.buildprev .bp-item {
-  position: relative;
-  width: 26px;
-  height: 26px;
-  border-radius: 5px;
-  border: 1px solid;
-  overflow: hidden;
-}
-.buildprev .bp-item.agree {
-  box-shadow: 0 0 0 1px var(--accent);
-}
-.buildprev .bp-item.differ {
-  box-shadow: 0 0 0 1px #e0b341;
-}
-.buildprev .bp-item.added {
-  box-shadow: 0 0 0 1px #54c66b;
-}
-.buildprev .bp-item.missing {
-  box-shadow: 0 0 0 1px #d87a7a;
-}
-.buildprev .bp-item.dim {
-  opacity: 0.55;
-}
-/* Role-mismatch direction: ▼ our core is only situational for them, ▲ their core is only
-   situational for us. Corner badge like the skill-rank one. */
-.buildprev .bp-flag {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  padding: 0 1px;
-  font-size: 8px;
-  line-height: 11px;
-  background: rgba(0, 0, 0, 0.72);
-  color: #e0b341;
-  border-top-left-radius: 4px;
-}
-.buildprev .bp-sub {
-  margin: 9px 0 5px;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-.buildprev .bp-sub.agree {
-  color: var(--accent);
-}
-.buildprev .bp-sub.differ {
-  color: #e0b341;
-}
-.buildprev .bp-sub.added {
-  color: #54c66b;
-}
-.buildprev .bp-sub.missing {
-  color: #d87a7a;
-}
-/* Their situational-only tail, collapsed to a count — the kitchen-sink part of the menu. */
-.buildprev .bp-tail {
-  margin-top: 7px;
-  font-size: 10.5px;
-  color: var(--muted);
-}
-.buildprev .bp-item img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.buildprev .bp-skills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.buildprev .bp-skill {
-  position: relative;
-  width: 26px;
-  height: 26px;
-  border-radius: 5px;
-  border: 1px solid;
-  overflow: hidden;
-}
-.buildprev .bp-skill img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-/* Their max order diverges from ours at this ability — dim it so the agreement reads first. */
-.buildprev .bp-skill.moved {
-  opacity: 0.45;
-  filter: grayscale(0.5);
-}
-.buildprev .bp-skrank {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  min-width: 11px;
-  padding: 0 1px;
-  font-size: 9px;
-  line-height: 11px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  background: rgba(0, 0, 0, 0.72);
-  color: #fff;
-  border-top-left-radius: 4px;
-}
-.buildprev .bp-foot {
-  margin-top: 7px;
-  font-size: 10.5px;
-  color: var(--muted);
-}
-
-.enemies {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 22px 4px;
-}
-.enemies .lbl {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: #3a2730;
-  color: #f0c2cf;
-  border: 1px solid #5a3a45;
-  border-radius: 999px;
-  padding: 3px 10px;
-  font-size: 12px;
-  cursor: pointer;
-}
-.chip:hover {
-  background: #4a313c;
-}
-
-/* The enemy picker's single entry point — opens the command palette in enemies mode.
-   Chip-shaped and dashed: an empty slot in the row of enemy chips, waiting to be filled. */
-.addenemy {
-  background: var(--panel2);
-  color: var(--muted);
-  border: 1px dashed var(--line);
-  border-radius: 999px;
-  padding: 3px 12px;
-  font-size: 12px;
-  cursor: pointer;
-}
-.addenemy:hover {
-  color: var(--text);
-  border-color: #e39ab0;
-}
-
-/* One-line explainer shown above the build when enemies are selected; the counter
-   data itself lives inline on the build rows. */
-.counters-note {
-  margin: 6px 22px 4px;
-  padding: 8px 12px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-left: 3px solid #e39ab0;
-  border-radius: 8px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-/* Hover shop card (portal-positioned; fixed to the viewport). */
-.itemcard {
-  position: fixed;
-  z-index: 50;
-  width: min(300px, calc(100vw - 16px));
-  max-height: calc(100vh - 16px);
-  overflow: hidden;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
-  pointer-events: none; /* a tooltip — never steals the cursor */
-  color: var(--text);
-  /* Portaled to document.body, so it's outside .app and won't inherit its font. */
-  font:
-    12.5px/1.4 system-ui,
-    -apple-system,
-    Segoe UI,
-    Roboto,
-    sans-serif;
-}
-/* Native path (Popover API + CSS anchor positioning, see SUPPORTS_ANCHOR): the card is a
-   top-layer [popover] anchored to its row's `anchor-name` — to the row's right by default,
-   flipping to the left and/or bottom-pinning via @position-try when it would leave the
-   viewport (the declarative version of the fallback's measure-flip-clamp layout effect). */
-.itemcard[popover] {
-  inset: auto;
-  margin: 0;
-  padding: 0;
-  left: calc(anchor(right) + 10px);
-  top: anchor(top);
-  /* Anchored flips first; then viewport pins for narrow screens where neither side of a
-     full-width row fits the card (the old JS clamp's `max(8px, …)` equivalent). */
-  position-try-fallbacks:
-    --card-left, --card-pin-bottom, --card-left-pin-bottom, --card-pin-left,
-    --card-pin-left-bottom;
-}
-@position-try --card-left {
-  left: auto;
-  right: calc(anchor(left) + 10px);
-}
-@position-try --card-pin-bottom {
-  top: auto;
-  bottom: 8px;
-}
-@position-try --card-left-pin-bottom {
-  left: auto;
-  right: calc(anchor(left) + 10px);
-  top: auto;
-  bottom: 8px;
-}
-@position-try --card-pin-left {
-  left: 8px;
-}
-@position-try --card-pin-left-bottom {
-  left: 8px;
-  top: auto;
-  bottom: 8px;
-}
-/* Tap-pinned on touch (see ItemHover): make it a real surface — tappable and scrollable — so a
-   tall card reads on a phone instead of clipping, and a tap on it doesn't fall through to a row. */
-.itemcard.sticky {
-  pointer-events: auto;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-}
-.itemcard .ic-head {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 8px 10px;
-  color: #fff;
-}
-.itemcard .ic-head img {
-  width: 34px;
-  height: 34px;
-  object-fit: contain;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.4));
-}
-.itemcard .ic-title {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.itemcard .ic-name {
-  font-weight: 700;
-  font-size: 14px;
-}
-.itemcard .ic-sub {
-  font-size: 11px;
-  opacity: 0.85;
-}
-.itemcard .ic-sec {
-  padding: 8px 10px;
-  border-top: 1px solid var(--line);
-}
-.itemcard .ic-sec.active {
-  background: rgba(111, 177, 255, 0.06);
-}
-.itemcard .ic-kind {
-  display: inline-block;
-  margin-bottom: 4px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-.itemcard .ic-text {
-  margin: 0;
-  color: var(--text);
-}
-.itemcard .ic-text.plain {
-  color: var(--muted);
-}
-.itemcard .ic-text strong {
-  color: #fff;
-  font-weight: 700;
-}
-.itemcard .ic-stats {
-  list-style: none;
-  margin: 6px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.itemcard .ic-sec.innate .ic-stats {
-  margin-top: 0;
-}
-.itemcard .ic-stats li {
-  color: var(--muted);
-}
-.itemcard .ic-stats li.strong {
-  color: var(--text);
-}
-.itemcard .ic-stats .v {
-  display: inline-block;
-  min-width: 38px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-}
-.itemcard .ic-stats li.strong .v {
-  color: var(--accent);
-}
-.itemcard .ic-comp {
-  padding: 7px 10px;
-  border-top: 1px solid var(--line);
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.banner {
-  margin: 16px 22px;
-  padding: 12px 16px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-.banner.error {
-  border-color: #5a2b2b;
-  background: #241718;
-  color: #f0b8b8;
-}
-
-/* The skill-order card — a full-width card in the right grid column (it was a right-floated
-   sidebar before the pre-build stats were gridded). */
-.skills {
-  margin: 4px 0 10px;
-  padding: 14px 16px 16px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-}
-.skills h2 {
-  margin: 0 0 11px;
-  font-size: 14px;
-}
-.skills h2 .sub {
-  font-weight: 400;
-  color: var(--muted);
-  font-size: 11.5px;
-}
-/* One shared label column (subgrid) sized to the widest ability name, so labels align across
-   rows and names show in full instead of truncating in a fixed 104px box. */
-.skill-grid {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 5px 8px;
-  overflow-x: auto;
-}
-.skill-row {
-  display: grid;
-  grid-template-columns: subgrid;
-  grid-column: 1 / -1;
-  align-items: center;
-}
-.srow-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-left-width: 3px;
-  border-radius: 7px;
-  padding: 3px 6px;
-}
-.srow-label img {
-  width: 24px;
-  height: 24px;
-  border-radius: 5px;
-  flex: 0 0 24px;
-}
-.srow-info {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
-  min-width: 0;
-}
-.srow-info .aname {
-  font-weight: 600;
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.srow-info .amax {
-  font-size: 10px;
-  color: var(--muted);
-}
-.srow-cells {
-  display: grid;
-  grid-template-columns: repeat(var(--steps, 16), minmax(12px, 1fr));
-  gap: 2px;
-}
-.pip {
-  height: 20px;
-  display: grid;
-  place-items: center;
-  border-radius: 3px;
-  background: #14181e;
-  border: 1px solid var(--line);
-  font-size: 9px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: #0c0f13;
-}
-.pip.on {
-  border-color: transparent;
-}
-
-.phases {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(230px, 1fr));
-  gap: 16px;
-  padding: 14px 22px;
-}
-@media (max-width: 1380px) {
-  .phases {
-    grid-template-columns: repeat(3, minmax(230px, 1fr));
-  }
-}
-@media (max-width: 1100px) {
-  .phases {
-    grid-template-columns: repeat(2, minmax(230px, 1fr));
-  }
-}
-@media (max-width: 620px) {
-  .phases {
-    grid-template-columns: 1fr;
-  }
-}
-
-.phase {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 14px;
-}
-
-/* Scroll-driven entrance: on narrow layouts the columns stack below the fold, and each one
-   rises/fades in as it scrolls into view. Progressive enhancement — @supports skips browsers
-   without scroll timelines, reduced-motion opts out. The range end is an absolute 160px (not a
-   % of the column) so a tall column settles crisp once its top has risen 160px above the fold,
-   rather than staying faded until most of it has scrolled past — a partially-entered column at
-   page load reads as an invitation to scroll, not a rendering bug. The transform is transient
-   (identity once entry completes), so it can't permanently re-root fixed-position children. */
-@supports (animation-timeline: view()) {
-  @media (prefers-reduced-motion: no-preference) {
-    .phase {
-      animation: phase-enter ease-out both;
-      animation-timeline: view(block);
-      animation-range: entry 0% entry 160px;
-    }
-  }
-}
-@keyframes phase-enter {
-  from {
-    opacity: 0.2;
-    transform: translateY(14px);
-  }
-}
-
-/* The overtime buy-list is a prioritized shopping list, not a time phase — give it an accent edge
-   and a faint tint so it reads as the culmination of the Lane→Late progression. */
-.phase.overtime {
-  border-color: color-mix(in srgb, var(--accent, #9b6dd1) 55%, var(--line));
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--accent, #9b6dd1) 7%, var(--panel)),
-    var(--panel) 120px
-  );
-  box-shadow: 0 0 0 1px
-    color-mix(in srgb, var(--accent, #9b6dd1) 20%, transparent);
-}
-.phase.overtime h2 .time {
-  color: color-mix(in srgb, var(--accent, #9b6dd1) 80%, var(--muted));
-}
-/* The sell side of the overtime swap: which standing slots to free (weakest first) for the buys
-   below. A quiet callout box, not an item row — these are names to recognize, not picks to weigh. */
-.ot-sell {
-  margin: 2px 0 10px;
-  padding: 6px 8px;
-  font-size: 12px;
-  color: var(--muted);
-  border: 1px dashed var(--line);
-  border-radius: 6px;
-}
-
-.phase h2 {
-  margin: 0 0 10px;
-  font-size: 15px;
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-.phase h2 .time {
-  font-size: 12px;
-  color: var(--muted);
-  font-weight: 500;
-}
-
-.budget {
-  margin: -4px 0 6px;
-  font-size: 12px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.catbar {
-  display: flex;
-  height: 14px;
-  margin: 0 0 12px;
-  border-radius: 4px;
-  overflow: hidden;
-  background: var(--panel2);
-  font-variant-numeric: tabular-nums;
-}
-.catseg {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  font-size: 9px;
-  font-weight: 700;
-  color: #0d1117;
-  white-space: nowrap;
-}
-.catseg + .catseg {
-  box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.3);
-}
-
-.role {
-  display: inline-block;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  padding: 1px 5px;
-  margin-right: 6px;
-  border-radius: 4px;
-  vertical-align: 1px;
-}
-.role-universal {
-  background: #2c3b52;
-  color: #8fb6ff;
-}
-.role-value {
-  background: #34402c;
-  color: #b5d98a;
-}
-.role-filler {
-  background: #2f3340;
-  color: #9aa6bb;
-}
-.role-need {
-  background: #143a36;
-  color: #74d6c4;
-}
-/* The row's third line: counter bubbles / weak flag / transient note. */
-.tags {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-}
-.tags .reason {
-  color: #d8b768;
-  font-size: 11.5px;
-}
-.tags .reason-part {
-  color: #b7a4e0; /* match the PART chip — a structural note, not a warning */
-}
-
-/* One bubble per enemy: a small framed portrait + this item's edge vs that hero. */
-.cbubble {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px 7px 1px 2px;
-  border-radius: 12px;
-  background: #3a2630;
-  color: #f0a9bf;
-  font-size: 11px;
-  font-weight: 700;
-  vertical-align: 1px;
-  font-variant-numeric: tabular-nums;
-}
-.cbubble img {
-  width: 17px;
-  height: 17px;
-  border-radius: 50%;
-  object-fit: cover;
-  object-position: center 22%;
-  box-shadow: 0 0 0 1.5px #5a3a46;
-}
-.cbubble.low {
-  opacity: 0.6;
-}
-
-/* Relationship clue: builds-toward (→) or same-slot swap. */
-.rel {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 7px;
-  border-radius: 10px;
-  background: #20262f;
-  color: #8fa3bd;
-  font-size: 10.5px;
-  font-weight: 600;
-}
-.rel.swap {
-  background: #2a2620;
-  color: #c2a86a;
-}
-.rel.rush {
-  background: #233326;
-  color: #79c98f;
-}
-/* Imbue target: which ability authors imbue this item onto (left edge tinted to the ability,
-   matching the skill grid's color). */
-.rel.imbue {
-  gap: 4px;
-  padding-left: 3px;
-  background: #251f2e;
-  color: #b79ad6;
-  border-left: 2px solid #6c5a86;
-}
-.rel.imbue img {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  object-fit: cover;
-}
-
-/* "win more" (raw≫adj, leans on a lead) vs "comeback" (adj≫raw, holds up when behind). */
-.statetag {
-  padding: 1px 7px;
-  border-radius: 10px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-.statetag.winmore {
-  background: #33291c;
-  color: #e0a85a;
-}
-.statetag.comeback {
-  background: #1c2e30;
-  color: #5fc4c0;
-}
-
-/* Per-phase tempo lines: ahead-of-pace / behind-of-pace advice. */
-.tempo {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 8px 0 2px;
-  padding: 7px 9px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #141922;
-}
-.tline {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  line-height: 1.5;
-}
-.tlbl {
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-.tline.ahead .tlbl {
-  color: #79c98f;
-}
-.tline.behind .tlbl {
-  color: #d98b6a;
-}
-.tact {
-  color: var(--muted);
-  font-weight: 600;
-  margin-left: 2px;
-}
-.tact.risky {
-  color: #e0a85a;
-}
-.tchip {
-  padding: 1px 7px;
-  border-radius: 10px;
-  border-left: 2px solid var(--line);
-  background: #1a1f27;
-  color: #c2ccd8;
-  font-size: 10.5px;
-  font-weight: 600;
-}
-
-/* "Weak into this comp" flag (negative comp edge, no countering portrait). */
-.weakcomp {
-  padding: 1px 6px;
-  border-radius: 10px;
-  background: #3a2424;
-  color: #e08a8a;
-  font-size: 10.5px;
-  font-weight: 700;
-  vertical-align: 1px;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Per-enemy breakdown shown inside the item's hover card. */
-.ic-counter {
-  padding: 9px 13px;
-  background: #2a1f26;
-  border-bottom: 1px solid var(--line);
-}
-.ic-counter ul {
-  list-style: none;
-  margin: 5px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.ic-counter li {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12.5px;
-}
-.ic-counter li img {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  object-fit: cover;
-  object-position: center 22%;
-  box-shadow: 0 0 0 1.5px #5a3a46;
-}
-.ic-counter .cn {
-  flex: 1;
-}
-.ic-counter .cd {
-  font-weight: 700;
-  color: #54c66b;
-  font-variant-numeric: tabular-nums;
-}
-.ic-counter .cw {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.ic-counter .ic-note {
-  margin: 7px 0 0;
-  font-size: 10.5px;
-  color: var(--muted);
-  line-height: 1.3;
-}
-
-.item.counter-add {
-  border-left-style: dashed;
-}
-.item.counter-add .n.low {
-  color: #e0b341;
-}
-
-.grouphdr {
-  margin: 14px 0 8px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-  border-top: 1px dashed var(--line);
-  padding-top: 10px;
-}
-.grouphdr.core {
-  border-top: none;
-  padding-top: 0;
-  margin-top: 0;
-  color: #cdd6e3;
-}
-
-.item {
-  display: flex;
-  gap: 10px;
-  padding: 8px;
-  margin-bottom: 8px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-left-width: 3px;
-  border-radius: 8px;
-}
-.item.muted {
-  opacity: 0.85;
-}
-.item.transient {
-  opacity: 0.66;
-  border-left-style: dashed;
-}
-.item.transient .name {
-  font-weight: 500;
-}
-/* Transient badges — dashed rows don't hold a standing slot; the chip says how each one leaves.
- * PART (violet, structural): consumed by an in-build upgrade. SELL (yellow, an action): sell-fodder,
- * whether the data shows it leaving early or the slot cap forces it out late. */
-.role-part {
-  background: #2b2338;
-  color: #b7a4e0;
-}
-.role-sold {
-  background: #3a3320;
-  color: #d8b768;
-}
-.why .reason {
-  color: #d8b768;
-}
-
-.icon {
-  flex: 0 0 36px;
-  width: 36px;
-  height: 36px;
-  border-radius: 6px;
-  overflow: hidden;
-  display: grid;
-  place-items: center;
-}
-.icon img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.body {
-  min-width: 0;
-  flex: 1;
-}
-.line1 {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-}
-.line1 .name {
-  font-weight: 600;
-}
-/* "🔥 trending" marker on a build pick the player base is currently adopting + winning with. */
-.line1 .trendtag {
-  margin-left: 5px;
-  font-size: 11px;
-  cursor: help;
-  vertical-align: middle;
-}
-.line1 .cost {
-  color: #e3c770;
-  font-variant-numeric: tabular-nums;
-  font-size: 12px;
-}
-.line1 .cost.discounted {
-  display: inline-flex;
-  gap: 5px;
-  align-items: baseline;
-}
-.line1 .cost .cost-full {
-  color: #8a8170;
-  text-decoration: line-through;
-  font-size: 11px;
-}
-.line2 {
-  display: flex;
-  gap: 10px;
-  margin-top: 2px;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-.line2 .wr {
-  font-weight: 700;
-}
-.line2 .wrabs {
-  margin-left: 5px;
-  font-weight: 500;
-  color: var(--muted);
-}
-.line2 .pick,
-.line2 .n {
-  color: var(--muted);
-}
-.why {
-  margin-top: 4px;
-  font-size: 11.5px;
-  color: var(--muted);
-  line-height: 1.35;
-}
-
-.empty {
-  color: var(--muted);
-  font-size: 12px;
-  margin: 2px 0 6px;
-}
-
-.foot {
-  padding: 8px 22px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.foot a {
-  color: var(--muted);
-}
-.foot .disclaimer {
-  margin-top: 6px;
-  font-size: 11px;
-  opacity: 0.75;
-  max-width: 70ch;
-}
-
-/* "How it works" trigger that sits alongside the header controls. */
-.guidebtn {
-  align-self: flex-end;
-  margin-bottom: 1px;
-  padding: 7px 12px;
-  background: var(--panel2);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font: inherit;
-  font-size: 12.5px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.guidebtn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-/* Inline "learn more →" links left behind in the trimmed hints and footer. */
-.guidelink {
-  padding: 0;
-  background: none;
-  border: 0;
-  color: var(--accent);
-  font: inherit;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.guidelink:hover {
-  text-decoration: underline;
-}
-
-/* Methodology & glossary modal — a native <dialog> (see ModalShell): the browser owns the
-   top layer, focus trapping, and Escape, and the old .guide-backdrop overlay is now the
-   dialog's ::backdrop. The dialog element itself is the card. */
-dialog.guide {
-  /* Top-anchored like the old overlay: the UA's inset:0 plus auto side margins center it,
-     and the 6vh top margin replaces the backdrop's padding. */
-  margin: 6vh auto auto;
-  width: min(680px, calc(100vw - 32px));
-  max-width: none; /* the width above already accounts for margins; drop the UA cap */
-  max-height: calc(94vh - 24px);
-  padding: 0;
-  overflow: hidden;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
-  /* Top-layer element, so it doesn't inherit the app's font/color — set them here. */
-  color: var(--text);
-  font:
-    14px/1.45 system-ui,
-    -apple-system,
-    Segoe UI,
-    Roboto,
-    sans-serif;
-  /* Enter/exit: @starting-style below fades/rises the card in; on close, allow-discrete holds
-     display and top-layer membership (overlay) until the fade-out ends. ModalShell defers its
-     unmount to match (EXIT_MS). */
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  transition:
-    opacity 0.18s ease,
-    transform 0.18s ease,
-    overlay 0.18s ease allow-discrete,
-    display 0.18s ease allow-discrete;
-}
-dialog.guide[open] {
-  /* The card is a fixed-height column: a pinned header + a body that scrolls on its own,
-     so the header can't overlap content and scrolling can't chain to the page behind.
-     Scoped to [open] so the UA's display:none for closed dialogs still applies. */
-  display: flex;
-  flex-direction: column;
-}
-dialog.guide:not([open]) {
-  opacity: 0;
-  transform: translateY(6px) scale(0.98);
-}
-@starting-style {
-  dialog.guide[open] {
-    opacity: 0;
-    transform: translateY(10px) scale(0.98);
-  }
-  dialog.guide[open]::backdrop {
-    opacity: 0;
-  }
-}
-dialog.guide::backdrop {
-  background: rgba(8, 10, 13, 0.62);
-  -webkit-backdrop-filter: blur(3px);
-  backdrop-filter: blur(3px);
-  opacity: 1;
-  transition:
-    opacity 0.18s ease,
-    overlay 0.18s ease allow-discrete,
-    display 0.18s ease allow-discrete;
-}
-dialog.guide:not([open])::backdrop {
-  opacity: 0;
-}
-@media (prefers-reduced-motion: reduce) {
-  dialog.guide,
-  dialog.guide::backdrop {
-    transition: none;
-  }
-}
-.guide-head {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 15px 20px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--line);
-  border-radius: 14px 14px 0 0;
-}
-.guide-head h2 {
-  margin: 0;
-  font-size: 17px;
-}
-.guide-x {
-  padding: 4px 9px;
-  background: none;
-  border: 0;
-  border-radius: 6px;
-  color: var(--muted);
-  font-size: 14px;
-  cursor: pointer;
-}
-.guide-x:hover {
-  color: var(--text);
-  background: var(--panel2);
-}
-.guide-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 2px 20px 20px;
-}
-
-/* --- Ctrl+K command palette — a native <dialog> like the guide modal, but the query input is
-   the header and the ranked command list is the body (see components/CommandPalette). Snappier
-   transitions than the guide (0.12s, keep in sync with EXIT_MS): a palette is a reflex, not a
-   destination. --- */
-dialog.palette {
-  margin: 12vh auto auto;
-  width: min(540px, calc(100vw - 32px));
-  max-width: none;
-  padding: 0;
-  overflow: hidden;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
-  color: var(--text);
-  font:
-    13.5px/1.45 system-ui,
-    -apple-system,
-    Segoe UI,
-    Roboto,
-    sans-serif;
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  transition:
-    opacity 0.12s ease,
-    transform 0.12s ease,
-    overlay 0.12s ease allow-discrete,
-    display 0.12s ease allow-discrete;
-}
-dialog.palette[open] {
-  display: flex;
-  flex-direction: column;
-}
-dialog.palette:not([open]) {
-  opacity: 0;
-  transform: translateY(-6px) scale(0.98);
-}
-@starting-style {
-  dialog.palette[open] {
-    opacity: 0;
-    transform: translateY(-10px) scale(0.98);
-  }
-  dialog.palette[open]::backdrop {
-    opacity: 0;
-  }
-}
-dialog.palette::backdrop {
-  background: rgba(8, 10, 13, 0.5);
-  -webkit-backdrop-filter: blur(2px);
-  backdrop-filter: blur(2px);
-  opacity: 1;
-  transition:
-    opacity 0.12s ease,
-    overlay 0.12s ease allow-discrete,
-    display 0.12s ease allow-discrete;
-}
-dialog.palette:not([open])::backdrop {
-  opacity: 0;
-}
-@media (prefers-reduced-motion: reduce) {
-  dialog.palette,
-  dialog.palette::backdrop {
-    transition: none;
-  }
-}
-.pal-in {
-  flex: 0 0 auto;
-  width: 100%;
-  background: transparent;
-  color: var(--text);
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  padding: 13px 16px;
-  font: inherit;
-  font-size: 15px;
-}
-.pal-in:focus {
-  outline: none;
-  border-bottom-color: var(--accent);
-}
-.pal-in::placeholder {
-  color: var(--muted);
-}
-.pal-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  max-height: min(52vh, 460px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 5px;
-}
-.pal-hdr {
-  padding: 9px 10px 3px;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-.pal-opt {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  background: none;
-  border: 0;
-  border-radius: 7px;
-  padding: 6px 10px;
-  font: inherit;
-  color: var(--text);
-  cursor: pointer;
-  text-align: left;
-}
-.pal-opt.on {
-  background: color-mix(in srgb, var(--accent) 16%, var(--panel2));
-}
-.pal-opt img,
-.pal-ico {
-  width: 22px;
-  height: 22px;
-  flex: 0 0 auto;
-  border-radius: 4px;
-  object-fit: cover;
-}
-.pal-ico {
-  display: grid;
-  place-items: center;
-  font-size: 9px;
-  color: var(--muted);
-}
-.pal-lbl {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.pal-check {
-  flex: 0 0 auto;
-  color: var(--accent);
-  font-size: 12px;
-}
-.pal-hint {
-  margin-left: auto;
-  flex: 0 0 auto;
-  font-size: 11px;
-  color: var(--muted);
-}
-.pal-empty {
-  padding: 14px 12px;
-  color: var(--muted);
-}
-.pal-foot {
-  flex: 0 0 auto;
-  border-top: 1px solid var(--line);
-  padding: 6px 12px;
-  font-size: 10.5px;
-  color: var(--muted);
-}
-
-/* --- Export-to-in-game panel (reuses the guide modal shell) --- */
-.guide.export {
-  max-width: 540px;
-}
-.export-steps {
-  margin: 12px 0;
-  padding-left: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  color: var(--muted);
-  font-size: 13.5px;
-  line-height: 1.45;
-}
-.export-steps strong {
-  color: var(--text);
-}
-.export-go {
-  display: inline-block;
-  margin: 4px 0;
-  padding: 9px 16px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--accent, #5fa84a);
-  color: #08130a;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-.export-go:hover {
-  filter: brightness(1.08);
-}
-.export-go:disabled,
-.export-go.busy {
-  opacity: 0.6;
-  cursor: default;
-}
-.export-steam {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin: 14px 0;
-  font-size: 13px;
-}
-.export-steam input {
-  padding: 7px 9px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--panel, #1a1d24);
-  color: var(--text);
-  font: inherit;
-  max-width: 220px;
-}
-.export-status {
-  margin: 12px 0 4px;
-  font-size: 13px;
-}
-.export-status.working {
-  color: var(--muted);
-}
-.export-status.done {
-  color: #5fa84a;
-}
-.export-status.error {
-  color: #d9534f;
-}
-.export-where {
-  margin-top: 16px;
-  font-size: 12.5px;
-  color: var(--muted);
-}
-.export-where summary {
-  cursor: pointer;
-}
-.export-where code {
-  font-size: 11.5px;
-  word-break: break-all;
-}
-
-/* --- Share panel (reuses the guide modal shell + .export-go buttons) --- */
-.guide.share {
-  /* Wide enough that the 1200px card previews at a readable size. */
-  width: min(760px, calc(100vw - 32px));
-}
-.share-holder {
-  min-height: 120px;
-}
-/* The rendered card canvas (1200×630 at 2×), scaled down to the panel width. */
-.share-preview {
-  display: block;
-  width: 100%;
-  height: auto;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-}
-.share-fun {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 12px 0 0;
-  font-size: 13px;
-  color: var(--muted);
-  cursor: pointer;
-}
-.share-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 12px;
-}
-.share-url {
-  margin: 10px 0 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  color: var(--muted);
-  word-break: break-all;
-}
-.guide-body section {
-  padding: 16px 0;
-  border-bottom: 1px solid var(--line);
-}
-.guide-body section:last-child {
-  border-bottom: 0;
-  padding-bottom: 2px;
-}
-.guide-body h3 {
-  margin: 0 0 8px;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--accent);
-}
-.guide-body p {
-  margin: 0 0 8px;
-  line-height: 1.5;
-}
-.guide-body p:last-child {
-  margin-bottom: 0;
-}
-.guide-body a {
-  color: var(--accent);
-}
-.guide-body ul {
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.guide-body ul li {
-  margin: 0 0 8px;
-  line-height: 1.5;
-}
-.guide-body ul li:last-child {
-  margin-bottom: 8px;
-}
-.guide-body ul li .statetag {
-  margin-right: 6px;
-}
-.guide-body .fine {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-/* Two-column term list; collapses to stacked rows on narrow screens. */
-.glossary {
-  margin: 2px 0 0;
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 11px 18px;
-  align-items: baseline;
-}
-.glossary dt {
-  font-weight: 600;
-  color: var(--text);
-  white-space: nowrap;
-}
-.glossary dt .statetag,
-.glossary dt .weakcomp {
-  font-weight: 700;
-}
-.glossary dd {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.45;
-}
-@media (max-width: 560px) {
-  .glossary {
-    grid-template-columns: 1fr;
-    gap: 3px 0;
-  }
-  .glossary dd {
-    margin: 0 0 9px;
-  }
-}
-
-/* ---- Mobile / narrow-screen layout ----------------------------------------
+@layer responsive {
+  /* ---- Mobile / narrow-screen layout ----------------------------------------
    The app is desktop-first (a sticky header with inline controls, a multi-column
    phase grid). Below ~760px the header controls drop to their own full-width row,
    the header stops being sticky so it doesn't eat the short viewport, the page
    gutters tighten, and form controls go to 16px so iOS doesn't zoom on focus. */
-@media (max-width: 760px) {
-  /* Header: brand on its own line, controls wrap below as full-width fields. A wrapped
+  @media (max-width: 760px) {
+    /* Header: brand on its own line, controls wrap below as full-width fields. A wrapped
      control row would make a sticky header tall enough to swallow the viewport, so let
      it scroll away — `relative` keeps the loadstrip anchored to its bottom edge. */
-  .topbar {
-    position: relative;
-    flex-wrap: wrap;
-    gap: 10px 12px;
-    padding: 11px 14px;
+    .topbar {
+      position: relative;
+      flex-wrap: wrap;
+      gap: 10px 12px;
+      padding: 11px 14px;
+    }
+    .controls {
+      width: 100%;
+      flex-wrap: wrap;
+      gap: 10px 12px;
+    }
+    .controls label {
+      flex: 1 1 140px; /* selects grow to share the row, two-up on a phone */
+    }
+    .controls select {
+      width: 100%;
+      min-width: 0;
+      font-size: 16px; /* ≥16px stops iOS Safari zooming in when the field is tapped */
+    }
+    .guidebtn {
+      flex: 1 1 100%; /* full-width tap target on its own line */
+      align-self: stretch;
+      margin-bottom: 0;
+      padding: 9px 12px;
+    }
+
+    /* Tighten the generous 22px desktop gutters so content isn't squeezed thin. */
+    .meta,
+    .identity,
+    .matchups,
+    .archetypes,
+    .enemies,
+    .phases,
+    .foot {
+      padding-left: 14px;
+      padding-right: 14px;
+    }
+    .counters-note,
+    .skills,
+    .banner {
+      margin-left: 14px;
+      margin-right: 14px;
+    }
+    .enemies select {
+      font-size: 16px;
+    }
+
+    /* Roomier tap targets for the pill controls (matchup / enemy chips). */
+    .mchip,
+    .chip {
+      padding-top: 5px;
+      padding-bottom: 5px;
+    }
   }
-  .controls {
-    width: 100%;
-    flex-wrap: wrap;
-    gap: 10px 12px;
+
+  @media (max-width: 380px) {
+    /* On the narrowest phones give each select its own row — two-up gets too cramped. */
+    .controls label {
+      flex-basis: 100%;
+    }
   }
-  .controls label {
-    flex: 1 1 140px; /* selects grow to share the row, two-up on a phone */
-  }
-  .controls select {
-    width: 100%;
-    min-width: 0;
-    font-size: 16px; /* ≥16px stops iOS Safari zooming in when the field is tapped */
-  }
-  .guidebtn {
-    flex: 1 1 100%; /* full-width tap target on its own line */
-    align-self: stretch;
-    margin-bottom: 0;
-    padding: 9px 12px;
-  }
-
-  /* Tighten the generous 22px desktop gutters so content isn't squeezed thin. */
-  .meta,
-  .identity,
-  .matchups,
-  .archetypes,
-  .enemies,
-  .phases,
-  .foot {
-    padding-left: 14px;
-    padding-right: 14px;
-  }
-  .counters-note,
-  .skills,
-  .banner {
-    margin-left: 14px;
-    margin-right: 14px;
-  }
-  .enemies select {
-    font-size: 16px;
-  }
-
-  /* Roomier tap targets for the pill controls (matchup / enemy chips). */
-  .mchip,
-  .chip {
-    padding-top: 5px;
-    padding-bottom: 5px;
-  }
-}
-
-@media (max-width: 380px) {
-  /* On the narrowest phones give each select its own row — two-up gets too cramped. */
-  .controls label {
-    flex-basis: 100%;
-  }
-}
-
-/* ---- The Lab (experimental stats modal; shares the guide-* card shell) ---- */
-
-.guide.lab {
-  width: min(760px, calc(100vw - 32px));
-}
-.labtag {
-  margin-left: 8px;
-  padding: 2px 7px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--purple);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  vertical-align: 2px;
-}
-.labbtn {
-  color: var(--purple);
-}
-.labintro,
-.labmeta {
-  color: var(--muted);
-}
-.labmeta {
-  margin-top: 18px;
-  font-size: 12px;
-}
-
-/* Closing-power rows: name | signed value | diverging bar around a center line. */
-.labheroes {
-  display: grid;
-  grid-template-columns: max-content max-content 1fr;
-  gap: 3px 10px;
-  margin-top: 10px;
-}
-.labhero {
-  display: grid;
-  grid-column: 1 / -1;
-  grid-template-columns: subgrid;
-  align-items: center;
-}
-.labhero.current .labname {
-  color: var(--accent);
-  font-weight: 600;
-}
-.labname {
-  font-size: 13px;
-}
-.labval {
-  font-variant-numeric: tabular-nums;
-  font-size: 12.5px;
-  text-align: right;
-}
-.labbar {
-  position: relative;
-  height: 10px;
-  background: var(--panel2);
-  border-radius: 5px;
-  overflow: hidden;
-}
-.labbar::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--line);
-}
-.labbar i {
-  position: absolute;
-  top: 2px;
-  bottom: 2px;
-  border-radius: 3px;
-  opacity: 0.85;
-}
-
-.labtablewrap {
-  margin-top: 10px;
-  max-height: 420px;
-  overflow-y: auto;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-.labtable {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-.labtable th {
-  position: sticky;
-  top: 0;
-  background: var(--panel2);
-  color: var(--muted);
-  font-size: 11.5px;
-  font-weight: 600;
-  text-align: right;
-  padding: 7px 10px;
-  white-space: nowrap;
-}
-.labtable th:first-child,
-.labtable td:first-child {
-  text-align: left;
-}
-.labtable td {
-  padding: 4px 10px;
-  border-top: 1px solid color-mix(in srgb, var(--line) 45%, transparent);
-  text-align: right;
-  white-space: nowrap;
-}
-.labtier {
-  color: var(--muted);
-}
-
-/* Phase-header lead note (from the baked WP surface) and chip closing-power glyphs. */
-.wpnote {
-  color: var(--muted);
-  cursor: help;
-}
-.chip .closer {
-  margin-left: 4px;
-  font-size: 15px;
-  line-height: 1;
-}
-.chip .closer.up {
-  color: #54c66b;
-}
-.chip .closer.down {
-  color: #d89a5a;
-}
-
-/* Lab closing-power row extras: hero WR context + converter/snowballer style chip. */
-.labwr {
-  margin-left: 6px;
-  color: var(--muted);
-  font-style: normal;
-  font-size: 11px;
-}
-.labstyle {
-  margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-.labstyle.up {
-  color: #54c66b;
-  border: 1px solid color-mix(in srgb, #54c66b 45%, transparent);
-}
-.labstyle.down {
-  color: #d89a5a;
-  border: 1px solid color-mix(in srgb, #d89a5a 45%, transparent);
-}
-
-/* --- Match analysis modal (components/MatchModal) --- */
-/* Reuses the guide/lab modal shell and the fundamentals-row grid; adds the match lookup,
-   the WP line chart, and the soul-economy rows. */
-
-.matchinput {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-  margin-bottom: 14px;
-}
-.matchback {
-  background: none;
-  border: none;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 12.5px;
-  padding: 2px 0;
-  margin-bottom: 2px;
-}
-.matchback:hover {
-  color: var(--accent);
-}
-.matchinput input {
-  flex: 1;
-  max-width: 320px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--text);
-  padding: 7px 10px;
-  font-size: 13px;
-}
-.matchinput button {
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--text);
-  padding: 7px 14px;
-  font-size: 13px;
-  cursor: pointer;
-}
-.matchinput button:hover {
-  border-color: var(--accent);
-}
-
-.matchrecent h3 {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  margin: 12px 0 6px;
-}
-.matchrow {
-  display: grid;
-  grid-template-columns: 44px 1fr 76px 78px;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  text-align: left;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--text);
-  padding: 6px 10px;
-  margin-bottom: 4px;
-  font-size: 12.5px;
-  cursor: pointer;
-}
-.matchrow:hover {
-  border-color: var(--accent);
-}
-.matchrow .mhero {
-  font-weight: 600;
-}
-.mwin,
-.mloss {
-  font-weight: 700;
-  font-size: 11.5px;
-  letter-spacing: 0.04em;
-}
-.mwin {
-  color: #7ecf9e;
-}
-.mloss {
-  color: #e08989;
-}
-.mkda,
-.mwhen {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.matchnote {
-  color: var(--muted);
-  font-size: 11.5px;
-  margin: 6px 0 0;
-}
-.matchhead {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
-  font-size: 14px;
-  margin: 6px 0 4px;
-}
-.matchhead .mmuted,
-.mmuted {
-  color: var(--muted);
-  font-weight: 400;
-  font-size: 12px;
-}
-.matchdeaths {
-  font-size: 12.5px;
-  margin: 2px 0 0;
-}
-.linkbtn {
-  background: none;
-  border: none;
-  color: var(--accent);
-  cursor: pointer;
-  font-size: inherit;
-  padding: 0;
-  text-decoration: underline;
-}
-
-/* WP line chart: one series (no legend), dashed 50% midline, death ticks on the baseline. */
-.wpchart svg {
-  width: 100%;
-  height: auto;
-  display: block;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  touch-action: none;
-}
-.wpmid {
-  stroke: var(--line);
-  stroke-dasharray: 4 4;
-  stroke-width: 1;
-}
-.wpline {
-  stroke: var(--accent);
-  stroke-width: 2;
-  fill: none;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-}
-.wparea {
-  fill: var(--accent);
-  opacity: 0.1;
-  stroke: none;
-}
-.wpdeath {
-  stroke: #e08989;
-  stroke-width: 2;
-}
-.wpdot {
-  fill: var(--accent);
-  stroke: var(--bg);
-  stroke-width: 2;
-}
-.wpread {
-  color: var(--muted);
-  font-size: 11.5px;
-  margin-top: 4px;
-  min-height: 16px;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Soul-economy rows: fundamentals grid plus a kind chip; bar lengths are share-of-largest. */
-.econrow {
-  display: grid;
-  grid-template-columns: 118px 74px 1fr 48px 56px 30px;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 0;
-  font-size: 12.5px;
-}
-.econrow .epct {
-  text-align: right;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-}
-.econrow .epct.hi {
-  color: #7ecf9e;
-}
-.econrow .epct.lo {
-  color: #e08989;
-}
-.econrow .fbar {
-  height: 6px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.econrow .fbar > span {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--muted);
-}
-.econkind {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-}
-.econkind.k-steady {
-  color: #7ecf9e;
-}
-.econrow .fbar > span.k-steady {
-  background: #7ecf9e;
-}
-.econrow .fbar > span.k-swingy {
-  background: #d8a05a;
-}
-.econrow .fbar > span.k-passive {
-  background: var(--muted);
-}
-.econrow .fval,
-.econrow .fpct {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.econrow .fpct {
-  color: var(--muted);
-  font-size: 11px;
-}
-
-/* --- Economy panel: souls/min headline, then the steady-vs-swingy source breakdown --- */
-
-/* Headline: the one number that most separates ranks, framed as this card's thesis rather than a
-   row lost among six others. Sits above a divider so the breakdown reads as its explanation. */
-.ecohead {
-  display: grid;
-  grid-template-columns: 72px 46px 1fr 30px 52px;
-  align-items: center;
-  gap: 8px;
-  padding: 0 0 9px;
-  margin-bottom: 9px;
-  border-bottom: 1px solid var(--line);
-  font-size: 12.5px;
-}
-.ecohead .fval {
-  text-align: right;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.ecohead .fbar {
-  height: 6px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.ecohead .fbar > span {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--accent);
-}
-.ecohead .fbar > span.hi {
-  background: #7ecf9e;
-}
-.ecohead .fbar > span.lo {
-  background: #e08989;
-}
-.ecohead .fpct {
-  text-align: right;
-  font-size: 11px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.ecohead .ecovs {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  text-align: right;
-}
-
-.economy .econlead {
-  margin: 0 0 10px;
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--text);
-}
-.economy .econlead strong,
-.economy .econlead em {
-  font-style: normal;
-  color: #7ecf9e;
-}
-.economy .econgather {
-  margin: 0;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-/* A source group (steady / swingy): a coloured header, then its rows. The group IS the framing, so
-   rows carry no per-row kind chip — one label per bucket instead of one per line. */
-.ecogroup + .ecogroup {
-  margin-top: 9px;
-}
-.ecogrouphdr {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  padding-bottom: 2px;
-}
-.ecogrouphdr.k-steady {
-  color: #7ecf9e;
-}
-.ecogrouphdr.k-swingy {
-  color: #d8a05a;
-}
-.ecorow {
-  display: grid;
-  /* Label column fits "Bosses & objectives" on one line — it wrapped to two at 116px. */
-  grid-template-columns: 132px 1fr 58px;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 0;
-  font-size: 12.5px;
-}
-/* With the last-game overlay there's a fourth column: your own rate, same units as the median. */
-.economy.has-you .ecorow {
-  grid-template-columns: 132px 1fr 58px 62px;
-}
-/* Column headers over the median/you numbers — the two columns are otherwise indistinguishable. */
-.ecorow.ecohdr {
-  padding: 0 0 3px;
-}
-.ecorow.ecohdr .fpop,
-.ecorow.ecohdr .fyou {
-  font-size: 9.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-/* Bullet chart: the filled bar is YOUR rate (so it means the same thing as the souls/min bar above
-   it), read against a tick at the hero's median. Bar past the tick = above median. */
-.ecorow .fbar {
-  position: relative;
-  height: 6px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-}
-.ecorow .fbar > span {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--muted);
-}
-.ecorow .fbar > .ftick {
-  position: absolute;
-  top: -2px;
-  width: 2px;
-  height: 10px;
-  margin-left: -1px;
-  border-radius: 1px;
-  background: var(--text);
-  opacity: 0.75;
-}
-.ecorow .fbar > span.k-steady {
-  background: #7ecf9e;
-}
-.ecorow .fbar > span.k-swingy {
-  background: #d8a05a;
-}
-.ecorow .fpop {
-  text-align: right;
-  color: var(--muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-/* Your last game: the rate leads (same units as the median beside it), the percentile trails muted
-   and small — a locator, not a grade, so it gets no good/bad colour. */
-.ecorow .fyou {
-  display: flex;
-  align-items: baseline;
-  justify-content: flex-end;
-  gap: 4px;
-  white-space: nowrap;
-}
-.ecorow .fyoun {
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-}
-/* Above / below the hero's median. A direction, not a verdict — the note says as much. */
-.ecorow .fyoun.hi {
-  color: #7ecf9e;
-}
-.ecorow .fyoun.lo {
-  color: #e08989;
-}
-.ecorow .fyoup {
-  font-size: 10px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-@media (max-width: 560px) {
-  .matchrow {
-    grid-template-columns: 40px 1fr 64px;
-  }
-  .matchrow .mwhen {
-    display: none;
-  }
-  .econrow {
-    grid-template-columns: 96px 1fr 44px 50px 28px;
-  }
-  .econrow .econkind {
-    display: none;
-  }
-  .ecorow {
-    grid-template-columns: 96px 1fr 50px;
-  }
-  .economy.has-you .ecorow {
-    grid-template-columns: 96px 1fr 50px 56px;
-  }
-  .ecohead {
-    grid-template-columns: 66px 44px 1fr 28px;
-  }
-  .ecohead .ecovs {
-    display: none;
-  }
-}
-
-/* Games-window selector in the fundamentals header — scoping by games, not days, is what keeps a
-   long break out of the average (lib/fundamentals.recentWindow). */
-.fundwin {
-  margin-left: 8px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--muted);
-  font-size: 11px;
-  padding: 1px 4px;
-  cursor: pointer;
-}
-
-/* Death read + the "build against your nemesis" list (MatchModal). */
-.deathread {
-  font-size: 12px;
-  color: var(--muted);
-  margin-bottom: 4px;
-  line-height: 1.45;
-}
-.nemesis {
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
-}
-.nemrow {
-  display: grid;
-  grid-template-columns: 1fr 60px 90px;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 12.5px;
-  padding: 2px 0;
-}
-.nemitem {
-  font-weight: 600;
-}
-.nemedge {
-  text-align: right;
-  color: #7ecf9e;
-  font-variant-numeric: tabular-nums;
-}
-.nemn {
-  text-align: right;
-  color: var(--muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-/* "climbing" tag next to the benchmark rank in the fundamentals header. */
-.climbmark {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--purple);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0 4px;
-  vertical-align: middle;
-}
-
-/* "Analyze your last game" bridge from the fundamentals card into the match modal. */
-.lastgamelink {
-  display: inline-block;
-  margin-top: 8px;
-  background: none;
-  border: none;
-  color: var(--accent);
-  cursor: pointer;
-  font-size: 12.5px;
-  padding: 0;
-}
-.lastgamelink:hover {
-  text-decoration: underline;
-}
-
-
-/* Palette item jump: one accent pulse on the row the jump landed on (class toggled by
-   flashItemRow in App.tsx). Pure highlight — no transform — so it's reduced-motion safe. */
-.item.rowflash {
-  animation: rowflash 1.5s ease-out;
-}
-@keyframes rowflash {
-  0%,
-  35% {
-    box-shadow: inset 0 0 0 2px var(--accent);
-    background: color-mix(in srgb, var(--accent) 14%, var(--panel2));
-  }
-  100% {
-    box-shadow: inset 0 0 0 2px transparent;
-    background: var(--panel2);
-  }
-}
-
-/* --- Generator-verdict card ("why isn't X here" — components/VerdictCard) --- */
-.guide.verdict {
-  width: min(520px, calc(100vw - 32px));
-}
-.verdict-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.verdict-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  display: grid;
-  place-items: center;
-  flex: none;
-}
-.verdict-icon img {
-  width: 22px;
-  height: 22px;
-}
-.verdict-head {
-  margin: 0 0 12px;
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.4;
-}
-.verdict-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  padding: 8px 12px;
-  margin-bottom: 12px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font-size: 12px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.verdict-body {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--muted);
 }

@@ -1,0 +1,439 @@
+@layer components {
+/* Hover shop card (portal-positioned; fixed to the viewport). */
+.itemcard {
+  position: fixed;
+  z-index: 50;
+  width: min(300px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
+  pointer-events: none; /* a tooltip — never steals the cursor */
+  color: var(--text);
+  /* Portaled to document.body, so it's outside .app and won't inherit its font. */
+  font:
+    12.5px/1.4 system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    sans-serif;
+}
+/* Native path (Popover API + CSS anchor positioning, see SUPPORTS_ANCHOR): the card is a
+   top-layer [popover] anchored to its row's `anchor-name` — to the row's right by default,
+   flipping to the left and/or bottom-pinning via @position-try when it would leave the
+   viewport (the declarative version of the fallback's measure-flip-clamp layout effect). */
+.itemcard[popover] {
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  left: calc(anchor(right) + 10px);
+  top: anchor(top);
+  /* Anchored flips first; then viewport pins for narrow screens where neither side of a
+     full-width row fits the card (the old JS clamp's `max(8px, …)` equivalent). */
+  position-try-fallbacks:
+    --card-left, --card-pin-bottom, --card-left-pin-bottom, --card-pin-left,
+    --card-pin-left-bottom;
+}
+@position-try --card-left {
+  left: auto;
+  right: calc(anchor(left) + 10px);
+}
+@position-try --card-pin-bottom {
+  top: auto;
+  bottom: 8px;
+}
+@position-try --card-left-pin-bottom {
+  left: auto;
+  right: calc(anchor(left) + 10px);
+  top: auto;
+  bottom: 8px;
+}
+@position-try --card-pin-left {
+  left: 8px;
+}
+@position-try --card-pin-left-bottom {
+  left: 8px;
+  top: auto;
+  bottom: 8px;
+}
+/* Tap-pinned on touch (see ItemHover): make it a real surface — tappable and scrollable — so a
+   tall card reads on a phone instead of clipping, and a tap on it doesn't fall through to a row. */
+.itemcard.sticky {
+  pointer-events: auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.itemcard .ic-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  color: #fff;
+}
+.itemcard .ic-head img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.4));
+}
+.itemcard .ic-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.itemcard .ic-name {
+  font-weight: 700;
+  font-size: 14px;
+}
+.itemcard .ic-sub {
+  font-size: 11px;
+  opacity: 0.85;
+}
+.itemcard .ic-sec {
+  padding: 8px 10px;
+  border-top: 1px solid var(--line);
+}
+.itemcard .ic-sec.active {
+  background: rgba(111, 177, 255, 0.06);
+}
+.itemcard .ic-kind {
+  display: inline-block;
+  margin-bottom: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.itemcard .ic-text {
+  margin: 0;
+  color: var(--text);
+}
+.itemcard .ic-text.plain {
+  color: var(--muted);
+}
+.itemcard .ic-text strong {
+  color: #fff;
+  font-weight: 700;
+}
+.itemcard .ic-stats {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.itemcard .ic-sec.innate .ic-stats {
+  margin-top: 0;
+}
+.itemcard .ic-stats li {
+  color: var(--muted);
+}
+.itemcard .ic-stats li.strong {
+  color: var(--text);
+}
+.itemcard .ic-stats .v {
+  display: inline-block;
+  min-width: 38px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.itemcard .ic-stats li.strong .v {
+  color: var(--accent);
+}
+.itemcard .ic-comp {
+  padding: 7px 10px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.role {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  margin-right: 6px;
+  border-radius: 4px;
+  vertical-align: 1px;
+}
+.role-universal {
+  background: #2c3b52;
+  color: #8fb6ff;
+}
+.role-value {
+  background: #34402c;
+  color: #b5d98a;
+}
+.role-filler {
+  background: #2f3340;
+  color: #9aa6bb;
+}
+.role-need {
+  background: #143a36;
+  color: #74d6c4;
+}
+/* The row's third line: counter bubbles / weak flag / transient note. */
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.tags .reason {
+  color: #d8b768;
+  font-size: 11.5px;
+}
+.tags .reason-part {
+  color: #b7a4e0; /* match the PART chip — a structural note, not a warning */
+}
+
+/* One bubble per enemy: a small framed portrait + this item's edge vs that hero. */
+.cbubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px 1px 2px;
+  border-radius: 12px;
+  background: #3a2630;
+  color: #f0a9bf;
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: 1px;
+  font-variant-numeric: tabular-nums;
+}
+.cbubble img {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: center 22%;
+  box-shadow: 0 0 0 1.5px #5a3a46;
+}
+.cbubble.low {
+  opacity: 0.6;
+}
+
+/* Relationship clue: builds-toward (→) or same-slot swap. */
+.rel {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: #20262f;
+  color: #8fa3bd;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.rel.swap {
+  background: #2a2620;
+  color: #c2a86a;
+}
+.rel.rush {
+  background: #233326;
+  color: #79c98f;
+}
+/* Imbue target: which ability authors imbue this item onto (left edge tinted to the ability,
+   matching the skill grid's color). */
+.rel.imbue {
+  gap: 4px;
+  padding-left: 3px;
+  background: #251f2e;
+  color: #b79ad6;
+  border-left: 2px solid #6c5a86;
+}
+.rel.imbue img {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+/* "win more" (raw≫adj, leans on a lead) vs "comeback" (adj≫raw, holds up when behind). */
+.statetag {
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.statetag.winmore {
+  background: #33291c;
+  color: #e0a85a;
+}
+.statetag.comeback {
+  background: #1c2e30;
+  color: #5fc4c0;
+}
+
+/* Per-enemy breakdown shown inside the item's hover card. */
+.ic-counter {
+  padding: 9px 13px;
+  background: #2a1f26;
+  border-bottom: 1px solid var(--line);
+}
+.ic-counter ul {
+  list-style: none;
+  margin: 5px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ic-counter li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+}
+.ic-counter li img {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: center 22%;
+  box-shadow: 0 0 0 1.5px #5a3a46;
+}
+.ic-counter .cn {
+  flex: 1;
+}
+.ic-counter .cd {
+  font-weight: 700;
+  color: #54c66b;
+  font-variant-numeric: tabular-nums;
+}
+.ic-counter .cw {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.ic-counter .ic-note {
+  margin: 7px 0 0;
+  font-size: 10.5px;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+.item.counter-add {
+  border-left-style: dashed;
+}
+.item.counter-add .n.low {
+  color: #e0b341;
+}
+
+.item {
+  display: flex;
+  gap: 10px;
+  padding: 8px;
+  margin-bottom: 8px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 8px;
+}
+.item.muted {
+  opacity: 0.85;
+}
+.item.transient {
+  opacity: 0.66;
+  border-left-style: dashed;
+}
+.item.transient .name {
+  font-weight: 500;
+}
+/* Transient badges — dashed rows don't hold a standing slot; the chip says how each one leaves.
+ * PART (violet, structural): consumed by an in-build upgrade. SELL (yellow, an action): sell-fodder,
+ * whether the data shows it leaving early or the slot cap forces it out late. */
+.role-part {
+  background: #2b2338;
+  color: #b7a4e0;
+}
+.role-sold {
+  background: #3a3320;
+  color: #d8b768;
+}
+.why .reason {
+  color: #d8b768;
+}
+
+.icon {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.body {
+  min-width: 0;
+  flex: 1;
+}
+.line1 {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.line1 .name {
+  font-weight: 600;
+}
+/* "🔥 trending" marker on a build pick the player base is currently adopting + winning with. */
+.line1 .trendtag {
+  margin-left: 5px;
+  font-size: 11px;
+  cursor: help;
+  vertical-align: middle;
+}
+.line1 .cost {
+  color: #e3c770;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+.line1 .cost.discounted {
+  display: inline-flex;
+  gap: 5px;
+  align-items: baseline;
+}
+.line1 .cost .cost-full {
+  color: #8a8170;
+  text-decoration: line-through;
+  font-size: 11px;
+}
+.line2 {
+  display: flex;
+  gap: 10px;
+  margin-top: 2px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.line2 .wr {
+  font-weight: 700;
+}
+.line2 .wrabs {
+  margin-left: 5px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.line2 .pick,
+.line2 .n {
+  color: var(--muted);
+}
+.why {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+}

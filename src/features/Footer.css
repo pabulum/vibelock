@@ -1,0 +1,17 @@
+@layer components {
+.foot {
+  padding: 8px 22px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.foot a {
+  color: var(--muted);
+}
+.foot .disclaimer {
+  margin-top: 6px;
+  font-size: 11px;
+  opacity: 0.75;
+  max-width: 70ch;
+}
+
+}
