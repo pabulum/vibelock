@@ -3,7 +3,7 @@
 // as gzipped NDJSON shards — the training set for the offline models on the stats roadmap
 // (logistic item effects, causal adjustment, WPA). Run by .github/workflows/harvest.yml; also
 // runs locally: node scripts/harvest-matches.mjs (env: HARVEST_DAY=YYYY-MM-DD, BINS, PER_BIN,
-// OUT_DIR, RETENTION_DAYS).
+// OUT_DIR, RETENTION_DAYS, FETCH_RETRIES).
 //
 // Design constraints, in order:
 //  - The bulk metadata endpoint allows 10 req/min per IP — so few, large requests, spaced 7s.
@@ -48,12 +48,54 @@ const PER_BIN = Number(process.env.PER_BIN || 100);
 const GOLD_PER_BIN = Number(process.env.GOLD_PER_BIN || 120);
 const OUT_DIR = process.env.OUT_DIR || "data/shards";
 const RETENTION_DAYS = Number(process.env.RETENTION_DAYS || 30);
+// Retry budget for a single request. The nightly run lives across the internet from a CDN, so a
+// mid-body socket reset (UND_ERR_SOCKET) or a transient 5xx will happen eventually; losing a whole
+// day's sample to one dropped connection isn't worth it. Bounded so a genuine outage still fails.
+const FETCH_RETRIES = Number(process.env.FETCH_RETRIES || 4);
 
 function isoDay(ms) {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 // --- Fetch: one request per time bin, paced for the 10 req/min limit ---
+
+// Server-side statuses worth a retry: rate limiting and the transient 5xx family. A 4xx other
+// than 429 is deterministic (bad params, gone) — retrying can't fix it, so those throw at once.
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+
+/**
+ * Fetch and parse JSON with bounded retries on transient failures. A thrown fetch()/res.json()
+ * error is always network-layer (socket reset, connect/DNS, timeout, truncated body) and carries
+ * no `.status`, so it's retried; our own HTTP errors carry `.status` and retry only when the
+ * status is in RETRYABLE_STATUS. Backoff is linear (6s × attempt, capped 30s) — comfortably above
+ * the bulk endpoint's 6s/request floor, and a failed request may already have cost a rate token.
+ */
+async function fetchJson(url, { label = url, retries = FETCH_RETRIES } = {}) {
+  const maxAttempts = retries + 1;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        const body = (await res.text().catch(() => "")).slice(0, 200);
+        const err = new Error(`HTTP ${res.status} for ${label}: ${body}`);
+        err.status = res.status;
+        throw err;
+      }
+      return await res.json();
+    } catch (e) {
+      const retryable = e.status === undefined || RETRYABLE_STATUS.has(e.status);
+      if (!retryable || attempt >= maxAttempts) throw e;
+      const wait = Math.min(30000, 6000 * attempt);
+      const why = e.status ? `HTTP ${e.status}` : e.code || e.cause?.code || e.name;
+      console.warn(
+        `${label}: ${why} — retry ${attempt}/${retries} in ${wait / 1000}s`,
+      );
+      await sleep(wait);
+    }
+  }
+}
 
 async function fetchBin(fromUnix, toUnix) {
   const params = new URLSearchParams({
@@ -67,12 +109,7 @@ async function fetchBin(fromUnix, toUnix) {
     extra_player_columns: "stats.net_worth,stats.time_stamp_s",
     limit: String(PER_BIN),
   });
-  const res = await fetch(`${API}?${params}`);
-  if (!res.ok)
-    throw new Error(
-      `HTTP ${res.status} for bin ${fromUnix}-${toUnix}: ${(await res.text()).slice(0, 200)}`,
-    );
-  return res.json();
+  return fetchJson(`${API}?${params}`, { label: `bin ${fromUnix}-${toUnix}` });
 }
 
 // --- Per-source gold (soul economy): a subsample of single-match fetches ---
@@ -106,9 +143,14 @@ async function fetchGoldSources(ids, concurrency = 8) {
     while (idx < ids.length) {
       const id = ids[idx++];
       try {
-        const r = await fetch(`${MATCH_API}/${id}/metadata?disable_steam=true`);
-        if (!r.ok) continue;
-        const mi = (await r.json()).match_info;
+        // One retry only: this is a best-effort subsample on the looser single-match rate family,
+        // and a broad outage shouldn't stall the run behind hundreds of backing-off gold fetches.
+        const mi = (
+          await fetchJson(`${MATCH_API}/${id}/metadata?disable_steam=true`, {
+            label: `gold ${id}`,
+            retries: 1,
+          })
+        ).match_info;
         const bySlot = {};
         for (const p of mi?.players ?? []) {
           const g = goldFromPlayer(p);
@@ -244,11 +286,23 @@ if (existsSync(shardPath) && !process.env.FORCE) {
   const gzip = createGzip({ level: 9 });
   const flushed = pipeline(gzip, createWriteStream(tmpPath));
   const seen = new Set();
+  let failedBins = 0;
   try {
     for (let i = 0; i < BINS; i++) {
       const from = dayStart + i * binSeconds;
       const to = i === BINS - 1 ? dayStart + 24 * 3600 : from + binSeconds;
-      const matches = await fetchBin(from, to);
+      // A bin that still fails after fetchBin's retries is skipped, not fatal: 11/12 bins is a fine
+      // day, losing one time-of-day slice is a small bias next to losing the whole sample. The
+      // sparsity guard after the loop aborts only if too little came back to trust.
+      let matches;
+      try {
+        matches = await fetchBin(from, to);
+      } catch (e) {
+        failedBins++;
+        console.warn(`bin ${i + 1}/${BINS} failed, skipping: ${e.message}`);
+        if (i < BINS - 1) await sleep(7000);
+        continue;
+      }
       const fresh = matches.filter((m) => !seen.has(m.match_id));
       // Economy subsample: fetch per-source gold for the first GOLD_PER_BIN fresh matches (order is
       // arbitrary within a time bin, so first-N is an unbiased sample). One extra request each, on
@@ -264,8 +318,15 @@ if (existsSync(shardPath) && !process.env.FORCE) {
       console.log(
         `bin ${i + 1}/${BINS}: ${matches.length} matches, ${gold.size} with economy (running total ${seen.size})`,
       );
-      if (i < BINS - 1) await new Promise((r) => setTimeout(r, 7000));
+      if (i < BINS - 1) await sleep(7000);
     }
+    // Discard a day that came back too thin to trust rather than write a biased partial shard that
+    // `existsSync` would then treat as a complete day and refuse to re-harvest. A failed run here
+    // surfaces in the workflow; the tmp shard is cleaned up by the catch below.
+    if (failedBins > BINS / 2)
+      throw new Error(
+        `harvest too sparse: ${failedBins}/${BINS} bins failed (${seen.size} matches)`,
+      );
     gzip.end();
     await flushed;
   } catch (e) {
