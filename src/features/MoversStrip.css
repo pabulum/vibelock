@@ -63,5 +63,15 @@
 .movers .hype b {
   color: var(--muted);
 }
+/* Causal tag: this mover is named as a change subject in the patch notes (lib/patchChanges) — the
+   move is patch-caused, not a meta drift. A quiet accented pen glyph + ring, no extra row weight. */
+.movers .mover.changed {
+  border-color: color-mix(in oklab, var(--accent) 55%, var(--line));
+}
+.movers .patchtag {
+  color: var(--accent);
+  font-size: 11px;
+  align-self: center;
+}
 
 }

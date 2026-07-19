@@ -16,6 +16,7 @@ import { assembleArchetypes, pickSignatures } from "../lib/archetypes";
 import { matchCommunityBuilds } from "../lib/communityBuilds";
 import { blendFlow } from "../lib/patchBlend";
 import { findAdoptionMovers, findPatchMovers } from "../lib/patchMovers";
+import { touchedItems } from "../lib/patchChanges";
 import { buildJointGamesLookup } from "../lib/pairs";
 import { buildSynergyLookup, singleRecordsFromFlow } from "../lib/synergy";
 import { bestImbueTargets } from "../lib/imbue";
@@ -43,6 +44,8 @@ export function useBuildData(opts: {
   priorKey: TimeWindow | null;
   lineAware: boolean;
   urlBuild: string | undefined;
+  /** Notes body of the selected patch, for the movers' causal tag (lib/patchChanges). */
+  patchNotes: string | undefined;
 }) {
   const {
     hero,
@@ -58,6 +61,7 @@ export function useBuildData(opts: {
     priorKey,
     lineAware,
     urlBuild,
+    patchNotes,
   } = opts;
 
   // Whether the URL's archetype has been honored yet — only on the first build of the linked hero;
@@ -158,9 +162,16 @@ export function useBuildData(opts: {
         }).catch(() => null),
       ]);
       const base = baseBlend.flow;
+      // Items the patch's notes actually changed — the causal tag that tells a real patch mover from
+      // one riding a meta shift (lib/patchChanges). Null when the feed carried no notes.
+      const touched =
+        canBackfill && patchNotes ? touchedItems(patchNotes, itemMap) : null;
       // Movers compare the RAW windows (blending them first would test the prior against itself).
       const movers = canBackfill
-        ? findPatchMovers(statsFresh, statsPrior, itemMap)
+        ? findPatchMovers(statsFresh, statsPrior, itemMap).map((m) => ({
+            ...m,
+            changed: touched?.has(m.item.id) ?? false,
+          }))
         : null;
       const BUY_TIME_MIN_MATCHES = 40;
       const timeStats = new Map(statsPrior.map((s) => [s.item_id, s]));
@@ -190,7 +201,7 @@ export function useBuildData(opts: {
             baseBlend.priorGames,
             baseline,
             itemMap,
-          )
+          ).map((a) => ({ ...a, changed: touched?.has(a.item.id) ?? false }))
         : null;
       const synergyOf = permRows
         ? buildSynergyLookup(permRows, singleRecordsFromFlow(base), baseline)

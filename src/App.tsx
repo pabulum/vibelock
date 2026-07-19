@@ -387,6 +387,7 @@ function AppInner() {
     priorKey,
     lineAware,
     urlBuild: url0.build,
+    patchNotes: patches[patchIdx]?.content,
   });
 
   // The live selection as URL state — mirrored into the address bar below, and the state the

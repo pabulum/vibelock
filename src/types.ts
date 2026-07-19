@@ -409,6 +409,9 @@ export interface Patch {
   title: string;
   /** Unix seconds of the patch's publish time. */
   ts: number;
+  /** The changelog notes body, when the feed carried one (the Steam copy). Parsed by
+   * lib/patchChanges into the set of items this patch touched — the causal tag on patch movers. */
+  content?: string;
 }
 
 /** A notable matchup for the selected hero. */

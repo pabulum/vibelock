@@ -36,6 +36,9 @@ export interface PatchMover {
   nPrev: number;
   /** No pre-patch record at all — added (or first made viable) by this patch. */
   isNew?: boolean;
+  /** The patch notes name this item as a change subject (lib/patchChanges) — the move is caused by
+   * the patch, not a meta shift. Annotated post-hoc in useBuildData; absent when notes are missing. */
+  changed?: boolean;
 }
 
 /**
@@ -140,6 +143,9 @@ export interface AdoptionMover {
   nNew: number;
   /** Rising *and* winning above baseline — surface it. False ⇒ rising but not paying off (hype). */
   breakout: boolean;
+  /** The patch notes name this item as a change subject (lib/patchChanges) — a breakout the patch
+   * actually caused, vs one just riding a meta shift. Annotated post-hoc in useBuildData. */
+  changed?: boolean;
 }
 
 /**

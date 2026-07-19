@@ -818,10 +818,19 @@ export const patchesQueryOptions = queryOptions({
       if (!m) continue;
       const [, mm, dd, yyyy] = m;
       const dayKey = `${yyyy}-${mm}-${dd}`;
-      if (byDay.has(dayKey)) continue; // one entry per patch day
+      const content = p.content || undefined;
+      const existing = byDay.get(dayKey);
+      if (existing) {
+        // Same patch from the other feed: keep whichever copy carries the notes text (Steam),
+        // so the changelog is available for the touched-item tag (see lib/patchChanges).
+        if (content && content.length > (existing.content?.length ?? 0))
+          existing.content = content;
+        continue;
+      }
       byDay.set(dayKey, {
         title: `${dayKey}${/minor/i.test(title) ? " · Minor" : ""} Update`,
         ts: Math.floor(Date.UTC(+yyyy, +mm - 1, +dd) / 1000),
+        content,
       });
     }
 

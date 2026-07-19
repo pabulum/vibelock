@@ -28,13 +28,17 @@ export function MoversStrip(props: {
       {movers.map((m) => (
         <span
           key={m.item.id}
-          className={`mover${m.isNew ? " newitem" : m.delta > 0 ? " up" : " down"}`}
+          className={`mover${m.isNew ? " newitem" : m.delta > 0 ? " up" : " down"}${m.changed ? " changed" : ""}`}
           title={
-            m.isNew
+            (m.changed
+              ? "Named in this patch's notes — this move is caused by the patch, not a meta shift. "
+              : "") +
+            (m.isNew
               ? `New this patch — ${(m.newWinRate * 100).toFixed(1)}% over ${Math.round(m.nNew)} decided games`
-              : `${(m.prevWinRate * 100).toFixed(1)}% → ${(m.newWinRate * 100).toFixed(1)}% (${Math.round(m.nPrev).toLocaleString()} → ${Math.round(m.nNew).toLocaleString()} decided games)`
+              : `${(m.prevWinRate * 100).toFixed(1)}% → ${(m.newWinRate * 100).toFixed(1)}% (${Math.round(m.nPrev).toLocaleString()} → ${Math.round(m.nNew).toLocaleString()} decided games)`)
           }
         >
+          {m.changed && <span className="patchtag">✎ </span>}
           {m.item.name}{" "}
           <b>
             {m.isNew
@@ -55,9 +59,10 @@ export function MoversStrip(props: {
           {adoption.map((a) => (
             <span
               key={a.item.id}
-              className={`mover ${a.breakout ? "breakout" : "hype"}`}
-              title={`Pick rate ${(a.pickPrev * 100).toFixed(0)}% → ${(a.pickNew * 100).toFixed(0)}% (+${(a.pickDelta * 100).toFixed(0)}pt). Win rate ${(a.winRate * 100).toFixed(1)}% (${a.winEdge >= 0 ? "+" : ""}${(a.winEdge * 100).toFixed(1)} vs hero avg) over ${a.nNew.toLocaleString()} games. ${a.breakout ? "Rising and winning — a breakout." : "Rising but not beating the hero's average — being tried, not proven."}`}
+              className={`mover ${a.breakout ? "breakout" : "hype"}${a.changed ? " changed" : ""}`}
+              title={`Pick rate ${(a.pickPrev * 100).toFixed(0)}% → ${(a.pickNew * 100).toFixed(0)}% (+${(a.pickDelta * 100).toFixed(0)}pt). Win rate ${(a.winRate * 100).toFixed(1)}% (${a.winEdge >= 0 ? "+" : ""}${(a.winEdge * 100).toFixed(1)} vs hero avg) over ${a.nNew.toLocaleString()} games. ${a.breakout ? "Rising and winning — a breakout." : "Rising but not beating the hero's average — being tried, not proven."}${a.changed ? " Named in this patch's notes — the patch is likely why." : ""}`}
             >
+              {a.changed && <span className="patchtag">✎ </span>}
               {a.item.name}{" "}
               <b>
                 {a.breakout ? "↑" : "•"}

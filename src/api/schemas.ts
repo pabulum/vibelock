@@ -355,6 +355,9 @@ export type RawItem = v.InferOutput<typeof RawItemSchema>;
  * the feed's pub_date is re-stamped on Forum entries and can't be trusted). */
 export const RawPatchSchema = v.object({
   title: v.optional(v.string()),
+  /** The notes body. Forum-feed entries carry only a link-unfurl (empty text); the Steam-feed copy
+   * of the same patch carries the real changelog, which lib/patchChanges parses for touched items. */
+  content: v.optional(v.string()),
 });
 export type RawPatch = v.InferOutput<typeof RawPatchSchema>;
 
