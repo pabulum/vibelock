@@ -1,6 +1,8 @@
 // The sticky header: brand mark, the Hero / Rank / Patch / Backfill / Steam-ID controls, the
-// palette + guide + lab + match buttons, and the indeterminate loading strip.
+// palette + guide + lab + match buttons, the theme toggle, and the indeterminate loading strip.
+import { useSyncExternalStore } from "react";
 import "./TopBar.css";
+import { resolvedTheme, setTheme, subscribeTheme } from "../lib/theme";
 import { IS_MAC, type PaletteMode } from "../lib/palette";
 import {
   RANK_TIERS,
@@ -12,6 +14,51 @@ import { parseSteamInput, parseVanityName } from "../lib/steamId";
 import { searchSteamPlayers, type SteamPlayerMatch } from "../api/deadlock";
 import { ShuffleMark } from "../components/panels";
 import type { Hero, Item, Patch } from "../types";
+
+const SUN = (
+  <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+    <circle cx="8" cy="8" r="3" fill="currentColor" />
+    <g
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      fill="none"
+    >
+      <path d="M8 .9v2.1M8 13v2.1M.9 8H3M13 8h2.1M2.98 2.98l1.48 1.48M11.54 11.54l1.48 1.48M13.02 2.98l-1.48 1.48M4.46 11.54l-1.48 1.48" />
+    </g>
+  </svg>
+);
+
+const MOON = (
+  <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+    <path
+      d="M13.5 10.4A6.1 6.1 0 0 1 5.6 2.5a6.1 6.1 0 1 0 7.9 7.9Z"
+      fill="currentColor"
+    />
+  </svg>
+);
+
+/** Light ⇄ dark. The button shows the theme a press will switch *to* — an icon can't say "you are
+ * currently in X" the way a word can, so it says "press for night" instead, which is what a reader
+ * reaching for it wants. Subscribed rather than plain state: with nothing stored the page is still
+ * following the OS, and this has to re-render when the OS flips under it. */
+function ThemeToggle() {
+  const theme = useSyncExternalStore(subscribeTheme, resolvedTheme, () =>
+    "dark" as const,
+  );
+  const target = theme === "dark" ? "light" : "dark";
+  return (
+    <button
+      type="button"
+      className="guidebtn themebtn"
+      title={`Switch to the ${target} theme`}
+      aria-label={`Switch to the ${target} theme`}
+      onClick={() => setTheme(target)}
+    >
+      {target === "dark" ? MOON : SUN}
+    </button>
+  );
+}
 
 export function TopBar(props: {
   items: Map<number, Item> | null;
@@ -74,7 +121,7 @@ export function TopBar(props: {
         {hero?.tagline && <span className="tagline">{hero.tagline}</span>}
       </div>
       <div className="controls">
-        <label>
+        <label className="selctl">
           Hero
           <select
             value={heroId ?? ""}
@@ -87,7 +134,7 @@ export function TopBar(props: {
             ))}
           </select>
         </label>
-        <label className="rankctl">
+        <label className="selctl rankctl">
           Rank
           <select
             value={typeof rankSel === "number" ? String(rankSel) : "band"}
@@ -116,7 +163,7 @@ export function TopBar(props: {
             </span>
           )}
         </label>
-        <label>
+        <label className="selctl">
           Patch
           <select
             value={patchIdx}
@@ -190,38 +237,43 @@ export function TopBar(props: {
             </div>
           )}
         </label>
-        <button
-          type="button"
-          className="guidebtn palbtn"
-          onClick={() => setPalette("all")}
-          title={`Command palette — switch hero, rank, or patch and add enemies (${IS_MAC ? "⌘K" : "Ctrl+K"})`}
-        >
-          {IS_MAC ? "⌘K" : "Ctrl+K"}
-        </button>
-        <button
-          type="button"
-          className="guidebtn"
-          onClick={onOpenGuide}
-          title="How these numbers are calculated"
-        >
-          How it works
-        </button>
-        <button
-          type="button"
-          className="guidebtn labbtn"
-          onClick={onOpenLab}
-          title="Experimental stats from whole-match data: closing power and state-adjusted item value"
-        >
-          Lab
-        </button>
-        <button
-          type="button"
-          className="guidebtn"
-          onClick={onOpenMatch}
-          title="Post-game read of one match: win-probability trajectory, fundamentals vs the ladder, soul economy, deaths"
-        >
-          Match
-        </button>
+        {/* One group, so the rail wraps into "fields" and "actions" rather than shedding
+            whichever single button happened to fall off the end. */}
+        <div className="railacts">
+          <button
+            type="button"
+            className="guidebtn palbtn"
+            onClick={() => setPalette("all")}
+            title={`Command palette — switch hero, rank, or patch and add enemies (${IS_MAC ? "⌘K" : "Ctrl+K"})`}
+          >
+            {IS_MAC ? "⌘K" : "Ctrl+K"}
+          </button>
+          <button
+            type="button"
+            className="guidebtn"
+            onClick={onOpenGuide}
+            title="How these numbers are calculated"
+          >
+            How it works
+          </button>
+          <button
+            type="button"
+            className="guidebtn labbtn"
+            onClick={onOpenLab}
+            title="Experimental stats from whole-match data: closing power and state-adjusted item value"
+          >
+            Lab
+          </button>
+          <button
+            type="button"
+            className="guidebtn"
+            onClick={onOpenMatch}
+            title="Post-game read of one match: win-probability trajectory, fundamentals vs the ladder, soul economy, deaths"
+          >
+            Match
+          </button>
+          <ThemeToggle />
+        </div>
       </div>
       {busy && <div className="loadstrip" aria-hidden="true" />}
     </header>

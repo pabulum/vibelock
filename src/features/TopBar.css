@@ -1,161 +1,231 @@
 @layer components {
-.controls {
-  display: flex;
-  gap: 14px;
-}
-.controls label {
-  display: flex;
-  flex-direction: column;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  gap: 4px;
-}
-.controls select {
-  background: var(--panel2);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 7px 10px;
-  font-size: 14px;
-  min-width: 150px;
-}
-/* The backfill checkbox rides the same label column as the selects; sized/centered to
-   sit on the select row's midline rather than dangling tiny under its caption. */
-.controls .checkctl {
-  flex: 0 0 auto;
-  cursor: pointer;
-}
-.controls .checkctl input {
-  width: 18px;
-  height: 18px;
-  margin: 7px auto;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-/* One-time cue when a Steam profile auto-selects the rank band — without it the silent re-slice
- * reads as "Steam ID changes the items". Fades itself out; pointer-events off so the stale chip
- * never blocks the controls (state is also cleared on a deliberate rank pick / profile change). */
-.controls .rankctl {
-  position: relative;
-}
-.autoset {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 6;
-  margin-top: 4px;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: #21303f;
-  color: var(--accent);
-  font-size: 11px;
-  text-transform: none;
-  letter-spacing: 0;
-  white-space: nowrap;
-  pointer-events: none;
-  animation: autosetfade 6s ease forwards;
-}
-@keyframes autosetfade {
-  0% {
-    opacity: 0;
-    transform: translateY(-2px);
+  /* The masthead's right-hand control rail. Fields are drawn, not raised: a hairline box on the
+     paper, a mono caption above it, and an accent underline on focus. No fills, no shadows —
+     the rail should read as a form printed on the page. */
+  /* Wrapping is a safety net, not the plan: below 1250px App.css stacks the rail under the
+     nameplate and left-aligns it, and this keeps a very narrow window (or a long patch title) from
+     overflowing instead of folding. */
+  .controls {
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 11px;
   }
-  8% {
-    opacity: 1;
-    transform: translateY(0);
+  .controls label {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    color: var(--ink-3);
   }
-  80% {
-    opacity: 1;
+  .controls select,
+  .controls .idctl input {
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    padding: 5px 8px;
+    font-family: var(--font-text);
+    font-size: 13px;
+    letter-spacing: 0;
+    text-transform: none;
   }
-  100% {
-    opacity: 0;
+  /* Drop the native widget chrome and draw our own chevron: an OS-styled select is the one
+     control that would still look like a stock form on an otherwise drawn page. The marker is a
+     clip-pathed block on the wrapping label, so it's a real triangle in the current ink colour
+     with no image asset and nothing to re-encode for light mode. */
+  .controls select {
+    min-width: 132px;
+    appearance: none;
+    padding-right: 26px;
+    background-image: none;
   }
-}
+  .controls .selctl {
+    position: relative;
+  }
+  .controls .selctl::after {
+    content: "";
+    position: absolute;
+    right: 9px;
+    bottom: 11px;
+    width: 9px;
+    height: 6px;
+    pointer-events: none;
+    background: var(--ink-3);
+    clip-path: polygon(0 0, 100% 0, 50% 100%);
+  }
+  .controls .idctl input {
+    width: 118px;
+  }
+  .controls select:focus-visible,
+  .controls .idctl input:focus-visible {
+    outline: none;
+    border-color: var(--accent-ui);
+    box-shadow: inset 0 -2px 0 var(--accent-ui);
+  }
 
-.controls .idctl {
-  position: relative;
-}
-.controls .idctl input {
-  background: var(--panel2);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 7px 10px;
-  font-size: 14px;
-  width: 130px;
-}
-/* Name-search results under the Steam id input. */
-.idresults {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 6;
-  min-width: 220px;
-  margin-top: 4px;
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-}
-.idresults button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  background: none;
-  border: 0;
-  border-radius: 6px;
-  color: var(--text);
-  font-size: 13px;
-  text-transform: none;
-  letter-spacing: 0;
-  cursor: pointer;
-  text-align: left;
-}
-.idresults button:hover {
-  background: var(--panel2);
-}
-.idresults img {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-}
-.idresults i {
-  font-style: normal;
-  color: var(--muted);
-  font-size: 11px;
-  margin-left: auto;
-}
-.idresults .idempty {
-  padding: 6px 8px;
-  color: var(--muted);
-  font-size: 12px;
-  text-transform: none;
-  letter-spacing: 0;
-}
+  /* The backfill checkbox rides the same label column as the selects; sized and centered to sit
+     on the field row's midline rather than dangling tiny under its caption. */
+  .controls .checkctl {
+    flex: 0 0 auto;
+    cursor: pointer;
+  }
+  .controls .checkctl input {
+    width: 16px;
+    height: 16px;
+    margin: 5px auto;
+    accent-color: var(--accent-ui);
+    cursor: pointer;
+  }
 
-/* "How it works" trigger that sits alongside the header controls. */
-.guidebtn {
-  align-self: flex-end;
-  margin-bottom: 1px;
-  padding: 7px 12px;
-  background: var(--panel2);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font: inherit;
-  font-size: 12.5px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.guidebtn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
+  /* One-time cue when a Steam profile auto-selects the rank band — without it the silent re-slice
+     reads as "Steam ID changes the items". Fades itself out; pointer-events off so the stale note
+     never blocks the controls (state is also cleared on a deliberate rank pick / profile change). */
+  .controls .rankctl {
+    position: relative;
+  }
+  .autoset {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 6;
+    margin-top: 4px;
+    padding: 2px 7px;
+    background: var(--surface);
+    border: 1px solid var(--accent-rule);
+    color: var(--accent-ui);
+    font-family: var(--font-text);
+    font-size: 11px;
+    text-transform: none;
+    letter-spacing: 0;
+    white-space: nowrap;
+    pointer-events: none;
+    animation: autosetfade 6s ease forwards;
+  }
+  @keyframes autosetfade {
+    0% {
+      opacity: 0;
+      transform: translateY(-2px);
+    }
+    8% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    80% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
 
+  .controls .idctl {
+    position: relative;
+  }
+  /* Name-search results under the Steam id input. */
+  .idresults {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 6;
+    min-width: 230px;
+    margin-top: 4px;
+    padding: 3px;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--rule-strong);
+    box-shadow: var(--shadow-pop);
+  }
+  .idresults button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 7px;
+    background: none;
+    border: 0;
+    color: var(--ink);
+    font-family: var(--font-text);
+    font-size: 13px;
+    text-transform: none;
+    letter-spacing: 0;
+    cursor: pointer;
+    text-align: left;
+  }
+  .idresults button:hover {
+    background: var(--surface-2);
+  }
+  .idresults img {
+    width: 20px;
+    height: 20px;
+    border-radius: var(--r-pill);
+  }
+  .idresults i {
+    font-family: var(--font-mono);
+    font-style: normal;
+    color: var(--ink-3);
+    font-size: 10.5px;
+    margin-left: auto;
+  }
+  .idresults .idempty {
+    padding: 6px 8px;
+    color: var(--ink-3);
+    font-size: 12px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  /* The action cluster travels as one flex item, so when the rail wraps it moves as a block
+     instead of leaving a single stranded button on a line of its own. */
+  .railacts {
+    display: flex;
+    align-items: flex-end;
+    gap: 11px;
+  }
+
+  /* Rail buttons ("Ctrl+K", "How it works", "Lab", "Match", the theme toggle). Mono small-caps in
+     a hairline box — the same visual weight as a field label, because that's what they are: rail
+     furniture. */
+  .guidebtn {
+    align-self: flex-end;
+    padding: 6px 9px;
+    background: transparent;
+    color: var(--ink-2);
+    border: 1px solid var(--rule);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .guidebtn:hover {
+    border-color: var(--accent-ui);
+    color: var(--accent-ui);
+  }
+  .guidebtn.palbtn {
+    letter-spacing: 0.02em; /* "⌘K" / "Ctrl+K" is a keycap, not a caption */
+  }
+  .guidebtn.labbtn {
+    color: var(--spirit);
+    border-color: color-mix(in oklab, var(--spirit) 35%, var(--rule));
+  }
+  .guidebtn.labbtn:hover {
+    border-color: var(--spirit);
+    color: var(--spirit);
+  }
+  /* Icon-only, and square: sized off the text buttons' height so the rail keeps one baseline, and
+     fixed-width so swapping sun for moon can't shuffle its neighbours under the cursor. */
+  .guidebtn.themebtn {
+    display: inline-grid;
+    place-items: center;
+    width: 30px;
+    padding: 5px 0;
+    color: var(--ink-3);
+  }
 }

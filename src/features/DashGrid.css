@@ -1,554 +1,511 @@
 @layer components {
-/* "Your fundamentals" card — per-metric percentile bars vs the selected ladder. Same header
-   grammar as the community card; bars are the whole message so the rows stay dense. */
-.fundamentals {
-  padding: 10px 22px 2px;
-  max-width: 520px;
-  cursor: help;
-}
-.fundamentals h2 {
-  font-size: 13px;
-  font-weight: 700;
-  margin: 0 0 6px;
-}
-.fundamentals h2 .sub {
-  font-weight: 400;
-  font-size: 11.5px;
-  color: var(--muted);
-}
-.fundrow {
-  display: grid;
-  grid-template-columns: 92px 56px 1fr 34px;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 0;
-  font-size: 12.5px;
-}
-.fundrow .flabel {
-  color: var(--muted);
-}
-.fundrow .fval {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.fundrow .fbar {
-  height: 6px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.fundrow .fbar > span {
-  display: block;
-  height: 100%;
-  background: var(--muted);
-  border-radius: 999px;
-}
-.fundrow .fbar > span.hi {
-  background: #7ecf9e;
-}
-.fundrow .fbar > span.lo {
-  background: #e08989;
-}
-.fundrow .fpct {
-  color: var(--muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
+  /* ============================================================================
+     The pre-build dashboard: economy, combat fundamentals, climb tips, skill
+     order, community check. Same grammar as the build columns — a head rule, a
+     heading, then content — so the page reads as one ruled document rather than
+     a strip of panels above a strip of columns.
+     ============================================================================ */
 
-/* Climb tips (lib/fundamentals.climbAdvice): the 1–2 weakest controllable levers as concrete "do
-   this next game" advice. Its own dashboard card — the advice spans farm AND survival, so it
-   belonged inside neither the Economy nor the Combat panel. */
-.climbcard .climbtip {
-  margin-bottom: 6px;
-}
-.climbcard .lastgamelink {
-  margin-top: 2px;
-}
-/* Pre-build dashboard: a plain two-column grid, paired by subject.
-     row 1  Economy | Combat & survival   — the two "how you're doing" reads
-     row 2  Skill order | Community check — the two "what to build" reads
-   Deliberately NOT a wrap row (cards hung at ragged depths) and no row-spanning feature column: a
-   spanned Economy left a big hole beside it whenever it had no farm data to show, and forcing the
-   community card full-width made it an awkward page-wide band. Equal columns keep every card the
-   same width, so uneven heights read as a dashboard rather than a pile. One column below 900px.
-   Cards carry no outer margin — the page gutter and gaps live here. */
-.dash {
-  padding: 8px 22px 4px;
-}
-/* Two balanced columns, NOT a grid: grid rows force every card in a row to share the tallest one's
-   height, which punched a ~270px hole under the short Combat card whenever Economy had a full
-   breakdown to show. Multi-column packs each card directly under the previous one and balances the
-   column heights itself, so there are no interior gaps and the balance adapts to whatever the cards
-   actually contain (Economy collapses to a couple of lines when a hero has no farm data yet).
-   `break-inside: avoid` keeps a card whole rather than splitting it across the columns. */
-@media (min-width: 900px) {
+  /* Two balanced columns, NOT a grid: grid rows force every card in a row to share the tallest
+     one's height, which punched a big hole under the short Combat card whenever Economy had a
+     full breakdown to show. Multi-column packs each card directly under the previous one and
+     balances the column heights itself, so there are no interior gaps and the balance adapts to
+     whatever the cards actually contain (Economy collapses to a couple of lines when a hero has
+     no farm data yet). `break-inside: avoid` keeps a card whole rather than splitting it. */
   .dash {
-    column-count: 2;
-    column-gap: 14px;
+    padding: 18px var(--gutter) 4px;
   }
-}
-.dash > * {
-  break-inside: avoid;
-  margin: 0 0 14px;
-}
-/* Shared card frame for the dashboard panels. */
-.dash > .skills,
-.dash > .fundamentals,
-.dash > .economy,
-.dash > .climbcard,
-.dash > .community {
-  /* Bottom margin is the inter-card gap in the column flow — it must match `.dash > *` above, and
-     it's repeated here because these class selectors would otherwise out-specify it back to 0. */
-  margin: 0 0 14px;
-  padding: 14px 16px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  min-width: 0;
-}
-.dash > .economy > h2,
-.dash > .climbcard > h2,
-.dash > .community > h2 {
-  font-size: 13px;
-  font-weight: 700;
-  margin: 0 0 6px;
-}
-.dash > .economy > h2 .sub,
-.dash > .community > h2 .sub {
-  font-weight: 400;
-  font-size: 11.5px;
-  color: var(--muted);
-}
-/* The "To climb" tips used to live here beside the bars; they're their own strip above the dash now
-   (they're holistic advice, not a combat stat), so this card is simply a heading plus its rows. */
-.dash > .fundamentals {
-  cursor: help;
-  /* The standalone card caps itself at 520px; as a grid item it should fill its column instead. */
-  max-width: none;
-}
-@media (max-width: 760px) {
-  .dash {
-    padding-left: 14px;
-    padding-right: 14px;
+  @media (min-width: 900px) {
+    .dash {
+      column-count: 2;
+      column-gap: 34px;
+    }
   }
-}
+  .dash > * {
+    break-inside: avoid;
+    margin: 0 0 22px;
+  }
+  /* The shared frame is a rule, not a box. Repeated as class selectors because they would
+     otherwise out-specify the `.dash > *` margin back to 0. */
+  .dash > .skills,
+  .dash > .fundamentals,
+  .dash > .economy,
+  .dash > .climbcard,
+  .dash > .community {
+    margin: 0 0 22px;
+    padding: 10px 0 0;
+    border-top: 1px solid var(--rule-strong);
+    min-width: 0;
+  }
+  @media (max-width: 760px) {
+    .dash {
+      padding-left: var(--gutter-narrow);
+      padding-right: var(--gutter-narrow);
+    }
+  }
 
-.community {
-  padding: 10px 22px 2px;
-}
-.community h2 {
-  font-size: 13px;
-  font-weight: 700;
-  margin: 0 0 6px;
-}
-.community h2 .sub {
-  font-weight: 400;
-  font-size: 11.5px;
-  color: var(--muted);
-}
-/* Cap the hint's line length so it doesn't drive the (max-content) card width — the build
-   cards should decide how wide the community card is (one card narrow, two side by side). */
-.community .hint {
-  max-width: 46ch;
-}
-.crows {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.crow {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
-  /* The community card is now a full-width grid band, so the builds grow to share it rather than
-     being pinned to a fixed width — capped so two cards read as a pair instead of stretching into
-     banners, and dropping to one per row only when the viewport genuinely can't fit two. */
-  flex: 1 1 300px;
-  min-width: 0;
-  max-width: 520px;
-  padding: 7px 11px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel2);
-  font-size: 12.5px;
-}
-.crow.agree {
-  border-color: var(--accent);
-  background: #1b2735;
-}
-.crow .ctag {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  flex: 0 0 auto;
-}
-.crow.agree .ctag {
-  color: var(--accent);
-}
-.crow .cname {
-  font-weight: 600;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.crow .cstats {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.crow .cfoot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 1px;
-}
-.crow .cwr {
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-}
-.crow .cmeta {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  font-size: 11.5px;
-}
-.crow .cid {
-  flex: 0 0 auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11.5px;
-  color: var(--accent);
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 2px 7px;
-  cursor: pointer;
-}
-.crow .cid:hover {
-  border-color: var(--accent);
-  background: #1b2735;
-}
+  /* One heading style for every panel on the dashboard: display face for the subject, mono for
+     the qualifier that follows it. */
+  .dash h2,
+  .fundamentals h2,
+  .community h2,
+  .skills h2 {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 3px 8px;
+    margin: 0 0 10px;
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .dash h2 .sub,
+  .fundamentals h2 .sub,
+  .community h2 .sub,
+  .skills h2 .sub {
+    font-family: var(--font-mono);
+    font-weight: 400;
+    font-size: 10.5px;
+    letter-spacing: 0.03em;
+    color: var(--ink-3);
+    text-transform: none;
+  }
 
-/* Hover preview of a community build's items (portaled to body). */
-.buildprev {
-  position: fixed;
-  z-index: 50;
-  width: min(268px, calc(100vw - 16px));
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 9px 10px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-  pointer-events: none;
-  color: var(--text);
-  /* Portaled to document.body, so it's outside .app and won't inherit its font. */
-  font:
-    12.5px/1.4 system-ui,
-    -apple-system,
-    Segoe UI,
-    Roboto,
-    sans-serif;
-}
-/* Native path (Popover API + CSS anchor positioning, see SUPPORTS_ANCHOR): the preview is a
-   top-layer [popover] anchored to its row's `anchor-name` — below the row by default, flipping
-   above / pinning to the right edge via @position-try when it would leave the viewport. The
-   UA [popover] margin/inset/padding are reset so only the anchor() placement applies. */
-.buildprev[popover] {
-  inset: auto;
-  margin: 0;
-  left: anchor(left);
-  top: calc(anchor(bottom) + 10px);
-  position-try-fallbacks: --prev-up, --prev-pin-right, --prev-up-pin-right;
-}
-@position-try --prev-up {
-  top: auto;
-  bottom: calc(anchor(top) + 10px);
-}
-@position-try --prev-pin-right {
-  left: auto;
-  right: 8px;
-}
-@position-try --prev-up-pin-right {
-  top: auto;
-  bottom: calc(anchor(top) + 10px);
-  left: auto;
-  right: 8px;
-}
-/* Tap-pinned on touch (see usePinnablePopover): a real, scrollable surface, not a pass-through
-   tooltip — so a tap lands on it (not the row behind) and a tall preview can be read on a phone. */
-.buildprev.sticky {
-  pointer-events: auto;
-  max-height: calc(100vh - 16px);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-}
-.buildprev .bp-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 7px;
-}
-.buildprev .bp-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.buildprev .bp-id {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  color: var(--accent);
-  flex: 0 0 auto;
-}
-.buildprev .bp-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-/* Diff verdict colors (see BuildPreview): border stays the slot color, the ring says how the
-   two builds relate — accent = both run it, amber = both run it at different commitment,
-   green = their core pick we skip, red = our pick their menu lacks. `.dim` marks the
-   flex-level half of a bucket so core-level (dis)agreements read first. */
-.buildprev .bp-item {
-  position: relative;
-  width: 26px;
-  height: 26px;
-  border-radius: 5px;
-  border: 1px solid;
-  overflow: hidden;
-}
-.buildprev .bp-item.agree {
-  box-shadow: 0 0 0 1px var(--accent);
-}
-.buildprev .bp-item.differ {
-  box-shadow: 0 0 0 1px #e0b341;
-}
-.buildprev .bp-item.added {
-  box-shadow: 0 0 0 1px #54c66b;
-}
-.buildprev .bp-item.missing {
-  box-shadow: 0 0 0 1px #d87a7a;
-}
-.buildprev .bp-item.dim {
-  opacity: 0.55;
-}
-/* Role-mismatch direction: ▼ our core is only situational for them, ▲ their core is only
-   situational for us. Corner badge like the skill-rank one. */
-.buildprev .bp-flag {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  padding: 0 1px;
-  font-size: 8px;
-  line-height: 11px;
-  background: rgba(0, 0, 0, 0.72);
-  color: #e0b341;
-  border-top-left-radius: 4px;
-}
-.buildprev .bp-sub {
-  margin: 9px 0 5px;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-.buildprev .bp-sub.agree {
-  color: var(--accent);
-}
-.buildprev .bp-sub.differ {
-  color: #e0b341;
-}
-.buildprev .bp-sub.added {
-  color: #54c66b;
-}
-.buildprev .bp-sub.missing {
-  color: #d87a7a;
-}
-/* Their situational-only tail, collapsed to a count — the kitchen-sink part of the menu. */
-.buildprev .bp-tail {
-  margin-top: 7px;
-  font-size: 10.5px;
-  color: var(--muted);
-}
-.buildprev .bp-item img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.buildprev .bp-skills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.buildprev .bp-skill {
-  position: relative;
-  width: 26px;
-  height: 26px;
-  border-radius: 5px;
-  border: 1px solid;
-  overflow: hidden;
-}
-.buildprev .bp-skill img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-/* Their max order diverges from ours at this ability — dim it so the agreement reads first. */
-.buildprev .bp-skill.moved {
-  opacity: 0.45;
-  filter: grayscale(0.5);
-}
-.buildprev .bp-skrank {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  min-width: 11px;
-  padding: 0 1px;
-  font-size: 9px;
-  line-height: 11px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  background: rgba(0, 0, 0, 0.72);
-  color: #fff;
-  border-top-left-radius: 4px;
-}
-.buildprev .bp-foot {
-  margin-top: 7px;
-  font-size: 10.5px;
-  color: var(--muted);
-}
+  /* ---- Fundamentals: percentile bars vs the selected ladder ---------------- */
+  .fundamentals {
+    max-width: 520px;
+    cursor: help;
+  }
+  .dash > .fundamentals {
+    /* The standalone card caps itself at 520px; as a column item it should fill its column. */
+    max-width: none;
+  }
+  .fundrow {
+    display: grid;
+    grid-template-columns: 92px 56px 1fr 34px;
+    align-items: center;
+    gap: 9px;
+    padding: 2px 0;
+    font-size: 12.5px;
+  }
+  .fundrow .flabel {
+    color: var(--ink-2);
+  }
+  .fundrow .fval {
+    text-align: right;
+  }
+  /* Measuring bars: square, hairline-ruled, filled from the left. No capsule caps — a rounded
+     end implies the value stops somewhere it doesn't. */
+  .fundrow .fbar {
+    height: 5px;
+    background: var(--surface-2);
+    border: 1px solid var(--rule);
+  }
+  .fundrow .fbar > span {
+    display: block;
+    height: 100%;
+    background: var(--ink-3);
+  }
+  .fundrow .fbar > span.hi {
+    background: var(--pos);
+  }
+  .fundrow .fbar > span.lo {
+    background: var(--neg);
+  }
+  .fundrow .fpct {
+    color: var(--ink-3);
+    font-size: 10.5px;
+  }
 
-/* The skill-order card — a full-width card in the right grid column (it was a right-floated
-   sidebar before the pre-build stats were gridded). */
-.skills {
-  margin: 4px 0 10px;
-  padding: 14px 16px 16px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-}
-.skills h2 {
-  margin: 0 0 11px;
-  font-size: 14px;
-}
-.skills h2 .sub {
-  font-weight: 400;
-  color: var(--muted);
-  font-size: 11.5px;
-}
-/* One shared label column (subgrid) sized to the widest ability name, so labels align across
-   rows and names show in full instead of truncating in a fixed 104px box. */
-.skill-grid {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 5px 8px;
-  overflow-x: auto;
-}
-.skill-row {
-  display: grid;
-  grid-template-columns: subgrid;
-  grid-column: 1 / -1;
-  align-items: center;
-}
-.srow-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-left-width: 3px;
-  border-radius: 7px;
-  padding: 3px 6px;
-}
-.srow-label img {
-  width: 24px;
-  height: 24px;
-  border-radius: 5px;
-  flex: 0 0 24px;
-}
-.srow-info {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
-  min-width: 0;
-}
-.srow-info .aname {
-  font-weight: 600;
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.srow-info .amax {
-  font-size: 10px;
-  color: var(--muted);
-}
-.srow-cells {
-  display: grid;
-  grid-template-columns: repeat(var(--steps, 16), minmax(12px, 1fr));
-  gap: 2px;
-}
-.pip {
-  height: 20px;
-  display: grid;
-  place-items: center;
-  border-radius: 3px;
-  background: #14181e;
-  border: 1px solid var(--line);
-  font-size: 9px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: #0c0f13;
-}
-.pip.on {
-  border-color: transparent;
-}
+  /* Climb tips (lib/fundamentals.climbAdvice): the 1–2 weakest controllable levers as concrete
+     "do this next game" advice. Its own panel — the advice spans farm AND survival, so it
+     belonged inside neither the Economy nor the Combat card. */
+  .climbcard .climbtip {
+    margin-bottom: 6px;
+  }
+  .climbcard .lastgamelink {
+    margin-top: 2px;
+  }
 
-/* Games-window selector in the fundamentals header — scoping by games, not days, is what keeps a
-   long break out of the average (lib/fundamentals.recentWindow). */
-.fundwin {
-  margin-left: 8px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--muted);
-  font-size: 11px;
-  padding: 1px 4px;
-  cursor: pointer;
-}
+  /* Games-window selector in the fundamentals header — scoping by games, not days, is what keeps
+     a long break out of the average (lib/fundamentals.recentWindow). */
+  .fundwin {
+    background: transparent;
+    border: 1px solid var(--rule);
+    color: var(--ink-2);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    padding: 1px 4px;
+    cursor: pointer;
+  }
 
-/* "climbing" tag next to the benchmark rank in the fundamentals header. */
-.climbmark {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--purple);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0 4px;
-  vertical-align: middle;
-}
+  /* "climbing" tag next to the benchmark rank in the fundamentals header. */
+  .climbmark {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.11em;
+    color: var(--spirit);
+    border: 1px solid color-mix(in oklab, var(--spirit) 35%, var(--rule));
+    padding: 1px 5px;
+  }
 
-/* "Analyze your last game" bridge from the fundamentals card into the match modal. */
-.lastgamelink {
-  display: inline-block;
-  margin-top: 8px;
-  background: none;
-  border: none;
-  color: var(--accent);
-  cursor: pointer;
-  font-size: 12.5px;
-  padding: 0;
-}
-.lastgamelink:hover {
-  text-decoration: underline;
-}
+  /* "Analyze your last game" bridge from the fundamentals panel into the match modal. */
+  .lastgamelink {
+    display: inline-block;
+    margin-top: 8px;
+    background: none;
+    border: 0;
+    padding: 0;
+    color: var(--ink-2);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12.5px;
+    text-decoration: underline;
+    text-decoration-color: var(--rule-strong);
+    text-underline-offset: 2px;
+  }
+  .lastgamelink:hover {
+    color: var(--accent-ui);
+    text-decoration-color: var(--accent-ui);
+  }
 
+  /* ---- Community check ----------------------------------------------------- */
+  .community .hint {
+    /* Cap the measure so the hint doesn't drive the card's width — the build records should. */
+    max-width: 52ch;
+    color: var(--ink-2);
+    line-height: 1.5;
+  }
+  .crows {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  /* A community build is a discrete record — a citation — so it keeps a hairline frame where the
+     rest of the page uses bare rules. Flat and square; the frame is the only thing it needs. */
+  .crow {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    flex: 1 1 300px;
+    min-width: 0;
+    max-width: 520px;
+    padding: 8px 11px;
+    border: 1px solid var(--rule);
+    font-size: 12.5px;
+  }
+  .crow.agree {
+    border-color: var(--accent-rule);
+    background: var(--accent-wash);
+  }
+  .crow .ctag {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-3);
+    flex: 0 0 auto;
+  }
+  .crow.agree .ctag {
+    color: var(--accent-ui);
+  }
+  .crow .cname {
+    font-weight: 600;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .crow .cstats {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 9px;
+  }
+  .crow .cfoot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 2px;
+  }
+  .crow .cwr {
+    font-weight: 600;
+  }
+  .crow .cmeta {
+    color: var(--ink-3);
+    font-size: 11px;
+  }
+  .crow .cid {
+    flex: 0 0 auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-2);
+    background: transparent;
+    border: 1px solid var(--rule);
+    padding: 1px 6px;
+    cursor: pointer;
+  }
+  .crow .cid:hover {
+    border-color: var(--accent-ui);
+    color: var(--accent-ui);
+  }
+
+  /* ---- Hover preview of a community build's items (portaled to body) -------- */
+  .buildprev {
+    position: fixed;
+    z-index: 50;
+    width: min(272px, calc(100vw - 16px));
+    background-color: var(--frost);
+    background-image: var(--grain);
+    background-blend-mode: soft-light;
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+    backdrop-filter: blur(16px) saturate(1.4);
+    border: 1px solid var(--rule-strong);
+    padding: 10px 11px;
+    box-shadow: var(--shadow-pop);
+    pointer-events: none;
+    color: var(--ink);
+    /* Portaled to document.body, so it's outside .app and won't inherit its font. */
+    font: 400 12.5px/1.45 var(--font-text);
+  }
+  /* Native path (Popover API + CSS anchor positioning, see SUPPORTS_ANCHOR): the preview is a
+     top-layer [popover] anchored to its row's `anchor-name` — below the row by default, flipping
+     above / pinning to the right edge via @position-try when it would leave the viewport. The
+     UA [popover] margin/inset/padding are reset so only the anchor() placement applies. */
+  .buildprev[popover] {
+    inset: auto;
+    margin: 0;
+    left: anchor(left);
+    top: calc(anchor(bottom) + 10px);
+    position-try-fallbacks: --prev-up, --prev-pin-right, --prev-up-pin-right;
+  }
+  @position-try --prev-up {
+    top: auto;
+    bottom: calc(anchor(top) + 10px);
+  }
+  @position-try --prev-pin-right {
+    left: auto;
+    right: 8px;
+  }
+  @position-try --prev-up-pin-right {
+    top: auto;
+    bottom: calc(anchor(top) + 10px);
+    left: auto;
+    right: 8px;
+  }
+  /* Tap-pinned on touch (see usePinnablePopover): a real, scrollable surface, not a pass-through
+     tooltip — so a tap lands on it (not the row behind) and a tall preview can be read on a phone. */
+  .buildprev.sticky {
+    pointer-events: auto;
+    max-height: calc(100vh - 16px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .buildprev .bp-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .buildprev .bp-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .buildprev .bp-id {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    flex: 0 0 auto;
+  }
+  .buildprev .bp-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  /* Diff verdict colours (see BuildPreview): the border stays the slot colour, the ring says how
+     the two builds relate — accent = both run it, warn = both run it at different commitment,
+     pos = their core pick we skip, neg = our pick their menu lacks. `.dim` marks the flex-level
+     half of a bucket so core-level (dis)agreements read first. */
+  .buildprev .bp-item {
+    position: relative;
+    width: 26px;
+    height: 26px;
+    border: 1px solid;
+    overflow: hidden;
+  }
+  .buildprev .bp-item.agree {
+    box-shadow: 0 0 0 1px var(--accent-ui);
+  }
+  .buildprev .bp-item.differ {
+    box-shadow: 0 0 0 1px var(--warn);
+  }
+  .buildprev .bp-item.added {
+    box-shadow: 0 0 0 1px var(--pos);
+  }
+  .buildprev .bp-item.missing {
+    box-shadow: 0 0 0 1px var(--neg);
+  }
+  .buildprev .bp-item.dim {
+    opacity: 0.55;
+  }
+  /* Role-mismatch direction: ▼ our core is only situational for them, ▲ their core is only
+     situational for us. Corner badge like the skill-rank one. */
+  .buildprev .bp-flag {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    padding: 0 1px;
+    font-family: var(--font-mono);
+    font-size: 8px;
+    line-height: 11px;
+    background: rgba(0, 0, 0, 0.72);
+    color: #e8bf6a;
+  }
+  .buildprev .bp-sub {
+    margin: 10px 0 5px;
+  }
+  .buildprev .bp-sub.agree {
+    color: var(--accent-ui);
+  }
+  .buildprev .bp-sub.differ {
+    color: var(--warn);
+  }
+  .buildprev .bp-sub.added {
+    color: var(--pos);
+  }
+  .buildprev .bp-sub.missing {
+    color: var(--neg);
+  }
+  /* Their situational-only tail, collapsed to a count — the kitchen-sink part of the menu. */
+  .buildprev .bp-tail,
+  .buildprev .bp-foot {
+    margin-top: 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--ink-3);
+  }
+  .buildprev .bp-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .buildprev .bp-skills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .buildprev .bp-skill {
+    position: relative;
+    width: 26px;
+    height: 26px;
+    border: 1px solid;
+    overflow: hidden;
+  }
+  .buildprev .bp-skill img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  /* Their max order diverges from ours at this ability — dim it so the agreement reads first. */
+  .buildprev .bp-skill.moved {
+    opacity: 0.45;
+    filter: grayscale(0.5);
+  }
+  .buildprev .bp-skrank {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    min-width: 11px;
+    padding: 0 1px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    line-height: 11px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    background: rgba(0, 0, 0, 0.72);
+    color: #fff;
+  }
+
+  /* ---- Skill order --------------------------------------------------------- */
+  .skills {
+    margin: 4px 0 10px;
+  }
+  /* One shared label column (subgrid) sized to the widest ability name, so labels align across
+     rows and names show in full instead of truncating in a fixed box. */
+  .skill-grid {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 5px 10px;
+    overflow-x: auto;
+  }
+  .skill-row {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
+    align-items: center;
+  }
+  .srow-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 2px 0 2px 7px;
+    border-left: 2px solid; /* ability colour, set inline */
+  }
+  .srow-label img {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+  }
+  .srow-info {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+    min-width: 0;
+  }
+  .srow-info .aname {
+    font-weight: 600;
+    font-size: 11.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .srow-info .amax {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+  }
+  .srow-cells {
+    display: grid;
+    grid-template-columns: repeat(var(--steps, 16), minmax(12px, 1fr));
+    gap: 2px;
+  }
+  /* One cell per ability point. An empty cell is a hairline outline, a spent one is filled with
+     the ability's colour and carries its step number — a punch-card row, not a row of buttons. */
+  .pip {
+    height: 19px;
+    display: grid;
+    place-items: center;
+    background: transparent;
+    border: 1px solid var(--rule);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: #0d0d0c;
+  }
+  .pip.on {
+    border-color: transparent;
+  }
 }

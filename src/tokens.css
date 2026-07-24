@@ -1,0 +1,181 @@
+/* ============================================================================
+   Vibelock design tokens — the whole visual system in one place.
+
+   The look is a technical document: hairline rules instead of floating cards,
+   a mono voice for anything numeric or labelled, an editorial grotesk for
+   prose, and colour spent only where it carries meaning (a delta's sign, a
+   phase's accent). Everything below is a *semantic* name — components never
+   reach for a raw hex, so retuning the palette is a one-file edit and light
+   mode comes for free.
+
+   Dark is the canonical mode (it's a game tool, and the glow/frost effects are
+   designed for it); light is the same system with the substrate inverted and
+   the signal colours re-picked at readable lightness. `light-dark()` does the
+   switching, so there is exactly one declaration per token.
+   ============================================================================ */
+
+/* Cascade layers, declared here because tokens.css is the first stylesheet the app imports
+   (main.tsx) — component styles live next to their components in the components layer, and the
+   narrow-screen overrides win last via the responsive layer regardless of import order. */
+@layer base, components, responsive;
+
+/* Registered so it can *transition*: the per-hero theming (lib/heroAccent, set on :root from
+   App.tsx) retunes it per portrait, and registration makes every accent-tinted detail cross-fade
+   to the new hue instead of snapping. A colour fade, not motion — fine under reduced motion. */
+@property --accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: hsl(210 78% 70%);
+}
+
+@layer base {
+  :root {
+    /* Enables light-dark() and tells the UA to theme scrollbars/form controls to match. */
+    color-scheme: light dark;
+
+    /* ---- Substrate -------------------------------------------------------
+       Warm near-black rather than the usual blue-slate: Deadlock's own art is
+       deco brass-and-sepia, and a warm ground keeps the brass souls figures and
+       the per-hero accents from reading as stray hues on cold grey. Light mode
+       is a warm paper, never pure white. */
+    --paper: light-dark(#f4f1e9, #0e0e0d);
+    --surface: light-dark(#fbf9f4, #16161a);
+    --surface-2: light-dark(#eeeae0, #1e1e23);
+    --rule: light-dark(#dcd6c8, #2b2b31);
+    --rule-strong: light-dark(#b9b2a1, #3f3f47);
+
+    /* ---- Ink -------------------------------------------------------------
+       Three steps only. If a thing needs a fourth, it wants a different weight
+       or size, not a fourth grey. */
+    --ink: light-dark(#191713, #e9e7e1);
+    --ink-2: light-dark(#57524a, #9b978e);
+    --ink-3: light-dark(#847d70, #6d6a65);
+
+    /* ---- Signal ----------------------------------------------------------
+       Held at matched chroma in oklch so no single hue shouts over the others.
+       -wash variants are the faintest possible tint — a region marker, never a
+       filled badge. */
+    --pos: light-dark(oklch(0.5 0.13 152), oklch(0.79 0.13 152));
+    --pos-wash: color-mix(in oklab, var(--pos) 12%, transparent);
+    --neg: light-dark(oklch(0.51 0.16 27), oklch(0.72 0.14 27));
+    --neg-wash: color-mix(in oklab, var(--neg) 12%, transparent);
+    --warn: light-dark(oklch(0.53 0.12 75), oklch(0.81 0.12 75));
+    --warn-wash: color-mix(in oklab, var(--warn) 13%, transparent);
+    --spirit: light-dark(oklch(0.48 0.17 305), oklch(0.72 0.14 305));
+    --spirit-wash: color-mix(in oklab, var(--spirit) 13%, transparent);
+    /* Souls are brass on both sides of the switch — it's a currency, not a verdict. */
+    --gold: light-dark(oklch(0.55 0.11 78), oklch(0.82 0.11 78));
+
+    /* ---- Accent (per-hero) -----------------------------------------------
+       lib/heroAccent emits hsl(h 78% 70%) — tuned for the dark ground. Light
+       mode relights the same hue to ink weight via relative colour syntax, so
+       the hero identity survives the switch and the contrast doesn't. */
+    --accent: hsl(210 78% 70%);
+    --accent-ui: light-dark(hsl(from var(--accent) h 68% 34%), var(--accent));
+    --accent-wash: color-mix(in oklab, var(--accent-ui) 12%, transparent);
+    --accent-rule: color-mix(in oklab, var(--accent-ui) 45%, var(--rule));
+    transition: --accent 0.5s ease;
+
+    /* ---- Type ------------------------------------------------------------
+       Three families, each with one job. Space Grotesk's angular terminals give
+       headings a voice at display sizes; Archivo is the workhorse (big x-height,
+       holds up at 12px in a dense table); IBM Plex Mono carries every number,
+       label, and identifier — that mono column down the page is most of what
+       makes the thing read as an instrument rather than a feed. */
+    --font-display: "Space Grotesk", system-ui, sans-serif;
+    --font-text:
+      "Archivo", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    /* ---- Geometry --------------------------------------------------------
+       There are no rounded corners in this design — a radius is the single
+       biggest tell separating a component library from a drawn document, and
+       even 2px of it reads as a widget. The only radius token left is for the
+       things that are genuinely round in the world: portraits. (The UA reset in
+       App.css zeroes the radius Firefox puts on form controls and <dialog>.) */
+    --r-pill: 999px;
+    --gutter: 26px;
+    --gutter-narrow: 15px;
+
+    /* ---- Grain -----------------------------------------------------------
+       One fractal-noise tile reused by every frosted surface. Blended with
+       `background-blend-mode: soft-light` *inside* the layer, so it textures the
+       fill without ever sampling (and smearing) the content behind it. */
+    --grain: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0.33 0.33 0.33 0 -0.1 0.33 0.33 0.33 0 -0.1 0.33 0.33 0.33 0 -0.1 0 0 0 0 0.4'/></filter><rect width='160' height='160' filter='url(%23g)'/></svg>");
+
+    /* Frosted-glass recipe, shared by the masthead and every floating surface. */
+    --frost: light-dark(rgba(251, 249, 244, 0.82), rgba(16, 16, 19, 0.82));
+
+    /* Non-colour tokens can't use light-dark() — it resolves to a <color> and nothing else — so
+       these carry the light value and the dark block below overrides them. Light paper wants a
+       heavy fibre and a warm cast shadow; dark wants a whisper of grain (any more and the
+       near-black lifts to grey) and a deep neutral one.
+
+       Keyed off [data-theme] (written by lib/theme) rather than `prefers-color-scheme`, which
+       reports the *OS* — a reader who forces light on a dark machine would otherwise get light
+       colours wearing dark-mode grain and shadows. Every mode-dependent rule that isn't a plain
+       colour has to use this selector for the same reason. */
+    --grain-opacity: 0.32;
+    --shadow-pop: 0 10px 30px rgba(60, 50, 30, 0.16);
+  }
+
+  :root[data-theme="dark"] {
+    --grain-opacity: 0.035;
+    --shadow-pop: 0 10px 30px rgba(0, 0, 0, 0.55);
+  }
+
+  /* ---- Monochrome art on paper -------------------------------------------
+     Deadlock's ability icons are pure white line art on transparency (sampled across the roster:
+     zero chroma, luminance ~1.0), drawn for a dark game HUD. On the light theme they're white on
+     cream — invisible. Since they carry no colour at all, inverting is lossless and turns them
+     into black line art on paper, which is what an ability diagram in a printed manual would look
+     like anyway. Item icons are exempt: they're composited onto a slot-coloured plate, so they
+     read in both themes already. */
+  :root[data-theme="light"] .srow-label img,
+  :root[data-theme="light"] .rel.imbue img,
+  :root[data-theme="light"] .bp-skill img {
+    filter: invert(1);
+  }
+
+  /* ---- Type primitives ---------------------------------------------------
+     Utility-ish, but each is a *typographic role* rather than a style bag, and
+     they're what keep 13 component stylesheets speaking one language. */
+
+  /* Section labels: the mono margin notes that head every band and group. */
+  .lbl,
+  .grouphdr,
+  .pal-hdr,
+  .ic-kind,
+  .ecogrouphdr,
+  .climbhdr,
+  .bp-sub,
+  .econkind,
+  .matchrecent h3 {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    color: var(--ink-3);
+  }
+
+  /* Anything that should line up in a column or be read as a measurement. */
+  .num,
+  .cost,
+  .wr,
+  .n,
+  .pick,
+  .fval,
+  .fpct,
+  .fpop,
+  .cwr,
+  .cmeta,
+  .mwr,
+  .labval,
+  .budget,
+  .time {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "zero" 1; /* slashed zero — it's a data face, let it say so */
+  }
+}

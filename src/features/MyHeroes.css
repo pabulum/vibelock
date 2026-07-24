@@ -1,66 +1,55 @@
 @layer components {
-/* "Your heroes" quick-pick strip — the player's most-played heroes as portrait chips,
-   shown once a Steam id resolves to a profile. Mirrors the enemies row's layout. */
-.myheroes {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 22px 0;
-}
-.myheroes .lbl {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-.myheroes .chip {
-  background: var(--panel2);
-  color: var(--text);
-  border-color: var(--line);
-  padding: 3px 10px 3px 4px;
-}
-.myheroes .chip:hover {
-  background: var(--panel);
-}
-.myheroes .chip.active {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.myheroes .chip.try {
-  border-style: dashed;
-}
-.myheroes .lbl + .chip.try {
-  margin-left: 0;
-}
-.myheroes .chip img {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  object-fit: cover;
-  background: var(--panel);
-}
-.myheroes .lbl {
-  cursor: help;
-}
-/* Expected-tonight win rate on the chip (what-to-queue ordering). */
-.myheroes .chip i {
-  font-style: normal;
-  font-size: 11px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
+  /* "Your heroes" quick-pick strip — the player's most-played heroes as portrait chips, shown
+     once a Steam id resolves to a profile. Mirrors the enemies row's layout. */
+  .myheroes {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px var(--gutter) 0;
+  }
+  .myheroes .lbl {
+    cursor: help;
+  }
+  /* Same asymmetry as the matchup chips: the leading portrait needs clearance off the frame on
+     all four sides, the trailing text only needs the optical gap. */
+  .myheroes .chip {
+    gap: 8px;
+    padding: 5px 11px 5px 6px;
+  }
+  .myheroes .chip.active {
+    border-color: var(--accent-ui);
+    color: var(--accent-ui);
+  }
+  .myheroes .chip.try {
+    border-style: dashed;
+  }
+  .myheroes .chip img {
+    width: 22px;
+    height: 22px;
+    border-radius: var(--r-pill);
+    object-fit: cover;
+    background: var(--surface-2);
+  }
+  /* Expected-tonight win rate on the chip (what-to-queue ordering). */
+  .myheroes .chip i {
+    font-family: var(--font-mono);
+    font-style: normal;
+    font-size: 10.5px;
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
 
-.chip .closer {
-  margin-left: 4px;
-  font-size: 15px;
-  line-height: 1;
-}
-.chip .closer.up {
-  color: #54c66b;
-}
-.chip .closer.down {
-  color: #d89a5a;
-}
-
+  /* Closing-power direction from the Lab bake — a signed arrow, not a coloured dot. */
+  .chip .closer {
+    margin-left: 2px;
+    font-size: 13px;
+    line-height: 1;
+  }
+  .chip .closer.up {
+    color: var(--pos);
+  }
+  .chip .closer.down {
+    color: var(--warn);
+  }
 }

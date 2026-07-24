@@ -21,6 +21,11 @@ import type { AdoptionMover } from "../lib/patchMovers";
 
 const COUNTER_ADDS_PER_PHASE = 3; // cap on counter-only picks folded into a phase's swaps
 
+// Column numerals. The build is a sequence, and numbering the columns says so without a single
+// arrow — it also gives the overtime column (numbered in panels.tsx) a place in the same series
+// rather than looking like a stray fifth card.
+const PHASE_NUMERALS = ["I", "II", "III", "IV"];
+
 // Midpoint of each flow column's fixed time window (Lane 0–9, Early mid 9–20, Mid 20–30, 30+) —
 // where the phase's "typical lead ≈ X% win" note reads the baked WP surface.
 const PHASE_MID_S = [270, 870, 1500, 2100];
@@ -112,6 +117,9 @@ export function PhaseColumns(props: {
             style={{ viewTransitionName: `phase-${phase.column}` }}
           >
             <h2>
+              <span className="phasenum" aria-hidden="true">
+                {PHASE_NUMERALS[phase.column] ?? ""}
+              </span>
               {phase.label} <span className="time">{phase.timeLabel}</span>
             </h2>
             <div className="budget">

@@ -6,5 +6,10 @@ body,
 
 body {
   margin: 0;
-  background: #0f1216;
+  /* Matches --paper in tokens.css. Duplicated as a literal because the body paints before the
+     app's stylesheet has necessarily applied, and a flash of white behind a dark page is worse
+     than a token in two places. `color-scheme` is deliberately NOT set here — it's inherited from
+     :root, which is the single element lib/theme writes to, and re-declaring it on body would
+     shadow that for the entire document. */
+  background: light-dark(#f4f1e9, #0e0e0d);
 }

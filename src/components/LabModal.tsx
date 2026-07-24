@@ -72,7 +72,7 @@ export function LabModal({
 
       {error && (
         <div className="banner error">
-          ⚠ Couldn&rsquo;t load the Lab data — {error}
+          △ Couldn&rsquo;t load the Lab data — {error}
         </div>
       )}
       {!stats && !error && <p className="labintro">Loading…</p>}

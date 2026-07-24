@@ -691,7 +691,7 @@ function AppInner() {
         busy={busy}
       />
 
-      {error && <div className="banner error">⚠ {error}</div>}
+      {error && <div className="banner error">△ {error}</div>}
 
       {movers && (
         <MoversStrip

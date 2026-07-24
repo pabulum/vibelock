@@ -268,7 +268,7 @@ test("share panel paints the card and offers the app link", async () => {
     .element(screen.getByRole("heading", { name: /^Lane/ }), BAKE)
     .toBeVisible();
 
-  await screen.getByRole("button", { name: "⤴ Share" }).click();
+  await screen.getByRole("button", { name: "Share" }).click();
 
   // The card paints asynchronously (icon loads settle first, failures degrade to
   // placeholder tiles) — poll for the finished canvas.

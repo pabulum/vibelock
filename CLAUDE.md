@@ -29,6 +29,21 @@ docs/METHODOLOGY.md before touching anything statistical.
   facade. Statistical primitives live in src/lib/stats.ts and are unit-tested.
 - URL is the source of truth for selection state (src/lib/urlState.ts); shared links
   must reproduce the sender's view.
+- **Design system: src/tokens.css** — the whole palette, type scale, and geometry, as
+  semantic tokens (`--paper`/`--ink`/`--rule`, `--pos`/`--neg`/`--warn`/`--spirit`,
+  `--accent-ui`, `--r-sm`). Component stylesheets must never reach for a raw hex; light
+  mode is `light-dark()` on those tokens and comes free. The look is a technical document:
+  hairline rules instead of cards, **no radii at all** (only `--r-pill`, for portraits; the UA
+  reset in App.css zeroes what Firefox puts on form controls), mono (IBM Plex Mono) for
+  every number and label, Archivo for running text, Space Grotesk for headings. Colour is
+  meaning-only — a delta inside ±2pt gets none.
+- **Mode-dependent rules that aren't colours** must key off `:root[data-theme="dark"|"light"]`,
+  never `@media (prefers-color-scheme:)`. `light-dark()` resolves to a `<color>` and nothing
+  else, and the media query reports the *OS* — so with the theme toggle (src/lib/theme.ts,
+  which writes both `color-scheme` and `data-theme` to `<html>`) a forced light theme on a
+  dark machine would otherwise get light colours with dark-mode grain. Current users: grain
+  opacity, shadow recipe, and the invert() that makes Deadlock's white ability art — pure
+  greyscale, luminance ~1.0 — legible on light paper.
 
 ## Verification
 

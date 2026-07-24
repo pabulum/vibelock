@@ -72,12 +72,15 @@ function fmtDelta(d: number): string {
   return `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}`;
 }
 
-/** Color a WR delta: centered on the baseline, so 0 reads neutral, not "bad". */
+/** Colour a WR delta: centered on the baseline, so 0 reads neutral, not "bad". Three steps, not a
+ * continuous ramp — the old green→lime→yellow→red gradient tinted *every* row, which spent the
+ * page's whole colour budget on the observation that most picks are near average. Anything inside
+ * ±2pt is noise around the hero's baseline and gets no colour at all, so the rows that do carry
+ * one are the rows worth looking at. */
 function deltaColor(d: number): string {
-  if (d >= 0.04) return "#54c66b";
-  if (d >= 0.02) return "#a6cf57";
-  if (d >= -0.02) return "#d8c14a";
-  return "#d87a7a";
+  if (d >= 0.02) return "var(--pos)";
+  if (d > -0.02) return "var(--ink-2)";
+  return "var(--neg)";
 }
 
 /** One compact bubble: a single enemy's portrait + this item's edge vs that enemy. */
@@ -270,7 +273,8 @@ export function ItemRow({
   enemiesById?: Map<number, Hero>;
   /** For an imbue-type item: the ability most authors imbue it onto. */
   imbue?: ImbueTarget;
-  /** Set when this item is a current breakout (rising + winning this patch) — shows a 🔥 marker. */
+  /** Set when this item is a current breakout (rising + winning this patch) — shows a ↑ marker,
+   * the same glyph the Trending ticker uses for a breakout. */
   trending?: AdoptionMover;
   muted?: boolean;
   /** This item's roster-wide purchase context from the nightly wp-stats bake (win probability at
@@ -308,7 +312,7 @@ export function ItemRow({
                 className="trendtag"
                 title={`Trending up this patch — pick rate ${Math.round(trending.pickPrev * 100)}% → ${Math.round(trending.pickNew * 100)}% (+${(trending.pickDelta * 100).toFixed(0)}pt), winning ${(trending.winRate * 100).toFixed(0)}% over ${trending.nNew.toLocaleString()} games. Emerging meta — get ahead of it.`}
               >
-                🔥
+                ↑
               </span>
             )}
           </span>
@@ -389,7 +393,7 @@ export function CounterAddRow({
           <span className="pick">counters comp</span>
           <span className={`n ${top.lowSample ? "low" : ""}`}>
             n={top.sample.toLocaleString()}
-            {top.lowSample ? " ⚠" : ""}
+            {top.lowSample ? " △" : ""}
           </span>
         </div>
         <ItemTags

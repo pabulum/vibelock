@@ -236,7 +236,7 @@ export function MatchModal({
       const itemMap = await getItems();
       // "What item beats this hero" is fairly rank-stable, so use a rank FLOOR (no ceiling) rather
       // than the match's narrow band — a wider population gives confident samples instead of the
-      // ⚠ thin ones a single sub-tier yields, and the counter engine already de-leans the matchup.
+      // △ thin ones a single sub-tier yields, and the counter engine already de-leans the matchup.
       const base = {
         heroId: focus.hero_id,
         minBadge,
@@ -380,7 +380,7 @@ export function MatchModal({
         </div>
       )}
 
-      {error && <div className="banner error">⚠ {error}</div>}
+      {error && <div className="banner error">△ {error}</div>}
 
       {notIngested && (
         <div className="banner">
@@ -608,7 +608,7 @@ export function MatchModal({
                     </span>
                     <span className="nemn">
                       n={c.marks[0]?.sample.toLocaleString()}
-                      {c.marks[0]?.lowSample ? " ⚠" : ""}
+                      {c.marks[0]?.lowSample ? " △" : ""}
                     </span>
                   </div>
                 ))}

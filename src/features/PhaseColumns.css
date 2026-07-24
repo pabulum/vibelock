@@ -1,209 +1,249 @@
 @layer components {
-.phases {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(230px, 1fr));
-  gap: 16px;
-  padding: 14px 22px;
-}
-@media (max-width: 1380px) {
+  /* ---- The build, as ruled columns ----------------------------------------
+     Newspaper columns rather than cards: each phase opens with a heavy head rule and a numeral,
+     then runs down the page with nothing boxing it in. Killing the five rounded panels (and the
+     rounded row inside each of them, and the rounded chip inside that) is most of what separates
+     this from a dashboard. */
   .phases {
-    grid-template-columns: repeat(3, minmax(230px, 1fr));
+    display: grid;
+    grid-template-columns: repeat(5, minmax(224px, 1fr));
+    gap: 26px;
+    padding: 20px var(--gutter) 0;
   }
-}
-@media (max-width: 1100px) {
-  .phases {
-    grid-template-columns: repeat(2, minmax(230px, 1fr));
-  }
-}
-@media (max-width: 620px) {
-  .phases {
-    grid-template-columns: 1fr;
-  }
-}
-
-.phase {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 14px;
-}
-
-/* Scroll-driven entrance: on narrow layouts the columns stack below the fold, and each one
-   rises/fades in as it scrolls into view. Progressive enhancement — @supports skips browsers
-   without scroll timelines, reduced-motion opts out. The range end is an absolute 160px (not a
-   % of the column) so a tall column settles crisp once its top has risen 160px above the fold,
-   rather than staying faded until most of it has scrolled past — a partially-entered column at
-   page load reads as an invitation to scroll, not a rendering bug. The transform is transient
-   (identity once entry completes), so it can't permanently re-root fixed-position children. */
-@supports (animation-timeline: view()) {
-  @media (prefers-reduced-motion: no-preference) {
-    .phase {
-      animation: phase-enter ease-out both;
-      animation-timeline: view(block);
-      animation-range: entry 0% entry 160px;
+  @media (max-width: 1380px) {
+    .phases {
+      grid-template-columns: repeat(3, minmax(224px, 1fr));
+      row-gap: 34px;
     }
   }
-}
-@keyframes phase-enter {
-  from {
-    opacity: 0.2;
-    transform: translateY(14px);
+  @media (max-width: 1100px) {
+    .phases {
+      grid-template-columns: repeat(2, minmax(224px, 1fr));
+    }
   }
-}
-
-/* The overtime buy-list is a prioritized shopping list, not a time phase — give it an accent edge
-   and a faint tint so it reads as the culmination of the Lane→Late progression. */
-.phase.overtime {
-  border-color: color-mix(in srgb, var(--accent, #9b6dd1) 55%, var(--line));
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--accent, #9b6dd1) 7%, var(--panel)),
-    var(--panel) 120px
-  );
-  box-shadow: 0 0 0 1px
-    color-mix(in srgb, var(--accent, #9b6dd1) 20%, transparent);
-}
-.phase.overtime h2 .time {
-  color: color-mix(in srgb, var(--accent, #9b6dd1) 80%, var(--muted));
-}
-/* The sell side of the overtime swap: which standing slots to free (weakest first) for the buys
-   below. A quiet callout box, not an item row — these are names to recognize, not picks to weigh. */
-.ot-sell {
-  margin: 2px 0 10px;
-  padding: 6px 8px;
-  font-size: 12px;
-  color: var(--muted);
-  border: 1px dashed var(--line);
-  border-radius: 6px;
-}
-
-.phase h2 {
-  margin: 0 0 10px;
-  font-size: 15px;
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-.phase h2 .time {
-  font-size: 12px;
-  color: var(--muted);
-  font-weight: 500;
-}
-
-.budget {
-  margin: -4px 0 6px;
-  font-size: 12px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.catbar {
-  display: flex;
-  height: 14px;
-  margin: 0 0 12px;
-  border-radius: 4px;
-  overflow: hidden;
-  background: var(--panel2);
-  font-variant-numeric: tabular-nums;
-}
-.catseg {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  font-size: 9px;
-  font-weight: 700;
-  color: #0d1117;
-  white-space: nowrap;
-}
-.catseg + .catseg {
-  box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.3);
-}
-
-/* Per-phase tempo lines: ahead-of-pace / behind-of-pace advice. */
-.tempo {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 8px 0 2px;
-  padding: 7px 9px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #141922;
-}
-.tline {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  line-height: 1.5;
-}
-.tlbl {
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-.tline.ahead .tlbl {
-  color: #79c98f;
-}
-.tline.behind .tlbl {
-  color: #d98b6a;
-}
-.tact {
-  color: var(--muted);
-  font-weight: 600;
-  margin-left: 2px;
-}
-.tact.risky {
-  color: #e0a85a;
-}
-.tchip {
-  padding: 1px 7px;
-  border-radius: 10px;
-  border-left: 2px solid var(--line);
-  background: #1a1f27;
-  color: #c2ccd8;
-  font-size: 10.5px;
-  font-weight: 600;
-}
-
-.grouphdr {
-  margin: 14px 0 8px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-  border-top: 1px dashed var(--line);
-  padding-top: 10px;
-}
-.grouphdr.core {
-  border-top: none;
-  padding-top: 0;
-  margin-top: 0;
-  color: #cdd6e3;
-}
-
-/* Phase-header lead note (from the baked WP surface) and chip closing-power glyphs. */
-.wpnote {
-  color: var(--muted);
-  cursor: help;
-}
-
-/* Palette item jump: one accent pulse on the row the jump landed on (class toggled by
-   flashItemRow in App.tsx). Pure highlight — no transform — so it's reduced-motion safe. */
-.item.rowflash {
-  animation: rowflash 1.5s ease-out;
-}
-@keyframes rowflash {
-  0%,
-  35% {
-    box-shadow: inset 0 0 0 2px var(--accent);
-    background: color-mix(in srgb, var(--accent) 14%, var(--panel2));
+  @media (max-width: 620px) {
+    .phases {
+      grid-template-columns: 1fr;
+    }
   }
-  100% {
-    box-shadow: inset 0 0 0 2px transparent;
-    background: var(--panel2);
-  }
-}
 
+  .phase {
+    padding-top: 11px;
+    border-top: 2px solid var(--ink);
+    min-width: 0;
+  }
+
+  /* Scroll-driven entrance: on narrow layouts the columns stack below the fold, and each one
+     rises/fades in as it scrolls into view. Progressive enhancement — @supports skips browsers
+     without scroll timelines, reduced-motion opts out. The range end is an absolute 160px (not a
+     % of the column) so a tall column settles crisp once its top has risen 160px above the fold,
+     rather than staying faded until most of it has scrolled past — a partially-entered column at
+     page load reads as an invitation to scroll, not a rendering bug. The transform is transient
+     (identity once entry completes), so it can't permanently re-root fixed-position children. */
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .phase {
+        animation: phase-enter ease-out both;
+        animation-timeline: view(block);
+        animation-range: entry 0% entry 160px;
+      }
+    }
+  }
+  @keyframes phase-enter {
+    from {
+      opacity: 0.2;
+      transform: translateY(14px);
+    }
+  }
+
+  /* The overtime buy-list is a prioritised shopping list, not a time phase — the accent head rule
+     and a fade of accent wash under it mark it as the culmination of the Lane→Late run without
+     needing a differently-shaped container. */
+  /* This is the only column that paints a background, so it's the only one whose edges are
+     visible — and flush content against a lit edge reads as a cropping bug. It gets real interior
+     padding, pulled back out with a matching negative margin so the *content* still lines up with
+     the four unpainted columns on either side; only the tint and its bloom bleed into the gutter. */
+  .phase.overtime {
+    margin: 0 -13px;
+    padding: 11px 13px 16px;
+    border-top-color: var(--accent-ui);
+    background: linear-gradient(180deg, var(--accent-wash), transparent 170px);
+    /* A bloom off the head rule only — the column is marked by light spilling from its own edge
+       rather than by a differently-shaped container. */
+    box-shadow: 0 -6px 18px -8px color-mix(in oklab, var(--accent) 70%, transparent);
+  }
+  /* At one column wide the negative margin would push the tint past the page gutter. */
+  @media (max-width: 620px) {
+    .phase.overtime {
+      margin: 0;
+    }
+  }
+  .phase.overtime .phasenum,
+  .phase.overtime h2 .time {
+    color: var(--accent-ui);
+  }
+
+  .phase h2 {
+    margin: 0 0 7px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 8px;
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  /* The column numeral: mono, so it aligns with every other figure on the page, and sized down
+     so it labels the heading instead of competing with it. */
+  .phase h2 .phasenum {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: var(--ink-2);
+  }
+  .phase h2 .time {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+
+  .budget {
+    margin: 0 0 9px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 1.55;
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .wpnote {
+    cursor: help;
+  }
+
+  /* Souls-per-category split. Flat and square: it's a measuring bar, and a pill-shaped one with
+     rounded caps lies about where the segments start and end. */
+  .catbar {
+    display: flex;
+    height: 12px;
+    margin: 0 0 14px;
+    background: var(--surface-2);
+    font-variant-numeric: tabular-nums;
+  }
+  .catseg {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #0d0d0c;
+    white-space: nowrap;
+  }
+  .catseg + .catseg {
+    box-shadow: inset 1px 0 0 var(--paper);
+  }
+
+  /* Per-phase tempo lines: ahead-of-pace / behind-of-pace advice. Ruled top and bottom rather
+     than boxed — it's an aside inside the column, not a widget sitting in it. */
+  .tempo {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin: 0 0 4px;
+    padding: 8px 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+  .tline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .tlbl {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .tline.ahead .tlbl {
+    color: var(--pos);
+  }
+  .tline.behind .tlbl {
+    color: var(--neg);
+  }
+  .tact {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-2);
+  }
+  .tact.risky {
+    color: var(--warn);
+  }
+  /* An item named in a tempo line. The slot colour arrives as an inline `borderColor`, so the
+     border is declared left-only here and that inline value tints just the tick. */
+  .tchip {
+    padding: 0 0 0 6px;
+    border-style: none none none solid;
+    border-left-width: 2px;
+    color: var(--ink-2);
+    font-size: 11.5px;
+  }
+
+  /* Group headings inside a column ("Build", "Situational swaps"). The rule above is what
+     separates the groups; the label just names them. */
+  .grouphdr {
+    margin: 16px 0 8px;
+    padding-top: 9px;
+    border-top: 1px solid var(--rule);
+  }
+  .grouphdr.core {
+    border-top: none;
+    padding-top: 0;
+    margin-top: 10px;
+    color: var(--ink-2);
+  }
+
+  /* The sell side of the overtime swap: which standing slots to free (weakest first) for the buys
+     below. A quiet indented note, not an item row — these are names to recognise, not picks to
+     weigh. */
+  .ot-sell {
+    margin: 2px 0 10px;
+    padding-left: 9px;
+    border-left: 2px solid var(--rule-strong);
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--ink-2);
+  }
+
+  /* Palette item jump: one accent pulse on the row the jump landed on (class toggled by
+     flashItemRow in App.tsx). Pure highlight — no transform — so it's reduced-motion safe. */
+  .item.rowflash {
+    animation: rowflash 1.5s ease-out;
+  }
+  @keyframes rowflash {
+    0%,
+    35% {
+      background: var(--accent-wash);
+      box-shadow: inset 2px 0 0 var(--accent-ui);
+    }
+    100% {
+      background: transparent;
+      box-shadow: inset 2px 0 0 transparent;
+    }
+  }
 }

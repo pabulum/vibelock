@@ -233,6 +233,9 @@ export function OvertimeColumn({
       style={{ viewTransitionName: "phase-overtime" }}
     >
       <h2>
+        <span className="phasenum" aria-hidden="true">
+          V
+        </span>
         Overtime buys <span className="time">build full · 30+ min</span>
       </h2>
       <div className="budget">
@@ -335,7 +338,7 @@ export function SkillOrder({
         Skill order{" "}
         <span className="sub">
           the standard order · n={skill.sample.toLocaleString()} players
-          {skill.lowSample && <span className="warn"> · ⚠ thin sample</span>}
+          {skill.lowSample && <span className="warn"> · △ thin sample</span>}
         </span>
       </h2>
       <div

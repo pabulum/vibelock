@@ -1,35 +1,8 @@
-/* --accent is registered so it can *transition*: the per-hero theming (lib/heroAccent, set on
-   :root from App.tsx) retunes it per portrait, and registration makes every accent-tinted
-   detail cross-fade to the new hue instead of snapping. A color fade, not motion — fine under
-   prefers-reduced-motion. */
-@property --accent {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: #6fb1ff;
-}
-
-/* Cascade layers: base < components < responsive. Component styles live next to their
-   components (features/*.css, components/*.css) in the components layer; the narrow-screen
-   overrides win last via the responsive layer regardless of import order. */
-@layer base, components, responsive;
+/* App shell: the page substrate, the masthead, the loading choreography, and the handful of
+   genuinely global atoms. Tokens and type primitives live in tokens.css; everything else is
+   in the stylesheet next to its component. */
 
 @layer base {
-  :root {
-    --bg: #0f1216;
-    --panel: #171b21;
-    --panel2: #1d222a;
-    --line: #2a313b;
-    --text: #e6e9ee;
-    --muted: #98a2b3;
-    --accent: #6fb1ff;
-    transition: --accent 0.5s ease;
-    --purple: #9b6dd1; /* Deadlock spirit purple */
-    /* Brand type, matching the Open Graph card. Space Grotesk for the wordmark (and available for
-     headings); Archivo for the italic hero flavor lines. Both fall back to the system UI stack. */
-    --font-display: "Space Grotesk", system-ui, sans-serif;
-    --font-tagline: "Archivo", system-ui, sans-serif;
-  }
-
   * {
     box-sizing: border-box;
   }
@@ -38,55 +11,89 @@
     margin: 0;
   }
 
-  .app {
-    min-height: 100vh;
-    background: var(--bg);
-    color: var(--text);
-    font:
-      14px/1.45 system-ui,
-      -apple-system,
-      Segoe UI,
-      Roboto,
-      sans-serif;
-    padding: 0 0 40px;
+  /* Firefox rounds buttons, selects, text inputs and <dialog> by default, and Chrome rounds some
+     of them too — which is why a control could still show soft corners on a page whose stylesheets
+     never ask for a radius. Zero it once here instead of per component, so a new control can't
+     quietly reintroduce the one shape this design doesn't have. */
+  button,
+  input,
+  select,
+  textarea,
+  fieldset,
+  dialog {
+    border-radius: 0;
   }
 
+  /* Paper grain. A fixed layer in the negative stacking level, so it textures the page ground
+     without ever sitting between the reader and the text — a full-page overlay with a blend mode
+     would soften every glyph on the page. Strength differs per mode on purpose: dark needs a
+     lifting speckle to stop the near-black reading as a void, light wants a heavier fibre to read
+     as stock rather than as screen. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image: var(--grain);
+    opacity: var(--grain-opacity);
+  }
+
+  .app {
+    min-height: 100vh;
+    background: transparent; /* the paper is body's, so the fixed grain shows through */
+    color: var(--ink);
+    font: 400 13.5px/1.5 var(--font-text);
+    padding: 0 0 56px;
+  }
+
+  /* ---- Masthead -----------------------------------------------------------
+     A newspaper nameplate, not a nav bar: the wordmark sets tight and heavy on the left, the
+     controls run as a labelled rail on the right, and a single hairline closes the band. Frosted
+     so the page slides under it rather than being clipped by it. */
   .topbar {
     position: sticky;
     top: 0;
     z-index: 5;
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     justify-content: space-between;
-    gap: 16px;
-    padding: 14px 22px;
-    background: rgba(15, 18, 22, 0.92);
-    backdrop-filter: blur(6px);
-    border-bottom: 1px solid var(--line);
+    gap: 20px;
+    padding: 13px var(--gutter) 11px;
+    background-color: var(--frost);
+    background-image: var(--grain);
+    background-blend-mode: soft-light;
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    backdrop-filter: blur(14px) saturate(1.4);
+    border-bottom: 1px solid var(--rule);
   }
 
   .brand {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: 10px;
     min-width: 0;
-    font-size: 17px;
-    font-weight: 700;
-    letter-spacing: 0.2px;
+    padding-bottom: 2px;
   }
   .brandname {
     flex: 0 0 auto;
     font-family: var(--font-display);
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    color: var(--ink);
   }
-  /* Selected hero's flavor line — small, italic, muted. */
+  /* Selected hero's flavor line — the editorial half of the masthead, set in the text face's
+     italic against the display wordmark. Rules on either side make it a pull-quote rather than
+     a subtitle drifting beside the logo. */
   .tagline {
     min-width: 0;
-    font-family: var(--font-tagline);
+    padding-left: 11px;
+    border-left: 1px solid var(--rule);
+    font-family: var(--font-text);
     font-size: 12px;
-    font-weight: 400;
     font-style: italic;
-    color: var(--muted);
-    letter-spacing: 0;
+    color: var(--ink-2);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -97,7 +104,11 @@
   .tagline::after {
     content: "”";
   }
-  @media (max-width: 760px) {
+  /* The rail (five fields plus five buttons) is what actually sets the masthead's minimum width,
+     and the tagline is the one piece of it that's pure flavour — so it's the piece that goes when
+     the two would fight. Below this it doesn't hide because the screen is small, it hides because
+     the alternative is a wordmark squeezed into an ellipsis. */
+  @media (max-width: 1500px) {
     .tagline {
       display: none;
     }
@@ -108,10 +119,10 @@
     position: relative;
     flex: 0 0 auto;
     display: block;
-    background: linear-gradient(135deg, #241b35, #2b2444);
+    background: var(--surface-2);
     /* Asymmetric beveled-shard silhouette — deliberately off the usual square/circle. */
     clip-path: polygon(28% 0%, 100% 8%, 86% 72%, 58% 100%, 0% 84%, 10% 30%);
-    filter: drop-shadow(0 0 6px rgba(155, 109, 209, 0.4));
+    filter: drop-shadow(0 0 5px var(--spirit-wash));
   }
   .shufmark img {
     width: 100%;
@@ -125,7 +136,7 @@
     place-items: center;
     width: 100%;
     height: 100%;
-    color: var(--accent);
+    color: var(--accent-ui);
     font-size: 0.66em;
   }
   @keyframes shufin {
@@ -139,17 +150,17 @@
     }
   }
 
-  /* Indeterminate loading strip riding the bottom edge of the sticky header. A faint always-on track
-   (the strip's own background) reads as "active", and a brighter comet sweeps across it on a tight,
-   steady cadence — the old single 2.3s ease-in-out pass left long dead gaps that read as "stalled". */
+  /* Indeterminate loading strip riding the bottom edge of the sticky header. A faint always-on
+     track reads as "active", and a brighter comet sweeps across it on a tight, steady cadence —
+     a single slow pass leaves dead gaps that read as "stalled". */
   .loadstrip {
     position: absolute;
     left: 0;
     right: 0;
     bottom: -1px;
-    height: 3px;
+    height: 2px;
     overflow: hidden;
-    background: color-mix(in srgb, var(--purple) 22%, transparent);
+    background: var(--spirit-wash);
   }
   .loadstrip::before {
     content: "";
@@ -159,9 +170,9 @@
     background: linear-gradient(
       90deg,
       transparent,
-      var(--purple),
-      color-mix(in srgb, var(--purple) 60%, white) 55%,
-      var(--purple),
+      var(--spirit),
+      color-mix(in oklab, var(--spirit) 55%, white) 55%,
+      var(--spirit),
       transparent
     );
     animation: loadslide 1.15s linear infinite;
@@ -180,16 +191,18 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 14px;
-    padding: 64px 22px;
-    color: var(--muted);
+    gap: 16px;
+    padding: 80px var(--gutter);
+    color: var(--ink-3);
   }
   .loadstate .shufmark {
     animation: loadbob 1.7s ease-in-out infinite;
   }
   .loadstate .loadlabel {
-    font-size: 13px;
-    letter-spacing: 0.04em;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
   }
   @keyframes loadbob {
     0%,
@@ -210,11 +223,11 @@
   }
 
   /* ---- Hero/rank switch view transition --------------------------------------
-   switchTransition (App.tsx) snapshots the page across a hero/rank switch, so the named
-   pieces — the hero portrait and each phase column — cross-fade independently of the rest.
-   The default cross-fade is the right effect; we only tighten the timing. Composes with the
-   settle veil: the new-state snapshot is live, so the veil arming mid-transition shows
-   through it. (Reduced-motion users never enter a transition — gated in JS.) */
+     switchTransition (App.tsx) snapshots the page across a hero/rank switch, so the named
+     pieces — the hero portrait and each phase column — cross-fade independently of the rest.
+     The default cross-fade is the right effect; we only tighten the timing. Composes with the
+     settle veil: the new-state snapshot is live, so the veil arming mid-transition shows
+     through it. (Reduced-motion users never enter a transition — gated in JS.) */
   ::view-transition-group(*) {
     animation-duration: 0.22s;
   }
@@ -223,16 +236,14 @@
   }
 
   /* ---- Per-piece "developing" load cue --------------------------------------
-   While a query is in flight, each content box wears a frosted scrim: a
-   panel-colored cover textured with a soft-light-blended grain, faded in via
-   `--settle` (0 = crisp ↔ ~0.82 = covered), set in JS on the *section* and
-   inherited down to each box (.phase, .crow, .mchip, .movers, .fundamentals —
-   not one band over the whole section). The texture comes from
-   `background-blend-mode`, which blends the grain into the fill *within the
-   layer* — it never samples the backdrop, so unlike `backdrop-filter: blur()`
-   (the old approach) it can't smear the content reordering behind it into
-   digital artifacts. When the data lands the scrim eases off and `--flash`
-   pulses a purple glow once — the "just landed" punch. */
+     While a query is in flight, each content box wears a frosted scrim: a paper-colored cover
+     textured with a soft-light-blended grain, faded in via `--settle` (0 = crisp ↔ ~0.82 =
+     covered), set in JS on the *section* and inherited down to each box — not one band over the
+     whole section. The texture comes from `background-blend-mode`, which blends the grain into
+     the fill *within the layer*; it never samples the backdrop, so unlike `backdrop-filter:
+     blur()` (the old approach) it can't smear the content reordering behind it into digital
+     artifacts. When the data lands the scrim eases off and `--flash` pulses an accent glow once —
+     the "just landed" punch, and the one place a glow earns its keep. */
   .skills,
   .phase,
   .crow,
@@ -256,16 +267,13 @@
     pointer-events: none; /* clicks/hovers pass straight through to the content */
     border-radius: inherit;
     opacity: var(--settle, 0); /* 0 ⇒ invisible, nothing painted */
-    /* Panel fill + grayscale grain, blended together (not against the backdrop) so it reads as a
-     frosted surface. Tune the fill's alpha / the last colormatrix value to make the glass
-     lighter or heavier without ever reintroducing a backdrop blur. */
-    background-color: color-mix(in srgb, var(--panel) 94%, transparent);
-    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0.33 0.33 0.33 0 -0.1 0.33 0.33 0.33 0 -0.1 0.33 0.33 0.33 0 -0.1 0 0 0 0 0.4'/></filter><rect width='160' height='160' filter='url(%23g)'/></svg>");
+    background-color: color-mix(in srgb, var(--paper) 92%, transparent);
+    background-image: var(--grain);
     background-size: 160px 160px;
     background-repeat: repeat;
     background-blend-mode: soft-light;
   }
-  /* Purple "just landed" glow — a soft bloom (no hard frame), pulsed once by --flash on completion. */
+  /* "Just landed" bloom — soft, no hard frame, pulsed once by --flash on completion. */
   .skills::before,
   .phase::before,
   .crow::before,
@@ -281,128 +289,149 @@
     border-radius: inherit;
     opacity: var(--flash, 0);
     box-shadow:
-      0 0 20px 1px rgba(155, 109, 209, 0.4),
-      inset 0 0 26px rgba(155, 109, 209, 0.26);
+      0 0 22px 1px color-mix(in oklab, var(--accent-ui) 45%, transparent),
+      inset 0 0 26px color-mix(in oklab, var(--accent-ui) 28%, transparent);
   }
+
+  /* ---- Global atoms --------------------------------------------------------- */
 
   /* The match modal still stacks its tips under a divider, so the block style stays. */
   .climbtips {
-    margin-top: 10px;
-    padding-top: 8px;
-    border-top: 1px solid var(--line);
+    margin-top: 12px;
+    padding-top: 9px;
+    border-top: 1px solid var(--rule);
   }
   .climbhdr {
     display: block;
-    font-size: 10.5px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--muted);
-    margin-bottom: 5px;
+    margin-bottom: 6px;
     flex: none;
   }
   .climbtip {
     display: flex;
     align-items: baseline;
-    gap: 7px;
+    gap: 8px;
     margin-bottom: 4px;
     font-size: 12px;
   }
   .climbaction {
     flex: none;
     font-weight: 600;
-    color: var(--accent);
+    color: var(--accent-ui);
     white-space: nowrap;
   }
   .climbdetail {
-    color: var(--muted);
+    color: var(--ink-2);
   }
   .climbnote {
     font-size: 12px;
-    color: var(--muted);
+    color: var(--ink-2);
     margin: 0;
   }
 
   .warn {
-    color: #e0b341;
+    color: var(--warn);
   }
 
+  /* Selection chips (your-heroes, selected enemies). Squared off like every other control on the
+     page — the portrait inside stays round, which is the only thing here that's actually round. */
   .chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    background: #3a2730;
-    color: #f0c2cf;
-    border: 1px solid #5a3a45;
-    border-radius: 999px;
-    padding: 3px 10px;
+    gap: 6px;
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    padding: 2px 9px;
     font-size: 12px;
     cursor: pointer;
   }
   .chip:hover {
-    background: #4a313c;
+    border-color: var(--accent-ui);
+    color: var(--accent-ui);
   }
 
   .banner {
-    margin: 16px 22px;
+    margin: 16px var(--gutter);
     padding: 12px 16px;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 2px solid var(--rule-strong);
   }
   .banner.error {
-    border-color: #5a2b2b;
-    background: #241718;
-    color: #f0b8b8;
+    border-left-color: var(--neg);
+    background: var(--neg-wash);
+    color: var(--ink);
   }
 
   /* "Weak into this comp" flag (negative comp edge, no countering portrait). */
   .weakcomp {
-    padding: 1px 6px;
-    border-radius: 10px;
-    background: #3a2424;
-    color: #e08a8a;
-    font-size: 10.5px;
-    font-weight: 700;
-    vertical-align: 1px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--neg);
     font-variant-numeric: tabular-nums;
   }
 
   .empty {
-    color: var(--muted);
+    color: var(--ink-3);
     font-size: 12px;
     margin: 2px 0 6px;
   }
 
-  /* Inline "learn more →" links left behind in the trimmed hints and footer. */
+  /* Inline "learn more →" links left behind in the trimmed hints and footer. Underlined from
+     rest: in a document, a link is a link — it shouldn't need a hover to admit it. */
   .guidelink {
     padding: 0;
     background: none;
     border: 0;
-    color: var(--accent);
+    color: var(--ink-2);
     font: inherit;
     cursor: pointer;
     white-space: nowrap;
+    text-decoration: underline;
+    text-decoration-color: var(--rule-strong);
+    text-underline-offset: 2px;
   }
   .guidelink:hover {
-    text-decoration: underline;
+    color: var(--accent-ui);
+    text-decoration-color: var(--accent-ui);
   }
 }
 
 @layer responsive {
   /* ---- Mobile / narrow-screen layout ----------------------------------------
-   The app is desktop-first (a sticky header with inline controls, a multi-column
-   phase grid). Below ~760px the header controls drop to their own full-width row,
-   the header stops being sticky so it doesn't eat the short viewport, the page
-   gutters tighten, and form controls go to 16px so iOS doesn't zoom on focus. */
+     The app is desktop-first (a sticky masthead with an inline control rail, a multi-column phase
+     grid). Below ~760px the controls drop to their own full-width row, the masthead stops being
+     sticky so it doesn't eat the short viewport, the page gutters tighten, and form controls go to
+     16px so iOS doesn't zoom on focus. */
+
+  /* Between the phone layout and full width there isn't room for the wordmark and the whole rail
+     on one line. The rail wrapping inside itself is the wrong answer: `align-items: flex-end` then
+     drops the nameplate to sit beside the rail's *last* row, which reads as the brand falling into
+     the controls. So take the same shape the phone layout does — nameplate on its own line, rail
+     full-width beneath it — just earlier, and while still sticky. */
+  @media (max-width: 1250px) {
+    .topbar {
+      flex-wrap: wrap;
+      align-items: center;
+      row-gap: 11px;
+    }
+    .controls {
+      width: 100%;
+      justify-content: flex-start;
+    }
+  }
+
   @media (max-width: 760px) {
-    /* Header: brand on its own line, controls wrap below as full-width fields. A wrapped
-     control row would make a sticky header tall enough to swallow the viewport, so let
-     it scroll away — `relative` keeps the loadstrip anchored to its bottom edge. */
+    /* Brand on its own line, controls wrap below as full-width fields. A wrapped control row
+       would make a sticky header tall enough to swallow the viewport, so let it scroll away —
+       `relative` keeps the loadstrip anchored to its bottom edge. */
     .topbar {
       position: relative;
       flex-wrap: wrap;
+      align-items: center;
       gap: 10px 12px;
-      padding: 11px 14px;
+      padding: 11px var(--gutter-narrow);
     }
     .controls {
       width: 100%;
@@ -417,29 +446,50 @@
       min-width: 0;
       font-size: 16px; /* ≥16px stops iOS Safari zooming in when the field is tapped */
     }
+    /* Share one row two-up rather than taking a full line each — a column of stacked full-width
+       buttons pushed the build itself most of a screen down. Still a comfortable tap target. The
+       cluster goes full-width first so the 50% is of the row, not of the cluster's own content. */
+    .railacts {
+      width: 100%;
+      flex-wrap: wrap;
+      gap: 10px 12px;
+    }
+    /* The theme toggle moves to the masthead's top-right corner, opposite the wordmark — where a
+       phone reader expects it, and where it stops being a fifth item in a two-up grid that can
+       only ever strand it on a row of its own. Lifting it out of the flow leaves the four
+       panel-opening buttons to pack as a clean 2×2. */
+    .railacts .themebtn {
+      position: absolute;
+      top: 9px;
+      right: var(--gutter-narrow);
+      width: 40px;
+      height: 40px;
+    }
     .guidebtn {
-      flex: 1 1 100%; /* full-width tap target on its own line */
+      flex: 1 1 calc(50% - 6px);
       align-self: stretch;
       margin-bottom: 0;
-      padding: 9px 12px;
+      padding: 10px 12px;
     }
 
-    /* Tighten the generous 22px desktop gutters so content isn't squeezed thin. */
+    /* Tighten the generous desktop gutters so content isn't squeezed thin. */
     .meta,
     .identity,
     .matchups,
     .archetypes,
     .enemies,
     .phases,
-    .foot {
-      padding-left: 14px;
-      padding-right: 14px;
+    .foot,
+    .movers,
+    .myheroes,
+    .dash {
+      padding-left: var(--gutter-narrow);
+      padding-right: var(--gutter-narrow);
     }
     .counters-note,
-    .skills,
     .banner {
-      margin-left: 14px;
-      margin-right: 14px;
+      margin-left: var(--gutter-narrow);
+      margin-right: var(--gutter-narrow);
     }
     .enemies select {
       font-size: 16px;

@@ -1,17 +1,25 @@
 @layer components {
-.foot {
-  padding: 8px 22px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.foot a {
-  color: var(--muted);
-}
-.foot .disclaimer {
-  margin-top: 6px;
-  font-size: 11px;
-  opacity: 0.75;
-  max-width: 70ch;
-}
-
+  /* Colophon. Ruled off from the build columns above and set small — the last thing on the page
+     should look like the last thing on the page. */
+  .foot {
+    margin: 40px var(--gutter) 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--rule);
+    color: var(--ink-3);
+    font-size: 12px;
+  }
+  .foot a {
+    color: var(--ink-2);
+    text-decoration-color: var(--rule-strong);
+    text-underline-offset: 2px;
+  }
+  .foot a:hover {
+    color: var(--accent-ui);
+  }
+  .foot .disclaimer {
+    margin-top: 7px;
+    max-width: 74ch;
+    font-size: 11px;
+    line-height: 1.5;
+  }
 }

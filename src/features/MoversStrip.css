@@ -1,77 +1,80 @@
 @layer components {
-/* "Patch movers" strip — items whose win rate verifiably moved across the patch boundary.
-   Same slim row grammar as the enemies/your-heroes strips. */
-.movers {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 22px 0;
-}
-.movers .lbl {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  cursor: help;
-}
-.movers .mover {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 3px 10px;
-  font-size: 12px;
-  color: var(--text);
-  cursor: help;
-}
-.movers .mover b {
-  font-weight: 600;
-}
-.movers .up b {
-  color: #7ecf9e;
-}
-.movers .down b {
-  color: #e08989;
-}
-.movers .newitem b {
-  color: var(--accent);
-}
-.movers .none {
-  color: var(--muted);
-  border-style: dashed;
-}
-/* Adoption ("Trending") movers: a second label + chips for rising-pick-rate items. A breakout is
-   rising and winning (accent ring); hype is rising but unproven (muted, dashed). */
-.movers .lbl.trending {
-  margin-left: 6px;
-  padding-left: 12px;
-  border-left: 1px solid var(--line);
-}
-.movers .breakout {
-  border-color: #6d9bd1;
-}
-.movers .breakout b {
-  color: #8fc0ff;
-}
-.movers .hype {
-  border-style: dashed;
-  color: var(--muted);
-}
-.movers .hype b {
-  color: var(--muted);
-}
-/* Causal tag: this mover is named as a change subject in the patch notes (lib/patchChanges) — the
-   move is patch-caused, not a meta drift. A quiet accented pen glyph + ring, no extra row weight. */
-.movers .mover.changed {
-  border-color: color-mix(in oklab, var(--accent) 55%, var(--line));
-}
-.movers .patchtag {
-  color: var(--accent);
-  font-size: 11px;
-  align-self: center;
-}
+  /* ---- "Patch movers" + "Trending" ticker ---------------------------------
+     A ledger line, not a tray of badges: each entry is separated by a hairline rule and carries
+     its number in mono, so the strip scans as one continuous run of readings the way an index
+     line does. Twenty of these as filled pills was the single loudest band on the page. */
+  .movers {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    row-gap: 2px;
+    padding: 9px var(--gutter) 10px;
+    border-bottom: 1px solid var(--rule);
+    font-size: 12px;
+  }
+  .movers .lbl {
+    margin-right: 12px;
+    cursor: help;
+  }
 
+  .movers .mover {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 1px 12px 1px 0;
+    margin-right: 12px;
+    border-right: 1px solid var(--rule);
+    color: var(--ink-2);
+    cursor: help;
+  }
+  /* An entry that lands last before a wrap keeps its rule, which reads fine as a column divider;
+     the very last one in the strip would dangle, so drop it. */
+  .movers .mover:last-child {
+    border-right: 0;
+    margin-right: 0;
+  }
+  .movers .mover b {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-3);
+  }
+  .movers .up b {
+    color: var(--pos);
+  }
+  .movers .down b {
+    color: var(--neg);
+  }
+  .movers .newitem b,
+  .movers .breakout b {
+    color: var(--accent-ui);
+  }
+  .movers .none {
+    color: var(--ink-3);
+    font-style: italic;
+  }
+
+  /* Adoption ("Trending") movers: a second label opening a second run on the same line. A
+     breakout is rising and winning (accent number); hype is rising but unproven, so it stays
+     grey — an unproven pick shouldn't get to borrow a confirmed one's colour. */
+  .movers .lbl.trending {
+    margin-left: 4px;
+    padding-left: 16px;
+    border-left: 1px solid var(--rule-strong);
+  }
+  .movers .hype,
+  .movers .hype b {
+    color: var(--ink-3);
+  }
+
+  /* Causal tag: this mover is named as a change subject in the patch notes (lib/patchChanges) —
+     the move is patch-caused, not meta drift. A quiet accented pen glyph, no extra row weight. */
+  .movers .mover.changed {
+    color: var(--ink);
+  }
+  .movers .patchtag {
+    color: var(--accent-ui);
+    font-size: 11px;
+  }
 }

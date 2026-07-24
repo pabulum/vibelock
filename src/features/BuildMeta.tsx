@@ -68,41 +68,48 @@ export function BuildMeta(props: {
                 <span className="metaarch">{activeArchetype.label}</span>
               )}
             </div>
-            {build.rankLabel} · {patchLabel}
-            {backfillLabel} · {build.population.matches.toLocaleString()}{" "}
-            matches · avg game {Math.round(build.population.avgDurationS / 60)}{" "}
-            min · {(build.population.baselineWinRate * 100).toFixed(0)}% avg WR
-            (rows show ± vs this) ·{" "}
-            <span
-              className={
-                (displayBuild ?? build).standingSlots > SLOT_CAP
-                  ? "warn"
-                  : undefined
-              }
-            >
-              {(displayBuild ?? build).standingSlots}/{SLOT_CAP} standing slots
-            </span>
-            {lowPopulation && (
-              <span className="warn"> · ⚠ low sample, treat as noisy</span>
-            )}{" "}
-            ·{" "}
-            <button
-              type="button"
-              className="guidelink"
-              onClick={onOpenExport}
-              title="Add this build to your in-game build list so the shop guides you through it"
-            >
-              ⬇ Export to in-game build
-            </button>{" "}
-            ·{" "}
-            <button
-              type="button"
-              className="guidelink"
-              onClick={onOpenShare}
-              title="Copy a summary-card image for Discord, or a link that unfurls with this hero's card"
-            >
-              ⤴ Share
-            </button>
+            {/* The dateline: what this build was computed from, set as one mono run under the
+                title the way a masthead byline sits under a headline. Actions get their own
+                line below so they stop competing with the provenance for the same eye. */}
+            <div className="metaline">
+              {build.rankLabel} · {patchLabel}
+              {backfillLabel} · {build.population.matches.toLocaleString()}{" "}
+              matches · avg game{" "}
+              {Math.round(build.population.avgDurationS / 60)} min ·{" "}
+              {(build.population.baselineWinRate * 100).toFixed(0)}% avg WR
+              (rows show ± vs this) ·{" "}
+              <span
+                className={
+                  (displayBuild ?? build).standingSlots > SLOT_CAP
+                    ? "warn"
+                    : undefined
+                }
+              >
+                {(displayBuild ?? build).standingSlots}/{SLOT_CAP} standing
+                slots
+              </span>
+              {lowPopulation && (
+                <span className="warn"> · △ low sample, treat as noisy</span>
+              )}
+            </div>
+            <div className="metaacts">
+              <button
+                type="button"
+                className="guidelink"
+                onClick={onOpenExport}
+                title="Add this build to your in-game build list so the shop guides you through it"
+              >
+                Export to in-game build
+              </button>
+              <button
+                type="button"
+                className="guidelink"
+                onClick={onOpenShare}
+                title="Copy a summary-card image for Discord, or a link that unfurls with this hero's card"
+              >
+                Share
+              </button>
+            </div>
           </div>
         </div>
       )}
