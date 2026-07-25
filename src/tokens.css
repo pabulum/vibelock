@@ -126,16 +126,28 @@
   }
 
   /* ---- Monochrome art on paper -------------------------------------------
-     Deadlock's ability icons are pure white line art on transparency (sampled across the roster:
-     zero chroma, luminance ~1.0), drawn for a dark game HUD. On the light theme they're white on
-     cream — invisible. Since they carry no colour at all, inverting is lossless and turns them
-     into black line art on paper, which is what an ability diagram in a printed manual would look
-     like anyway. Item icons are exempt: they're composited onto a slot-coloured plate, so they
-     read in both themes already. */
-  :root[data-theme="light"] .srow-label img,
-  :root[data-theme="light"] .rel.imbue img,
-  :root[data-theme="light"] .bp-skill img {
-    filter: invert(1);
+     Deadlock's ability icons are zero-chroma line art on transparency, drawn for a dark game HUD —
+     so on the light theme they'd be white on cream, invisible. Carrying no colour, they can be
+     repainted losslessly into black line art on paper, which is what an ability diagram in a
+     printed manual would look like anyway.
+
+     Polarity is NOT uniform upstream, so we can't just invert in one theme: 16 of 370 ability
+     images ship as *black* art (Dynamo's Kinetic Pulse, both Bebop 2s, Viscous' Splatter…), and
+     those were black-on-black in dark mode and white-on-cream in light — the exact failure the
+     rule existed to prevent, mirrored. brightness(0) flattens either polarity to black while
+     preserving alpha, so normalise unconditionally and let dark mode invert from there; a new
+     off-polarity asset then costs nothing. Item icons are exempt: they're composited onto a
+     slot-coloured plate, so they read in both themes already. */
+  .srow-label img,
+  .rel.imbue img,
+  .bp-skill img {
+    filter: brightness(0);
+  }
+
+  :root[data-theme="dark"] .srow-label img,
+  :root[data-theme="dark"] .rel.imbue img,
+  :root[data-theme="dark"] .bp-skill img {
+    filter: brightness(0) invert(1);
   }
 
   /* ---- Type primitives ---------------------------------------------------
