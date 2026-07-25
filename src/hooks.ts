@@ -1,11 +1,53 @@
-// App-level React hooks: the "developing" veil. (Data fetching lives in TanStack Query —
-// useSettle is driven from a query's `isFetching`.)
+// App-level React hooks: the "developing" veil, and the commit delay that decides when a selection
+// becomes a query key. (Data fetching itself lives in TanStack Query — useSettle is driven from a
+// query's `isFetching`.)
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const REDUCED =
   typeof matchMedia !== "undefined" &&
   matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// How long a selection change waits before the queries key on it. One click is invisible at this
+// delay — the veil below doesn't even arm for ARM_MS, so nothing has moved yet — but a *run* of
+// changes collapses into a single fan-out instead of one per step. That matters more than it
+// sounds: one hero switch is ~12 analytics requests against a 200-per-60s budget, and the two
+// controls that produce runs are easy to hit by accident. A native <select> fires `change` on every
+// arrow key while closed (Linux/Windows), so arrow-keying the Hero list from Abrams to Yamato used
+// to be ~240 requests, all but the last dozen abandoned. Chaining enemy picks in the palette
+// ("haz⏎ vind⏎ sev⏎") is the same shape, deliberately.
+const COMMIT_MS = 180;
+
+/**
+ * `value`, held back until it stops changing for `ms`.
+ *
+ * Feed it the selection state that makes up a query key — never the state a control renders from.
+ * The header, the URL and the hero portrait should all follow the click instantly; only the
+ * fetching lags, under a veil that was going to cover it anyway.
+ */
+export function useCommitted<T>(value: T, ms = COMMIT_MS): T {
+  const [committed, setCommitted] = useState(value);
+  // Read by the timer instead of captured, so a change arriving mid-delay commits the newest value
+  // rather than the one that happened to start the clock.
+  const latest = useRef(value);
+  useEffect(() => {
+    latest.current = value;
+  });
+
+  // Compared by *signature*, not identity: callers pass an object literal, which is a fresh one
+  // every render. An identity compare would restart the timer on every unrelated re-render — and
+  // this app re-renders constantly while queries settle, so the commit could be postponed
+  // indefinitely.
+  const sig = JSON.stringify(value);
+  const committedSig = JSON.stringify(committed);
+  useEffect(() => {
+    if (sig === committedSig) return;
+    const t = setTimeout(() => setCommitted(latest.current), ms);
+    return () => clearTimeout(t);
+  }, [sig, committedSig, ms]);
+
+  return committed;
+}
 
 // How long a load must persist before the veil appears at all. A cached query resolves in a frame
 // or two; veiling it just makes the page flinch. Only a load slow enough to be worth acknowledging

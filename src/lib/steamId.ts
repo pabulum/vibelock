@@ -15,6 +15,30 @@ export function parseVanityName(raw: string): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
+/** Shortest bare digit run treated as an account id while a field is still being typed. Real ids
+ * run 7–11 digits; the gate exists only to keep the prefixes of one from resolving. */
+const MIN_TYPED_DIGITS = 6;
+
+/**
+ * Like {@link parseSteamInput}, but for a value that is still being typed.
+ *
+ * Typing a 9-digit account id walks through every one of its prefixes, and short account ids are
+ * real accounts — so the plain parser would resolve a stranger halfway through your own id. That
+ * isn't just a wasted fetch: a resolved profile pre-selects the hero and rank band, so the page
+ * would visibly retune itself to someone else mid-keystroke. A pasted URL or a 17-digit steamID64
+ * is unambiguous at any length, so only the bare digit form is gated.
+ *
+ * Kept separate from the parser rather than folded into it: "is this a well-formed id" is a
+ * different question from "should I fetch for this yet", and the Enter-to-search branch and the
+ * export author stamp want the former.
+ */
+export function typedAccountId(raw: string): number | null {
+  const id = parseSteamInput(raw);
+  if (id === null) return null;
+  const s = raw.trim();
+  return /^\d+$/.test(s) && s.length < MIN_TYPED_DIGITS ? null : id;
+}
+
 /** Extract an account id from whatever the player pasted: a plain account id, a steamID64
  * (17 digits), or a steamcommunity.com/profiles/<steam64> URL. Null when it's none of those. */
 export function parseSteamInput(raw: string): number | null {

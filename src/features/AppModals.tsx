@@ -48,6 +48,8 @@ export function AppModals(props: {
   palette: PaletteMode | null;
   paletteCommands: PaletteCommand[];
   onRunPalette: (a: PaletteAction) => void;
+  /** Prefetch for the row the player has paused on — speculative, never a state change. */
+  onPaletteIntent: (a: PaletteAction) => void;
   onClosePalette: () => void;
   // Why-not verdict card
   whyItem: Item | null;
@@ -88,6 +90,7 @@ export function AppModals(props: {
     palette,
     paletteCommands,
     onRunPalette,
+    onPaletteIntent,
     onClosePalette,
     whyItem,
     whyVerdict,
@@ -133,6 +136,7 @@ export function AppModals(props: {
               : "Hero, rank, patch, or “vs enemy”…"
           }
           onRun={onRunPalette}
+          onIntent={onPaletteIntent}
           onClose={onClosePalette}
         />
       )}

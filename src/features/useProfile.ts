@@ -33,7 +33,8 @@ import {
   tierToMinBadge,
   type RankSel,
 } from "../lib/ranks";
-import { parseSteamInput, parseVanityName } from "../lib/steamId";
+import { parseVanityName, typedAccountId } from "../lib/steamId";
+import { useCommitted } from "../hooks";
 import type {
   Hero,
   HeroLadderStat,
@@ -47,6 +48,10 @@ import type {
  * Economy panel (souls/min as its headline; last hits / jungle / denies replaced by the real
  * per-source breakdown), so what's left here is staying alive and what you do in a fight. */
 const COMBAT_KEYS = new Set(["deaths", "player_damage_per_min", "accuracy"]);
+
+/** How long the id field settles before anything is fetched for it. Longer than the selection
+ * commit (hooks.useCommitted) because this one is waiting out *typing*, not clicking. */
+const ID_COMMIT_MS = 400;
 
 /** The fundamentals benchmark card's data: your recent games placed on the ladder's distribution. */
 export interface FundamentalsData {
@@ -96,7 +101,11 @@ export function useProfile(opts: {
   const [steamId, setSteamId] = useState(
     () => localStorage.getItem("vibelock-steam-id") ?? "",
   );
-  const accountId = parseSteamInput(steamId);
+  // The field settles before anything keys on it — every query below, and the localStorage write.
+  // Typing an id used to fire a profile lookup per keystroke (~20 requests for a steamID64), each
+  // for a different, mostly-real account.
+  const committedId = useCommitted(steamId, ID_COMMIT_MS);
+  const accountId = typedAccountId(committedId);
   const [steamMatches, setSteamMatches] = useState<SteamPlayerMatch[] | null>(
     null,
   );
@@ -105,23 +114,28 @@ export function useProfile(opts: {
   // session you want your *current* form, not an average dragged back weeks.
   const [recentGames, setRecentGames] = useState(RECENT_GAMES_DEFAULT);
 
+  // Keyed off the committed value too, or a half-typed id gets persisted and restored next session.
   useEffect(() => {
-    const v = steamId.trim();
-    if (parseSteamInput(v) !== null)
-      localStorage.setItem("vibelock-steam-id", v);
+    const v = committedId.trim();
+    if (typedAccountId(v) !== null) localStorage.setItem("vibelock-steam-id", v);
     else if (v === "") localStorage.removeItem("vibelock-steam-id");
-  }, [steamId]);
+  }, [committedId]);
 
   // A pasted vanity URL (steamcommunity.com/id/<name>) can't be converted arithmetically — resolve
-  // it through the name search automatically (debounced past the paste) and offer the matches.
+  // it through the name search automatically and offer the matches. The commit above is the delay
+  // that waits out the paste, so there's no second one here; the `live` flag covers the rest of the
+  // race, where an earlier search lands after a later one and overwrites its results.
   useEffect(() => {
-    const vanity = parseVanityName(steamId);
+    const vanity = parseVanityName(committedId);
     if (!vanity) return;
-    const t = setTimeout(async () => {
-      setSteamMatches(await searchSteamPlayers(vanity).catch(() => []));
-    }, 350);
-    return () => clearTimeout(t);
-  }, [steamId]);
+    let live = true;
+    searchSteamPlayers(vanity)
+      .catch(() => [])
+      .then((m) => live && setSteamMatches(m));
+    return () => {
+      live = false;
+    };
+  }, [committedId]);
 
   // Player profile: top heroes for the quick-pick row, and their current rank to pre-select the
   // floor. Both fetches fail soft (bad/empty account ⇒ no row, no rank) so a typo in the id never

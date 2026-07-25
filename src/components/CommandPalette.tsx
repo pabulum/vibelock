@@ -17,10 +17,16 @@ import { useScrollLock } from "./useScrollLock";
 // for why unmount is deferred).
 const EXIT_MS = 120;
 
+// How long a row must stay highlighted before it counts as intent. Dwell, not hover: arrowing
+// *through* the list shouldn't fetch for every row it passes, and key repeat is faster than this.
+// A pause is the signal — at that point a commit is one keystroke away.
+const DWELL_MS = 180;
+
 export function CommandPalette({
   commands,
   placeholder,
   onRun,
+  onIntent,
   onClose,
 }: {
   commands: PaletteCommand[];
@@ -28,6 +34,9 @@ export function CommandPalette({
   /** Maps a committed command's action onto the app's handlers (only ever called from
    * commit events, so the handlers may touch refs/state freely). */
   onRun: (action: PaletteAction) => void;
+  /** Called when a row has been highlighted long enough to read as intent — the app prefetches
+   * for it (lib/prefetch). Speculative by definition: it must not change anything. */
+  onIntent?: (action: PaletteAction) => void;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -59,6 +68,24 @@ export function CommandPalette({
       ?.querySelector(".pal-opt.on")
       ?.scrollIntoView({ block: "nearest" });
   }, [hi, results]);
+
+  // Refreshed every render so the dwell timer can read the current row and callback without
+  // listing either as a dep — both change identity constantly, and depending on them would restart
+  // the timer on every re-render so it never fired.
+  const dwell = useRef({ target: results[hi], onIntent });
+  useEffect(() => {
+    dwell.current = { target: results[hi], onIntent };
+  });
+  // Keyed on the row's stable id, so the clock only restarts when the highlight actually moves.
+  const targetId = results[hi]?.id;
+  useEffect(() => {
+    if (targetId === undefined) return;
+    const t = setTimeout(() => {
+      const { target, onIntent: fire } = dwell.current;
+      if (target) fire?.(target.action);
+    }, DWELL_MS);
+    return () => clearTimeout(t);
+  }, [targetId]);
 
   const commit = (c: PaletteCommand | undefined) => {
     if (!c) return;

@@ -388,18 +388,23 @@ export function MatchupChip({
   hero,
   active,
   onClick,
+  onIntent,
   tough = false,
 }: {
   m: Matchup;
   hero?: Hero;
   active: boolean;
   onClick: () => void;
+  /** Hover starts fetching this enemy's counter slices — the chips exist to be clicked (the hint
+   * below them says so), and it's two requests either way. */
+  onIntent?: () => void;
   tough?: boolean;
 }) {
   return (
     <button
       className={`mchip ${tough ? "tough" : "fav"} ${active ? "active" : ""}`}
       onClick={onClick}
+      onPointerEnter={onIntent}
       title={`${hero?.name ?? "?"}: ${(m.winRate * 100).toFixed(0)}% win rate (${m.delta >= 0 ? "+" : ""}${(m.delta * 100).toFixed(1)} vs avg), n=${m.sample.toLocaleString()}${m.laneCsDelta < -10 ? ` · they out-farm you by ~${Math.abs(Math.round(m.laneCsDelta))} CS in lane` : ""}`}
     >
       {hero?.image && <img src={hero.image} alt="" loading="lazy" />}

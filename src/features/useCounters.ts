@@ -5,6 +5,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { getHeroCounters, getItemStats } from "../api/deadlock";
 import type { TimeWindow } from "../api/deadlock";
 import { computeItemCounters } from "../lib/counters";
+import { counterSliceQueries } from "../lib/prefetch";
 import { heroMatchups } from "../lib/matchups";
 import { blendItemStats } from "../lib/patchBlend";
 import type { Hero, Item, ItemCounters, ItemStat } from "../types";
@@ -49,8 +50,6 @@ export function useCounters(opts: {
     enabled: !!hero && !!items && enemies.length > 0,
     placeholderData: keepPreviousData,
     queryFn: async () => {
-      const base = { heroId: hero!.id, minBadge, maxBadge };
-
       // One query per enemy (not a combined `any-of` query) so each item keeps a per-enemy
       // delta — that's what lets a row carry the portrait of the specific hero it answers.
       // With backfill on, each slice is fetched for both windows (all in parallel) and blended.
@@ -59,21 +58,19 @@ export function useCounters(opts: {
       // sample pulls fresh while its thin enemy slice stays anchored to pre-patch — the mismatch
       // reads as a fake counter. So the per-item discounts are learned on the base pair and shared
       // into every per-enemy blend (see blendItemStats).
-      const slice = (enemyHeroIds?: number[]) =>
-        canBackfill
-          ? Promise.all([
-              getItemStats({
-                ...base,
-                ...dataWindow,
-                minMatches: 5,
-                enemyHeroIds,
-              }),
-              getItemStats({ ...base, ...priorWin, enemyHeroIds }),
-            ])
-          : Promise.all([
-              getItemStats({ ...base, ...dataWindow, enemyHeroIds }),
-              Promise.resolve([] as ItemStat[]),
-            ]);
+      // The queries themselves are built in lib/prefetch, which is also what the hover prefetch
+      // fires — one definition, so the two can't drift into near-miss URLs that do the work twice.
+      const slice = (enemyHeroIds?: number[]) => {
+        const [fresh, prior] = counterSliceQueries(
+          hero!.id,
+          { minBadge, maxBadge, dataWindow, priorWin, canBackfill },
+          enemyHeroIds,
+        );
+        return Promise.all([
+          getItemStats(fresh),
+          prior ? getItemStats(prior) : Promise.resolve([] as ItemStat[]),
+        ]);
+      };
       const [basePair, ...enemyPairs] = await Promise.all([
         slice(),
         ...enemies.map((id) => slice([id])),

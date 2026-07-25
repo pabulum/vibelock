@@ -11,6 +11,8 @@ export function CountersSection(props: {
   enemies: number[];
   enemyNames: string;
   toggleEnemy: (id: number) => void;
+  /** Prefetch the counter slices for an enemy the pointer is resting on (lib/prefetch). */
+  onIntentEnemy: (id: number) => void;
   onRemoveEnemy: (id: number) => void;
   onOpenPicker: () => void;
   onOpenGuide: () => void;
@@ -22,6 +24,7 @@ export function CountersSection(props: {
     enemies,
     enemyNames,
     toggleEnemy,
+    onIntentEnemy,
     onRemoveEnemy,
     onOpenPicker,
     onOpenGuide,
@@ -45,6 +48,7 @@ export function CountersSection(props: {
                       hero={heroes.find((h) => h.id === m.enemyHeroId)}
                       active={enemies.includes(m.enemyHeroId)}
                       onClick={() => toggleEnemy(m.enemyHeroId)}
+                      onIntent={() => onIntentEnemy(m.enemyHeroId)}
                     />
                   ))}
                 </div>
@@ -59,6 +63,7 @@ export function CountersSection(props: {
                       hero={heroes.find((h) => h.id === m.enemyHeroId)}
                       active={enemies.includes(m.enemyHeroId)}
                       onClick={() => toggleEnemy(m.enemyHeroId)}
+                      onIntent={() => onIntentEnemy(m.enemyHeroId)}
                     />
                   ))}
                 </div>

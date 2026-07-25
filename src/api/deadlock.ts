@@ -113,31 +113,73 @@ async function getJson<TSchema extends AnySchema>(
 // fans out enough parallel queries (archetype splits, locked paths, counters) to burst
 // past it; the cap spreads a burst over time instead of firing it all at once.
 const MAX_INFLIGHT = 5;
+// Speculative work (lib/prefetch) never holds more than this many of those slots, so a run of
+// hovers can't leave the click that follows them with nothing to run on.
+const MAX_PREFETCH_INFLIGHT = 2;
+
+type Priority = "user" | "prefetch";
+
 let inflight = 0;
-const queue: Array<() => void> = [];
+let prefetchInflight = 0;
+const queues: Record<Priority, Array<() => void>> = { user: [], prefetch: [] };
+
+/** Which queue may start a task right now: asked-for work always before speculative work, and
+ * speculative work only while it's under its own cap. Null = every slot that can run is busy. */
+function nextTier(): Priority | null {
+  if (inflight >= MAX_INFLIGHT) return null;
+  if (queues.user.length) return "user";
+  if (queues.prefetch.length && prefetchInflight < MAX_PREFETCH_INFLIGHT)
+    return "prefetch";
+  return null;
+}
 
 function pump(): void {
-  if (inflight >= MAX_INFLIGHT) return;
-  const next = queue.shift();
-  if (!next) return;
-  inflight++;
-  next();
+  for (let tier = nextTier(); tier !== null; tier = nextTier()) {
+    // LIFO within a tier, deliberately. When several selections are queued at once the newest is
+    // the one the player is waiting on; the older ones are for a hero or rank they already clicked
+    // past. Draining oldest-first meant an abandoned burst *delayed* the wanted result — five
+    // slots' worth of dead requests ahead of it, seconds each. Nothing is dropped here: some of
+    // those URLs are still wanted by a query whose own key never changed (the counter matrix
+    // survives a hero switch), and we have no way yet to tell which. They just go last.
+    const next = queues[tier].pop()!;
+    inflight++;
+    if (tier === "prefetch") prefetchInflight++;
+    next();
+  }
 }
 
 // Run `task` once a concurrency slot frees up, releasing it (and pumping the queue)
 // when the task settles either way.
-function throttle<T>(task: () => Promise<T>): Promise<T> {
+function throttle<T>(task: () => Promise<T>, tier: Priority): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    queue.push(() =>
+    queues[tier].push(() =>
       task()
         .then(resolve, reject)
         .finally(() => {
           inflight--;
+          if (tier === "prefetch") prefetchInflight--;
           pump();
         }),
     );
     pump();
   });
+}
+
+// Ambient rather than an argument, because a prefetch has to issue the *same* request as the real
+// query — same URL, same cache entry — or the work is thrown away, which leaves nowhere to thread a
+// parameter through. The scope is synchronous: priority is fixed when a request is enqueued, and
+// lib/prefetch issues everything it wants in one synchronous batch for exactly that reason.
+// Anything enqueued after an `await` inside `fn` would fall back to user priority.
+let currentTier: Priority = "user";
+
+/** Issue every analytics request `fn` makes at prefetch priority. See lib/prefetch. */
+export function atPrefetchPriority(fn: () => void): void {
+  currentTier = "prefetch";
+  try {
+    fn();
+  } finally {
+    currentTier = "user";
+  }
 }
 
 // Analytics endpoints recompute server-side and return small payloads, but a cold query can take
@@ -150,9 +192,12 @@ function getAnalytics<TSchema extends AnySchema>(
   url: string,
   schema: TSchema,
 ): Promise<v.InferOutput<TSchema>> {
+  // Captured here rather than read inside queryFn: the priority belongs to the moment the request
+  // was asked for, and fetchQuery gives no promise about when it runs the function.
+  const tier = currentTier;
   return queryClient.fetchQuery({
     queryKey: ["analytics", url],
-    queryFn: () => throttle(() => getJson(url, schema)),
+    queryFn: () => throttle(() => getJson(url, schema), tier),
   });
 }
 

@@ -16,6 +16,7 @@ import { switchTransition } from "./lib/viewTransition";
 import { foldTrendingBreakouts } from "./lib/patchMovers";
 import { heroFarmProfile } from "./lib/matchAnalysis";
 import { heroAccent } from "./lib/heroAccent";
+import { prefetchBuild, prefetchEnemy } from "./lib/prefetch";
 import {
   buildPaletteCommands,
   type PaletteAction,
@@ -28,7 +29,7 @@ import {
   tierOf,
   type RankSel,
 } from "./lib/ranks";
-import { useSettle } from "./hooks";
+import { useCommitted, useSettle } from "./hooks";
 import { useAssets } from "./features/useAssets";
 import { useProfile } from "./features/useProfile";
 import { useBuildData } from "./features/useBuildData";
@@ -107,6 +108,15 @@ function AppInner() {
   // BuildOptions.lineAware). Experimental, off by default; only the palette flips it.
   const [lineAware, setLineAware] = useState(false);
   const [enemies, setEnemies] = useState<number[]>([]);
+
+  // The selection as the *queries* see it. Every control above writes its state instantly — the
+  // header, the URL and the hero portrait all follow the click — but the values that make up a
+  // query key are held back until the selection settles, so a run of changes costs one fan-out
+  // instead of one per step (see hooks.useCommitted for why that's easy to trigger). Committed as
+  // one object, so changing two controls in the same breath still resolves to a single fetch.
+  // Everything downstream reads `sel.*` where it feeds a query, and the live state where it feeds
+  // a control or a label of what you picked.
+  const sel = useCommitted({ heroId, rankSel, patchIdx, enemies });
 
   // Overlay UI state (features/useModals): the guide/lab/match/export/share modals, the command
   // palette + its pending jump, the why-not verdict card, and the global Ctrl/⌘+K handler.
@@ -223,6 +233,13 @@ function AppInner() {
     () => heroes.find((h) => h.id === heroId) ?? null,
     [heroes, heroId],
   );
+  // The hero the *data* is for — a beat behind the portrait above while a selection settles. Only
+  // the three data hooks read it; everything visual stays on `hero` so a click still lands
+  // instantly, which is the arrangement the settle veil was already built around (see metaRef).
+  const dataHero = useMemo(
+    () => heroes.find((h) => h.id === sel.heroId) ?? null,
+    [heroes, sel.heroId],
+  );
   // Per-hero accent: retune --accent from the selected hero's portrait (one-time canvas
   // sample per portrait, cached — see lib/heroAccent). Set on :root so every accent-tinted
   // detail follows; the @property registration in App.css makes the change cross-fade.
@@ -243,31 +260,35 @@ function AppInner() {
       live = false;
     };
   }, [hero]);
-  const { minBadge, maxBadge } = rankSelToBadges(rankSel);
-  const rankLabel = rankSelLabel(rankSel);
+  // Rank and window, committed: these are query inputs, and the labels derived from them describe
+  // data that has been fetched rather than a control's current position.
+  const { minBadge, maxBadge } = rankSelToBadges(sel.rankSel);
+  const rankLabel = rankSelLabel(sel.rankSel);
   // Descriptive soul-income shape for this hero at this rank (population median from the Lab's farm
   // norms). Independent of the player's account — it renders whenever a hero + rank cell is baked.
   const farmProfile = useMemo(
     () =>
-      hero && wpStats
-        ? heroFarmProfile(wpStats, hero.id, tierOf(rankSel))
+      dataHero && wpStats
+        ? heroFarmProfile(wpStats, dataHero.id, tierOf(sel.rankSel))
         : null,
-    [hero, wpStats, rankSel],
+    [dataHero, wpStats, sel.rankSel],
   );
   // Numeric anchor for rank-scaled heuristics (the new-hero learning tax): the floor tier, or a
   // band's midpoint.
   const tierAnchor =
-    typeof rankSel === "number" ? rankSel : (rankSel.lo + rankSel.hi) / 2;
+    typeof sel.rankSel === "number"
+      ? sel.rankSel
+      : (sel.rankSel.lo + sel.rankSel.hi) / 2;
 
   // The selected patch window and its pre-patch prior — the two time slices every windowed query
   // below keys on. Memoized so query keys stay referentially honest across renders.
   const dataWindow = useMemo(
-    () => windowFor(patches, patchIdx),
-    [patches, patchIdx],
+    () => windowFor(patches, sel.patchIdx),
+    [patches, sel.patchIdx],
   );
   const priorWin = useMemo(
-    () => priorWindowFor(patches, patchIdx),
-    [patches, patchIdx],
+    () => priorWindowFor(patches, sel.patchIdx),
+    [patches, sel.patchIdx],
   );
   // Backfill needs a patch boundary to blend across; when the patch feed is down (empty list,
   // see patchesQueryOptions) we degrade to the plain window instead of dead-ending queries.
@@ -301,12 +322,12 @@ function AppInner() {
     lastGameFarm,
     lastHeroMatchId,
   } = useProfile({
-    hero,
-    heroId,
+    hero: dataHero,
+    heroId: sel.heroId,
     heroes,
     items,
     patchesReady,
-    rankSel,
+    rankSel: sel.rankSel,
     minBadge,
     maxBadge,
     tierAnchor,
@@ -374,8 +395,8 @@ function AppInner() {
     trendingByItem,
     activeFlow,
   } = useBuildData({
-    hero,
-    heroId,
+    hero: dataHero,
+    heroId: sel.heroId,
     items,
     abilities,
     rankLabel,
@@ -387,7 +408,7 @@ function AppInner() {
     priorKey,
     lineAware,
     urlBuild: url0.build,
-    patchNotes: patches[patchIdx]?.content,
+    patchNotes: patches[sel.patchIdx]?.content,
   });
 
   // The live selection as URL state — mirrored into the address bar below, and the state the
@@ -440,10 +461,10 @@ function AppInner() {
     counterByItem,
     countersByPhase,
   } = useCounters({
-    hero,
-    heroId,
+    hero: dataHero,
+    heroId: sel.heroId,
     items,
-    enemies,
+    enemies: sel.enemies,
     minBadge,
     maxBadge,
     dataWindow,
@@ -458,10 +479,33 @@ function AppInner() {
       e.includes(id) ? e.filter((x) => x !== id) : [...e, id],
     );
 
+  // Intent → speculative fetch. The click hasn't happened, but the data it would need starts moving
+  // now, behind everything the player has actually asked for (lib/prefetch). Same handler for every
+  // surface that can signal intent: hovering a hero chip or a matchup chip, resting on a palette
+  // row. Actions with nothing to fetch (jump, why, panels, toggles) simply fall through.
+  const dataSlice = { minBadge, maxBadge, dataWindow, priorWin, canBackfill };
+  const prefetchIntent = (a: PaletteAction) => {
+    if (a.kind === "hero") {
+      prefetchBuild(a.id, dataSlice);
+      return;
+    }
+    // The rest re-slice the *current* hero, so there's nothing to guess at without one.
+    if (sel.heroId === null) return;
+    if (a.kind === "enemy") prefetchEnemy(sel.heroId, a.id, dataSlice);
+    else if (a.kind === "rank")
+      prefetchBuild(sel.heroId, { ...dataSlice, ...rankSelToBadges(a.sel) });
+    else if (a.kind === "patch")
+      prefetchBuild(sel.heroId, {
+        ...dataSlice,
+        dataWindow: windowFor(patches, a.idx),
+        priorWin: priorWindowFor(patches, a.idx),
+      });
+  };
+
   // Empty patch list = the feed failed and the patches query degraded (see api/deadlock) —
   // windowless queries fall back to the API's default last-30-days, so label it that way.
   const patchLabel =
-    patches[patchIdx]?.title ?? (patches.length ? "…" : "last 30 days");
+    patches[sel.patchIdx]?.title ?? (patches.length ? "…" : "last 30 days");
   // "leans N% on pre-patch data" — only worth saying when the borrow is real (≥ 1%).
   const backfillLabel =
     backfill !== null && backfill >= 0.01
@@ -470,22 +514,25 @@ function AppInner() {
   const enemyNames = enemies
     .map((id) => heroes.find((h) => h.id === id)?.name ?? "?")
     .join(", ");
+  // Committed: these portraits tag build rows with the enemy each pick answers, so they have to
+  // name the comp the counter numbers were actually computed for. (The picker's own chips above
+  // read the live list, so adding an enemy still shows up the instant you pick it.)
   const enemiesById = useMemo(() => {
     const m = new Map<number, Hero>();
-    for (const id of enemies) {
+    for (const id of sel.enemies) {
       const h = heroes.find((x) => x.id === id);
       if (h) m.set(id, h);
     }
     return m;
-  }, [enemies, heroes]);
+  }, [sel.enemies, heroes]);
   // With a comp selected, re-rank the build for it: the comp decides which non-staples fill
   // each phase's core slots, the role labels, and the order (category counts + staples held).
   const displayBuild = useMemo(
     () =>
-      build && compEdges && items && enemies.length > 0
+      build && compEdges && items && sel.enemies.length > 0
         ? rerankBuildForComp(build, compEdges, items)
         : build,
-    [build, compEdges, items, enemies.length],
+    [build, compEdges, items, sel.enemies.length],
   );
   // The build as rendered: the (comp-re-ranked) build with un-built breakouts folded in as tagged
   // situational options — the discovery half of the app, surfaced where you pick flex items. Purely
@@ -639,7 +686,9 @@ function AppInner() {
     (!items && !error);
   // The brand mark's icon is a function of the current selection, so it flips to a new
   // item on each action (hero/rank/patch/build-style/enemy change) and is otherwise still.
-  const shuffleSeed = `${heroId}|${rankLabel}|${patchIdx}|${archKey}|${enemies.join(",")}`;
+  // Live, not committed: the mark is the acknowledgement that a click registered, so it flips with
+  // the control rather than with the fetch it triggers.
+  const shuffleSeed = `${heroId}|${rankSelLabel(rankSel)}|${patchIdx}|${archKey}|${enemies.join(",")}`;
 
   // Per-piece "developing" veils — each tracks its own query's fetching state so panels settle as
   // their data actually lands, independently of the single strip in the header. The build wears
@@ -708,6 +757,7 @@ function AppInner() {
           tryHeroes={tryHeroes}
           heroId={heroId}
           pickHero={pickHero}
+          onIntent={(id) => prefetchBuild(id, dataSlice)}
           newHeroTax={NEW_HERO_TAX}
           labHeroes={labHeroes}
         />
@@ -766,6 +816,7 @@ function AppInner() {
         enemies={enemies}
         enemyNames={enemyNames}
         toggleEnemy={toggleEnemy}
+        onIntentEnemy={(id) => prefetchIntent({ kind: "enemy", id })}
         onRemoveEnemy={(id) => setEnemies((e) => e.filter((x) => x !== id))}
         onOpenPicker={() => setPalette("enemies")}
         onOpenGuide={() => setShowGuide(true)}
@@ -805,6 +856,7 @@ function AppInner() {
         palette={palette}
         paletteCommands={paletteCommands}
         onRunPalette={runPaletteAction}
+        onPaletteIntent={prefetchIntent}
         onClosePalette={() => {
           setPalette(null);
           // Flush a committed item jump only now: the palette dialog scroll-freezes the page,

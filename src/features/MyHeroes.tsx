@@ -44,11 +44,21 @@ export function MyHeroes(props: {
   tryHeroes: TryHeroRow[] | null;
   heroId: number | null;
   pickHero: (id: number) => void;
+  /** Hovering a chip is a strong tell — this is a short list of heroes the player switches
+   * between — so the app starts fetching that hero's build before the click (lib/prefetch). */
+  onIntent: (id: number) => void;
   newHeroTax: number;
   labHeroes: Map<number, number> | null;
 }) {
-  const { topHeroes, tryHeroes, heroId, pickHero, newHeroTax, labHeroes } =
-    props;
+  const {
+    topHeroes,
+    tryHeroes,
+    heroId,
+    pickHero,
+    onIntent,
+    newHeroTax,
+    labHeroes,
+  } = props;
   return (
     <div className="myheroes">
       <span
@@ -62,6 +72,7 @@ export function MyHeroes(props: {
           key={h.id}
           className={`chip${h.id === heroId ? " active" : ""}`}
           onClick={() => pickHero(h.id)}
+          onPointerEnter={() => onIntent(h.id)}
           title={
             `you: ${Math.round(winRate * 100)}% over ${matches} matches` +
             (meta
@@ -89,6 +100,7 @@ export function MyHeroes(props: {
               key={h.id}
               className={`chip try${h.id === heroId ? " active" : ""}`}
               onClick={() => pickHero(h.id)}
+              onPointerEnter={() => onIntent(h.id)}
               title={`${(metaWinRate * 100).toFixed(1)}% at this rank/patch − ~${(newHeroTax * 100).toFixed(1)}pt learning tax ≈ ${(taxed * 100).toFixed(1)}% while you pick them up${closingHint(labHeroes?.get(h.id))}`}
             >
               <img src={h.image} alt="" loading="lazy" />
