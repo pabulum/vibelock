@@ -85,7 +85,8 @@
     --font-display: "Space Grotesk", system-ui, sans-serif;
     --font-text:
       "Archivo", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --font-mono:
+      "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
     /* ---- Geometry --------------------------------------------------------
        There are no rounded corners in this design — a radius is the single

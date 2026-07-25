@@ -9,24 +9,28 @@ export function friendlyError(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e);
 
   // Network-level failure: fetch rejected with a TypeError, so there's no HTTP status to read.
-  if (/failed to fetch|networkerror|network error|load failed|fetch failed/i.test(raw)) {
+  if (
+    /failed to fetch|networkerror|network error|load failed|fetch failed/i.test(
+      raw,
+    )
+  ) {
     return "Couldn't reach the stats API — check your connection and try again.";
   }
 
   // HTTP errors arrive as "<status> <statusText> for <url>"; read the leading status code.
   const status = Number(raw.match(/^(\d{3})\b/)?.[1]);
   if (status === 429) {
-    return 'The stats API is rate-limiting us — wait a moment, then try again.';
+    return "The stats API is rate-limiting us — wait a moment, then try again.";
   }
   if (status >= 500) {
-    return 'The stats API is having trouble right now — try again in a bit.';
+    return "The stats API is having trouble right now — try again in a bit.";
   }
   if (status === 404) {
-    return 'No data for that hero, rank, and patch yet — try a wider patch window or a lower rank.';
+    return "No data for that hero, rank, and patch yet — try a wider patch window or a lower rank.";
   }
   if (status >= 400) {
     return "That request wasn't accepted by the stats API — try a different hero or rank.";
   }
 
-  return 'Something went wrong loading the data — try again.';
+  return "Something went wrong loading the data — try again.";
 }

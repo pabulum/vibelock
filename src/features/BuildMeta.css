@@ -22,7 +22,8 @@
     object-fit: cover;
     background: var(--surface-2);
     border: 1px solid var(--rule);
-    box-shadow: 0 0 26px -6px color-mix(in oklab, var(--accent) 55%, transparent);
+    box-shadow: 0 0 26px -6px
+      color-mix(in oklab, var(--accent) 55%, transparent);
   }
   .metabody {
     min-width: 0;

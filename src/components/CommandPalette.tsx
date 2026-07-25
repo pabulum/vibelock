@@ -147,7 +147,9 @@ export function CommandPalette({
         aria-label="Search commands"
         aria-expanded="true"
         aria-controls="pal-list"
-        aria-activedescendant={results[hi] ? `pal-${results[hi].id}` : undefined}
+        aria-activedescendant={
+          results[hi] ? `pal-${results[hi].id}` : undefined
+        }
         placeholder={placeholder}
         value={query}
         onChange={(e) => {

@@ -50,7 +50,12 @@ export type ItemVerdict =
   /** Players at this rank/patch don't buy it on this hero at all — nothing to score. */
   | { kind: "no-data" }
   /** Sample floor: bought by too few players in every phase to clear MIN_SUPPORT. */
-  | { kind: "sample-floor"; stats: VerdictStats; players: number; floor: number }
+  | {
+      kind: "sample-floor";
+      stats: VerdictStats;
+      players: number;
+      floor: number;
+    }
   /** Either/or: it's an every-game pick, but so is a same-slot rival it demonstrably isn't
    * bought *with* — they share one core slot, and the rival holds it. */
   | {

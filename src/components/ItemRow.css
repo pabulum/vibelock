@@ -170,7 +170,9 @@
     color: var(--warn);
   }
   .tags .reason-part {
-    color: var(--spirit); /* structural note, not a warning — matches the PART marker */
+    color: var(
+      --spirit
+    ); /* structural note, not a warning — matches the PART marker */
   }
 
   /* One bubble per enemy: a small portrait + this item's edge vs that hero. The portrait stays

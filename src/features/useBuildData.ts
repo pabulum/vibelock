@@ -3,6 +3,7 @@
 // active-archetype selection (deep-linked on the first build, best-win-rate afterwards).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { queryClient } from "../queryClient";
 import {
   getAbilityOrder,
   getCommunityBuilds,
@@ -13,6 +14,11 @@ import {
 } from "../api/deadlock";
 import type { TimeWindow } from "../api/deadlock";
 import { assembleArchetypes, pickSignatures } from "../lib/archetypes";
+import {
+  guessSignatures,
+  rememberSignatures,
+  signaturesMatch,
+} from "../lib/signatureCache";
 import { matchCommunityBuilds } from "../lib/communityBuilds";
 import { blendFlow } from "../lib/patchBlend";
 import { findAdoptionMovers, findPatchMovers } from "../lib/patchMovers";
@@ -70,19 +76,20 @@ export function useBuildData(opts: {
   const [archKey, setArchKey] = useState<ArchetypeKey>("all");
 
   // Generate builds, split by archetype for flex heroes.
+  const buildKey = [
+    "build",
+    heroId,
+    { minBadge, maxBadge },
+    rankLabel,
+    dataWindow,
+    priorKey,
+    lineAware,
+  ];
   const buildQ = useQuery({
-    queryKey: [
-      "build",
-      heroId,
-      { minBadge, maxBadge },
-      rankLabel,
-      dataWindow,
-      priorKey,
-      lineAware,
-    ],
+    queryKey: buildKey,
     enabled: !!hero && !!items,
     placeholderData: keepPreviousData,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const h = hero!;
       const itemMap = items!;
       // With backfill on (default), every flow is fetched twice — the selected patch and the month
@@ -102,6 +109,7 @@ export function useBuildData(opts: {
                 ...dataWindow,
                 minMatches: 10,
                 includeItemIds,
+                signal,
               }),
               getItemFlowStats({
                 heroId: h.id,
@@ -109,6 +117,7 @@ export function useBuildData(opts: {
                 maxBadge,
                 ...priorWin,
                 includeItemIds,
+                signal,
               }),
             ]).then(([f, q]) => blendFlow(f, q))
           : getItemFlowStats({
@@ -117,6 +126,7 @@ export function useBuildData(opts: {
               maxBadge,
               ...dataWindow,
               includeItemIds,
+              signal,
             }).then((f) => ({
               flow: f,
               borrowedShare: 0,
@@ -124,6 +134,23 @@ export function useBuildData(opts: {
               freshGames: f.baseline.matches,
               priorGames: 0,
             }));
+
+      // Speculative archetype flows. The conditioned flows below normally can't start until the
+      // base flow lands (their include_item_ids come out of it), which measured as ~64% of a hero
+      // switch spent on a strictly serial second round trip. Signatures barely move for a given
+      // hero and rank, so fire last-known ones NOW, in parallel with everything else, and verify
+      // against the real pick once the base flow arrives (lib/signatureCache). A miss just falls
+      // through to the original fetch — two wasted requests, never a wrong build.
+      const guess = guessSignatures(h.id, minBadge, maxBadge);
+      const guessed = guess
+        ? {
+            gun: guess.gun ? flowFor([guess.gun]) : undefined,
+            spirit: guess.spirit ? flowFor([guess.spirit]) : undefined,
+          }
+        : null;
+      // A guess that turns out wrong must not surface as an unhandled rejection.
+      guessed?.gun?.catch(() => {});
+      guessed?.spirit?.catch(() => {});
 
       // Base population + buy times (for buy-order) + item-pair permutation stats, in parallel. The
       // permutation payload is large but overlaps the flow fetches below; a failure is non-fatal (the
@@ -140,6 +167,7 @@ export function useBuildData(opts: {
           maxBadge,
           ...dataWindow,
           ...(canBackfill ? { minMatches: 5 } : {}),
+          signal,
         }),
         canBackfill
           ? getItemStats({
@@ -147,12 +175,14 @@ export function useBuildData(opts: {
               minBadge,
               maxBadge,
               ...priorWin,
+              signal,
             })
           : Promise.resolve([] as ItemStat[]),
         getItemPermutationStats({
           heroId: h.id,
           minBadge,
           maxBadge,
+          signal,
           ...(canBackfill
             ? {
                 minUnixTimestamp: priorWin.minUnixTimestamp,
@@ -215,9 +245,21 @@ export function useBuildData(opts: {
       // Condition on each archetype's signature item. The gun/spirit overlap (for the
       // flex/hybrid decision) is read out of the gun flow itself, so no extra query.
       const sig = pickSignatures(base, itemMap);
+      // The guess held ⇒ those flows have had a head start and are already in flight or home.
+      // It didn't ⇒ fetch the right ones now, exactly as before.
+      const hit = signaturesMatch(guess, sig);
+      rememberSignatures(h.id, minBadge, maxBadge, sig);
       const [gunBlend, spiritBlend] = await Promise.all([
-        sig.gun ? flowFor([sig.gun]) : Promise.resolve(undefined),
-        sig.spirit ? flowFor([sig.spirit]) : Promise.resolve(undefined),
+        hit && guessed?.gun
+          ? guessed.gun
+          : sig.gun
+            ? flowFor([sig.gun])
+            : Promise.resolve(undefined),
+        hit && guessed?.spirit
+          ? guessed.spirit
+          : sig.spirit
+            ? flowFor([sig.spirit])
+            : Promise.resolve(undefined),
       ]);
       const gun = gunBlend?.flow;
       const spirit = spiritBlend?.flow;
@@ -246,6 +288,20 @@ export function useBuildData(opts: {
       };
     },
   });
+  // Abandon the previous selection's fan-out. A key change leaves the old build query observer-less
+  // but still running — TanStack does not cancel those on its own — and its archetype flows are the
+  // longest requests the app makes (~6s each, four at a time), so it would sit on most of the
+  // concurrency budget while the hero you just picked waits. cancelQueries aborts their signals;
+  // api/deadlock only lets that reach the socket once every *other* query wanting the same URL has
+  // gone too, so a shared slice is never pulled out from under a live panel.
+  const buildKeyStr = JSON.stringify(buildKey);
+  useEffect(() => {
+    queryClient.cancelQueries({
+      predicate: (q) =>
+        q.queryKey[0] === "build" && JSON.stringify(q.queryKey) !== buildKeyStr,
+    });
+  }, [buildKeyStr]);
+
   const archetypeSet = buildQ.data?.set ?? null;
   // "What changed this patch" — FDR-gated movers from the two item-stats windows the backfill
   // already fetches (needs both, so only computed while backfill is on).

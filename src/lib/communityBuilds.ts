@@ -9,7 +9,7 @@ import type {
   CommunityMatch,
   HeroBuildStatRow,
   RankedCommunityBuild,
-} from '../types';
+} from "../types";
 // A "best build" win rate is a claim, so it needs a real sample — otherwise a 3-game 100%
 // build is crowned "the meta". Builds below this are still rankable for *alignment* (which
 // doesn't lean on win rate), just not eligible to be the headline performer.
@@ -24,7 +24,10 @@ const MIN_BEST_SAMPLE = 50;
  * exposes a tight core and scores high; one that never flags its tail is judged on the
  * whole bloated list and falls behind.
  */
-function overlap(a: Set<number>, b: Iterable<number>): { jaccard: number; shared: number } {
+function overlap(
+  a: Set<number>,
+  b: Iterable<number>,
+): { jaccard: number; shared: number } {
   let inter = 0;
   let bSize = 0;
   const seen = new Set<number>();
@@ -45,7 +48,10 @@ function overlap(a: Set<number>, b: Iterable<number>): { jaccard: number; shared
  * Jaccard there ≈ 0 for everyone and a coverage metric there would re-reward kitchen-sink
  * builds — the very bias core:core removes. It's a display-only secondary signal.
  */
-function situationalOverlap(build: CommunityBuild, ourSitu: Set<number>): number {
+function situationalOverlap(
+  build: CommunityBuild,
+  ourSitu: Set<number>,
+): number {
   if (ourSitu.size === 0) return 0;
   const core = new Set(build.coreItemIds);
   let n = 0;
@@ -93,10 +99,15 @@ export function matchCommunityBuilds(
   const sampled = ranked.filter((r) => r.matches >= MIN_BEST_SAMPLE);
   const best = sampled.length
     ? sampled.reduce((a, b) =>
-        b.winRate > a.winRate || (b.winRate === a.winRate && b.matches > a.matches) ? b : a,
+        b.winRate > a.winRate ||
+        (b.winRate === a.winRate && b.matches > a.matches)
+          ? b
+          : a,
       )
     : null;
-  const aligned = ranked.reduce((a, b) => (b.similarity > a.similarity ? b : a));
+  const aligned = ranked.reduce((a, b) =>
+    b.similarity > a.similarity ? b : a,
+  );
 
   return { best, aligned, agree: best?.build.id === aligned.build.id };
 }

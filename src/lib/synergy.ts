@@ -15,7 +15,7 @@
 // items that reinforce each other — not just independently-good items. Read it as association, not proof:
 // the rates are raw (un-adjusted), and a residual depth bias may survive the centering below.
 
-import type { ItemFlowStats, ItemPermutationStats } from '../types';
+import type { ItemFlowStats, ItemPermutationStats } from "../types";
 
 const MIN_PAIR_SAMPLE = 100; // unordered joint games a pair needs before we'll judge its synergy
 const SYN_SHRINK_K = 400; // shrink a pair's synergy toward 0 by its joint sample (synergy·n/(n+K)) so a
@@ -48,14 +48,19 @@ export function singleRecordsFromFlow(flow: ItemFlowStats): Map<number, WL> {
 }
 
 /** Collapse the endpoint's *ordered* permutation rows into one *unordered* joint record per pair. */
-function unorderedPairs(rows: ItemPermutationStats[]): Array<{ ids: [number, number]; wl: WL }> {
+function unorderedPairs(
+  rows: ItemPermutationStats[],
+): Array<{ ids: [number, number]; wl: WL }> {
   const out = new Map<string, { ids: [number, number]; wl: WL }>();
   for (const r of rows) {
     if (r.item_ids.length !== 2) continue;
     const lo = Math.min(r.item_ids[0], r.item_ids[1]);
     const hi = Math.max(r.item_ids[0], r.item_ids[1]);
     const key = `${lo}-${hi}`;
-    const cur = out.get(key) ?? { ids: [lo, hi] as [number, number], wl: { wins: 0, losses: 0 } };
+    const cur = out.get(key) ?? {
+      ids: [lo, hi] as [number, number],
+      wl: { wins: 0, losses: 0 },
+    };
     cur.wl.wins += r.wins;
     cur.wl.losses += r.losses;
     out.set(key, cur);
@@ -63,7 +68,8 @@ function unorderedPairs(rows: ItemPermutationStats[]): Array<{ ids: [number, num
   return [...out.values()];
 }
 
-const pairKey = (a: number, b: number): string => (a < b ? `${a}-${b}` : `${b}-${a}`);
+const pairKey = (a: number, b: number): string =>
+  a < b ? `${a}-${b}` : `${b}-${a}`;
 
 /**
  * A function `(a, b) → synergy` for use inside the build fill: each eligible pair's additive interaction,
@@ -83,7 +89,11 @@ export function buildSynergyLookup(
   baselineWinRate: number,
 ): (a: number, b: number) => number {
   // Pass 1: raw interaction per eligible pair.
-  const raw: Array<{ ids: [number, number]; synergy: number; jointSample: number }> = [];
+  const raw: Array<{
+    ids: [number, number];
+    synergy: number;
+    jointSample: number;
+  }> = [];
   for (const { ids, wl } of unorderedPairs(pairRows)) {
     const nJoint = decided(wl);
     if (nJoint < MIN_PAIR_SAMPLE) continue;
@@ -109,5 +119,5 @@ export function buildSynergyLookup(
     const shrunk = centered * (r.jointSample / (r.jointSample + SYN_SHRINK_K));
     map.set(pairKey(r.ids[0], r.ids[1]), shrunk);
   }
-  return (a, b) => (a === b ? 0 : map.get(pairKey(a, b)) ?? 0);
+  return (a, b) => (a === b ? 0 : (map.get(pairKey(a, b)) ?? 0));
 }

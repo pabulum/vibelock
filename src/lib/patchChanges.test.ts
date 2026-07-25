@@ -38,7 +38,9 @@ describe("touchedItems", () => {
   });
 
   it("flattens html/bbcode and handles empty notes", () => {
-    expect([...touchedItems("<div>- Scourge: nerfed</div>", items)]).toEqual([3]);
+    expect([...touchedItems("<div>- Scourge: nerfed</div>", items)]).toEqual([
+      3,
+    ]);
     expect(touchedItems("", items).size).toBe(0);
   });
 });

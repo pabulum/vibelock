@@ -8,11 +8,15 @@ import type { Item } from "../types";
 import { SLOT_COLORS } from "./colors";
 import { ModalShell } from "./ModalShell";
 
-const pt = (x: number) => `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(1)}pt`;
+const pt = (x: number) =>
+  `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(1)}pt`;
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
 /** The verdict headline + explanation, per gate. Kept as data so the card body stays one shape. */
-function verdictCopy(v: ItemVerdict, itemName: string): { head: string; body: string } {
+function verdictCopy(
+  v: ItemVerdict,
+  itemName: string,
+): { head: string; body: string } {
   switch (v.kind) {
     case "in-build":
       return {
@@ -110,7 +114,8 @@ export function VerdictCard({
             {Math.round(stats.pickRate * 100)}% pick
           </span>
           <span title="Adjusted win rate vs the hero's baseline.">
-            {pct(stats.adjustedWinRate)} WR ({pt(stats.adjustedWinRate - stats.baseline)})
+            {pct(stats.adjustedWinRate)} WR (
+            {pt(stats.adjustedWinRate - stats.baseline)})
           </span>
           <span title="What that edge is worth after shrinking for sample size — the number the ranking actually used.">
             {pt(stats.lcbEdge)} shrunk

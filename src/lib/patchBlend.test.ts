@@ -1,12 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import type { FlowNode, FlowSummary, ItemFlowStats, ItemStat } from '../types';
+import { describe, expect, it } from "vitest";
+import type { FlowNode, FlowSummary, ItemFlowStats, ItemStat } from "../types";
 import {
   PATCH_K_DEFAULT,
   PATCH_K_MAX,
   blendFlow,
   blendItemStats,
   estimatePatchK,
-} from './patchBlend';
+} from "./patchBlend";
 
 function summary(wins: number, losses: number): FlowSummary {
   const matches = Math.round(wins + losses);
@@ -54,20 +54,38 @@ function flow(
 // A day-one fresh window: one item with 10 decided games. Prior: same item, 5000 games. With a
 // single overlapping node the drift fit can't run (< DRIFT_MIN_PAIRS), so K = PATCH_K_DEFAULT.
 const freshThin = flow(
-  [node({ item_id: 7, wins: 5, losses: 5, players: 10, matches: 10, adjusted_win_rate: 0.48 })],
+  [
+    node({
+      item_id: 7,
+      wins: 5,
+      losses: 5,
+      players: 10,
+      matches: 10,
+      adjusted_win_rate: 0.48,
+    }),
+  ],
   [500],
   250,
   250,
 );
 const priorBig = flow(
-  [node({ item_id: 7, wins: 2750, losses: 2250, players: 5000, matches: 5000, adjusted_win_rate: 0.55 })],
+  [
+    node({
+      item_id: 7,
+      wins: 2750,
+      losses: 2250,
+      players: 5000,
+      matches: 5000,
+      adjusted_win_rate: 0.55,
+    }),
+  ],
   [50000],
   25000,
   25000,
 );
 
-describe('blendFlow', () => {
-  it('on day one the prior dominates: blended rate sits near the pre-patch rate', () => {
+describe("blendFlow", () => {
+  it("on day one the prior dominates: blended rate sits near the pre-patch rate", () => {
     const { flow: f, borrowedShare } = blendFlow(freshThin, priorBig);
     const n = f.nodes.find((x) => x.item_id === 7)!;
     // ~10 fresh games vs ~950 borrowed (K=1000 minus a small agreement discount).
@@ -76,16 +94,25 @@ describe('blendFlow', () => {
     expect(borrowedShare).toBeGreaterThan(0.9);
   });
 
-  it('caps borrowing at K: effective decided games ≤ fresh n + K', () => {
+  it("caps borrowing at K: effective decided games ≤ fresh n + K", () => {
     const { flow: f } = blendFlow(freshThin, priorBig);
     const n = f.nodes.find((x) => x.item_id === 7)!;
     expect(n.wins + n.losses).toBeLessThanOrEqual(10 + PATCH_K_DEFAULT);
     expect(n.wins + n.losses).toBeGreaterThan(10); // ...but it did borrow
   });
 
-  it('anneals: with a mature fresh window the fresh data dominates', () => {
+  it("anneals: with a mature fresh window the fresh data dominates", () => {
     const freshMature = flow(
-      [node({ item_id: 7, wins: 24000, losses: 26000, players: 50000, matches: 50000, adjusted_win_rate: 0.48 })],
+      [
+        node({
+          item_id: 7,
+          wins: 24000,
+          losses: 26000,
+          players: 50000,
+          matches: 50000,
+          adjusted_win_rate: 0.48,
+        }),
+      ],
       [200000],
       100000,
       100000,
@@ -96,10 +123,19 @@ describe('blendFlow', () => {
     expect(borrowedShare).toBeLessThan(0.05);
   });
 
-  it('discounts a contradicted prior: an item the patch visibly changed borrows far less', () => {
+  it("discounts a contradicted prior: an item the patch visibly changed borrows far less", () => {
     // Fresh disagrees hard (0.40 over 2000 games vs prior 0.55): z ≈ 11 ⇒ discount ≈ 3%.
     const freshChanged = flow(
-      [node({ item_id: 7, wins: 800, losses: 1200, players: 2000, matches: 2000, adjusted_win_rate: 0.4 })],
+      [
+        node({
+          item_id: 7,
+          wins: 800,
+          losses: 1200,
+          players: 2000,
+          matches: 2000,
+          adjusted_win_rate: 0.4,
+        }),
+      ],
       [8000],
       4000,
       4000,
@@ -111,11 +147,25 @@ describe('blendFlow', () => {
     expect(n.wins + n.losses).toBeLessThan(2000 + 100);
   });
 
-  it('keeps prior-only items alive with the column-β pick-rate borrow', () => {
+  it("keeps prior-only items alive with the column-β pick-rate borrow", () => {
     const priorTwoItems = flow(
       [
-        node({ item_id: 7, wins: 2750, losses: 2250, players: 5000, matches: 5000, adjusted_win_rate: 0.55 }),
-        node({ item_id: 9, wins: 10500, losses: 9500, players: 20000, matches: 20000, adjusted_win_rate: 0.52 }),
+        node({
+          item_id: 7,
+          wins: 2750,
+          losses: 2250,
+          players: 5000,
+          matches: 5000,
+          adjusted_win_rate: 0.55,
+        }),
+        node({
+          item_id: 9,
+          wins: 10500,
+          losses: 9500,
+          players: 20000,
+          matches: 20000,
+          adjusted_win_rate: 0.52,
+        }),
       ],
       [50000],
       25000,
@@ -130,11 +180,25 @@ describe('blendFlow', () => {
     expect(ghost.adjusted_win_rate).toBeCloseTo(0.52, 6);
   });
 
-  it('passes fresh-only (new this patch) items through untouched', () => {
+  it("passes fresh-only (new this patch) items through untouched", () => {
     const freshNew = flow(
       [
-        node({ item_id: 7, wins: 5, losses: 5, players: 10, matches: 10, adjusted_win_rate: 0.48 }),
-        node({ item_id: 42, wins: 30, losses: 20, players: 55, matches: 55, adjusted_win_rate: 0.58 }),
+        node({
+          item_id: 7,
+          wins: 5,
+          losses: 5,
+          players: 10,
+          matches: 10,
+          adjusted_win_rate: 0.48,
+        }),
+        node({
+          item_id: 42,
+          wins: 30,
+          losses: 20,
+          players: 55,
+          matches: 55,
+          adjusted_win_rate: 0.58,
+        }),
       ],
       [500],
       250,
@@ -147,10 +211,19 @@ describe('blendFlow', () => {
     expect(fnew.players).toBe(55);
   });
 
-  it('borrowedShare falls as the fresh window grows', () => {
+  it("borrowedShare falls as the fresh window grows", () => {
     const dayOne = blendFlow(freshThin, priorBig).borrowedShare;
     const freshWeek = flow(
-      [node({ item_id: 7, wins: 2400, losses: 2600, players: 5000, matches: 5000, adjusted_win_rate: 0.48 })],
+      [
+        node({
+          item_id: 7,
+          wins: 2400,
+          losses: 2600,
+          players: 5000,
+          matches: 5000,
+          adjusted_win_rate: 0.48,
+        }),
+      ],
       [20000],
       10000,
       10000,
@@ -159,7 +232,7 @@ describe('blendFlow', () => {
     expect(weekIn).toBeLessThan(dayOne);
   });
 
-  it('blends the baseline with the same capped borrow, keeping counts integral', () => {
+  it("blends the baseline with the same capped borrow, keeping counts integral", () => {
     const { flow: f } = blendFlow(freshThin, priorBig);
     expect(Number.isInteger(f.baseline.matches)).toBe(true);
     const decided = f.baseline.wins + f.baseline.losses;
@@ -168,8 +241,13 @@ describe('blendFlow', () => {
   });
 });
 
-describe('blendItemStats', () => {
-  const stat = (item_id: number, wins: number, losses: number, buyT = 300): ItemStat => ({
+describe("blendItemStats", () => {
+  const stat = (
+    item_id: number,
+    wins: number,
+    losses: number,
+    buyT = 300,
+  ): ItemStat => ({
     item_id,
     wins,
     losses,
@@ -179,7 +257,7 @@ describe('blendItemStats', () => {
     avg_sell_time_s: 0,
   });
 
-  it('borrows for a thin fresh slice, capped at K', () => {
+  it("borrows for a thin fresh slice, capped at K", () => {
     const { stats } = blendItemStats([stat(7, 4, 6)], [stat(7, 2750, 2250)]);
     const r = stats.find((s) => s.item_id === 7)!;
     const n = r.wins + r.losses;
@@ -188,7 +266,7 @@ describe('blendItemStats', () => {
     expect(r.wins / n).toBeGreaterThan(0.5); // pulled toward the prior's 0.55
   });
 
-  it('shares the base discount so both sides of a counter delta borrow alike', () => {
+  it("shares the base discount so both sides of a counter delta borrow alike", () => {
     // Base slice: big fresh sample contradicts the prior (patch changed the item) ⇒ tiny discount.
     const base = blendItemStats([stat(7, 800, 1200)], [stat(7, 2750, 2250)]);
     expect(base.discounts.get(7)!).toBeLessThan(0.1);
@@ -196,12 +274,16 @@ describe('blendItemStats', () => {
     const solo = blendItemStats([stat(7, 5, 5)], [stat(7, 550, 450)]);
     expect(solo.discounts.get(7)!).toBeGreaterThan(0.8);
     // …but with the base's discounts it borrows almost nothing, like the base did.
-    const sharedBlend = blendItemStats([stat(7, 5, 5)], [stat(7, 550, 450)], base);
+    const sharedBlend = blendItemStats(
+      [stat(7, 5, 5)],
+      [stat(7, 550, 450)],
+      base,
+    );
     const r = sharedBlend.stats.find((s) => s.item_id === 7)!;
     expect(r.wins + r.losses).toBeLessThan(10 + PATCH_K_DEFAULT * 0.1);
   });
 
-  it('keeps prior-only items and passes fresh-only ones through', () => {
+  it("keeps prior-only items and passes fresh-only ones through", () => {
     const { stats } = blendItemStats(
       [stat(1, 30, 20)],
       [stat(1, 500, 500), stat(2, 600, 400)],
@@ -212,7 +294,7 @@ describe('blendItemStats', () => {
     expect(fresh.find((s) => s.item_id === 3)!.wins).toBe(30);
   });
 
-  it('a zero sell time (rarely sold) yields to the informative side instead of averaging', () => {
+  it("a zero sell time (rarely sold) yields to the informative side instead of averaging", () => {
     const f = { ...stat(7, 4, 6), avg_sell_time_s: 0 };
     const q = { ...stat(7, 500, 500), avg_sell_time_s: 900 };
     const { stats } = blendItemStats([f], [q]);
@@ -220,7 +302,7 @@ describe('blendItemStats', () => {
   });
 });
 
-describe('estimatePatchK', () => {
+describe("estimatePatchK", () => {
   const manyNodes = (adjOf: (i: number) => number, n: number) =>
     Array.from({ length: 10 }, (_, i) =>
       node({
@@ -233,28 +315,58 @@ describe('estimatePatchK', () => {
       }),
     );
 
-  it('falls back to the default with too few well-sampled pairs (day one)', () => {
+  it("falls back to the default with too few well-sampled pairs (day one)", () => {
     expect(estimatePatchK(freshThin, priorBig, 0.5)).toBe(PATCH_K_DEFAULT);
   });
 
-  it('returns the max when the windows agree beyond sampling noise (a no-op patch)', () => {
-    const a = flow(manyNodes(() => 0.5, 100000), [400000], 200000, 200000);
-    const b = flow(manyNodes(() => 0.5, 100000), [400000], 200000, 200000);
+  it("returns the max when the windows agree beyond sampling noise (a no-op patch)", () => {
+    const a = flow(
+      manyNodes(() => 0.5, 100000),
+      [400000],
+      200000,
+      200000,
+    );
+    const b = flow(
+      manyNodes(() => 0.5, 100000),
+      [400000],
+      200000,
+      200000,
+    );
     expect(estimatePatchK(a, b, 0.5)).toBe(PATCH_K_MAX);
   });
 
   it('does NOT max out on day-one "agreement" the fit had no power to test', () => {
     // Thin fresh pairs (60 games each): samplingVar ≫ typical drift, so driftVar ≤ 0 is guaranteed
     // whatever the truth — that must fall back to the default, not read as "no drift, borrow max".
-    const a = flow(manyNodes(() => 0.5, 60), [400], 200, 200);
-    const b = flow(manyNodes(() => 0.5, 100000), [400000], 200000, 200000);
+    const a = flow(
+      manyNodes(() => 0.5, 60),
+      [400],
+      200,
+      200,
+    );
+    const b = flow(
+      manyNodes(() => 0.5, 100000),
+      [400000],
+      200000,
+      200000,
+    );
     expect(estimatePatchK(a, b, 0.5)).toBe(PATCH_K_DEFAULT);
   });
 
-  it('learns K from real drift: ~2pt typical movement ⇒ K ≈ p(1−p)/drift²', () => {
+  it("learns K from real drift: ~2pt typical movement ⇒ K ≈ p(1−p)/drift²", () => {
     // Huge samples so sampling noise is negligible; items drift ±0.02 across the "patch".
-    const a = flow(manyNodes((i) => 0.5 + (i % 2 === 0 ? 0.02 : -0.02), 100000), [400000], 200000, 200000);
-    const b = flow(manyNodes(() => 0.5, 100000), [400000], 200000, 200000);
+    const a = flow(
+      manyNodes((i) => 0.5 + (i % 2 === 0 ? 0.02 : -0.02), 100000),
+      [400000],
+      200000,
+      200000,
+    );
+    const b = flow(
+      manyNodes(() => 0.5, 100000),
+      [400000],
+      200000,
+      200000,
+    );
     const k = estimatePatchK(a, b, 0.5);
     // 0.25 / 0.0004 = 625, minus the (tiny) sampling correction.
     expect(k).toBeGreaterThan(500);

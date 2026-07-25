@@ -25,7 +25,9 @@ function bakedShims(base: string): Promise<Set<string>> {
   shimSlugs ??= fetch(`${base}og/manifest.json`)
     .then((r) => (r.ok ? r.json() : []))
     .then((v: unknown) =>
-      Array.isArray(v) ? new Set(v.filter((s) => typeof s === "string")) : new Set<string>(),
+      Array.isArray(v)
+        ? new Set(v.filter((s) => typeof s === "string"))
+        : new Set<string>(),
     )
     .catch(() => new Set<string>());
   return shimSlugs;

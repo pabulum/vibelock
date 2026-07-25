@@ -19,6 +19,7 @@ import abilityOrder from "./fixtures/abilityOrder.json";
 import counterMatrix from "./fixtures/counterMatrix.json";
 import heroLadder from "./fixtures/heroLadder.json";
 import wpStats from "./fixtures/wpStats.json";
+import { setAnalyticsCacheEnabled } from "../lib/idbCache";
 
 const routes: Array<[RegExp, unknown]> = [
   [/^\/v2\/patches$/, patches],
@@ -45,9 +46,10 @@ export function installApiMock(): { unmatched: string[] } {
   const unmatched: string[] = [];
   const realFetch = window.fetch.bind(window);
 
-  // The client caches assets/patches in localStorage; clear so every run exercises
-  // the fetch path instead of a previous run's copy.
+  // The client caches assets/patches in localStorage and analytics responses in IndexedDB; clear
+  // and disable so every run exercises the fetch path instead of a previous run's copy.
   localStorage.clear();
+  setAnalyticsCacheEnabled(false);
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const href =

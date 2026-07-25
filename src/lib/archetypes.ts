@@ -17,8 +17,8 @@ import type {
   Hero,
   Item,
   ItemFlowStats,
-} from '../types';
-import { generateBuild, type BuildOptions } from './buildGenerator';
+} from "../types";
+import { generateBuild, type BuildOptions } from "./buildGenerator";
 
 const SIG_MIN_TIER = 3; // signatures must be scaling items, not lane fillers
 // A hero is flex only if both archetypes are well-played (≥ MIN), neither is so
@@ -35,9 +35,13 @@ export interface Signatures {
 }
 
 /** Pick the most-played T3+ weapon and spirit items as archetype signatures. */
-export function pickSignatures(flow: ItemFlowStats, items: Map<number, Item>): Signatures {
+export function pickSignatures(
+  flow: ItemFlowStats,
+  items: Map<number, Item>,
+): Signatures {
   const players = new Map<number, number>();
-  for (const n of flow.nodes) players.set(n.item_id, (players.get(n.item_id) ?? 0) + n.players);
+  for (const n of flow.nodes)
+    players.set(n.item_id, (players.get(n.item_id) ?? 0) + n.players);
 
   const ranked = [...players.entries()]
     .map(([id, n]) => ({ id, n, item: items.get(id) }))
@@ -45,8 +49,8 @@ export function pickSignatures(flow: ItemFlowStats, items: Map<number, Item>): S
     .sort((a, b) => b.n - a.n);
 
   return {
-    gun: ranked.find((x) => x.item!.slot === 'weapon')?.id,
-    spirit: ranked.find((x) => x.item!.slot === 'spirit')?.id,
+    gun: ranked.find((x) => x.item!.slot === "weapon")?.id,
+    spirit: ranked.find((x) => x.item!.slot === "spirit")?.id,
   };
 }
 
@@ -84,22 +88,33 @@ export function assembleArchetypes(
       winRate: winRateOf(flow),
       matches: flow.baseline.matches,
       share: flow.baseline.matches / baseMatches,
-      build: generateBuild(hero, rankLabel, items, flow, buyTimes, sellTimes, opts),
+      build: generateBuild(
+        hero,
+        rankLabel,
+        items,
+        flow,
+        buyTimes,
+        sellTimes,
+        opts,
+      ),
     };
   };
 
-  const all = make('all', 'All builds', flows.all)!; // base always has a baseline
-  const gun = make('gun', 'Gun', flows.gun, sig.gun);
-  const spirit = make('spirit', 'Spirit', flows.spirit, sig.spirit);
+  const all = make("all", "All builds", flows.all)!; // base always has a baseline
+  const gun = make("gun", "Gun", flows.gun, sig.gun);
+  const spirit = make("spirit", "Spirit", flows.spirit, sig.spirit);
 
-  const inRange = (a: Archetype) => a.share >= FLEX_MIN_SHARE && a.share <= FLEX_MAX_SHARE;
+  const inRange = (a: Archetype) =>
+    a.share >= FLEX_MIN_SHARE && a.share <= FLEX_MAX_SHARE;
   // Distinctness: how much of the smaller camp also bought the other signature. The
   // count of players who bought BOTH is already in the gun flow — the spirit
   // signature's node there counts gun-buyers who also bought it — so there's no need
   // for a separate query conditioned on both.
-  const bothMatches = flows.gun && sig.spirit ? sumPlayers(flows.gun, sig.spirit) : 0;
+  const bothMatches =
+    flows.gun && sig.spirit ? sumPlayers(flows.gun, sig.spirit) : 0;
   const bothShare = bothMatches / baseMatches;
-  const overlap = gun && spirit ? bothShare / Math.min(gun.share, spirit.share) : 1;
+  const overlap =
+    gun && spirit ? bothShare / Math.min(gun.share, spirit.share) : 1;
 
   const bothViable = !!gun && !!spirit && inRange(gun) && inRange(spirit);
   const flex = bothViable && overlap <= FLEX_MAX_OVERLAP;
@@ -107,14 +122,14 @@ export function assembleArchetypes(
   if (flex) {
     const split = [gun!, spirit!].sort((a, b) => b.winRate - a.winRate); // best win rate first
     const note = `Two distinct builds — ${split[0].label} wins more (${pct(split[0].winRate)} vs ${pct(split[1].winRate)}). Pick a style.`;
-    return { flex: true, kind: 'flex', note, archetypes: [...split, all] };
+    return { flex: true, kind: "flex", note, archetypes: [...split, all] };
   }
 
   if (bothViable) {
     return {
       flex: false,
-      kind: 'hybrid',
-      note: 'Hybrid hero — most players build weapon and spirit together, so this is one blended build.',
+      kind: "hybrid",
+      note: "Hybrid hero — most players build weapon and spirit together, so this is one blended build.",
       archetypes: [all],
     };
   }
@@ -122,17 +137,17 @@ export function assembleArchetypes(
   const lean = leanLabel(gun, spirit);
   return {
     flex: false,
-    kind: 'mono',
-    note: lean ? `${lean}-focused hero — one core build.` : 'One core build.',
+    kind: "mono",
+    note: lean ? `${lean}-focused hero — one core build.` : "One core build.",
     archetypes: [all],
   };
 }
 
 /** Which damage type the hero leans on, for the mono-hero note. */
 function leanLabel(gun?: Archetype, spirit?: Archetype): string | undefined {
-  if (gun && spirit) return spirit.share >= gun.share ? 'Spirit' : 'Gun';
-  if (spirit) return 'Spirit';
-  if (gun) return 'Gun';
+  if (gun && spirit) return spirit.share >= gun.share ? "Spirit" : "Gun";
+  if (spirit) return "Spirit";
+  if (gun) return "Gun";
   return undefined;
 }
 
@@ -147,5 +162,8 @@ function winRateOf(flow: ItemFlowStats): number {
 
 /** Total players who bought `itemId`, summed across phase columns (one buy per game). */
 function sumPlayers(flow: ItemFlowStats, itemId: number): number {
-  return flow.nodes.reduce((a, n) => (n.item_id === itemId ? a + n.players : a), 0);
+  return flow.nodes.reduce(
+    (a, n) => (n.item_id === itemId ? a + n.players : a),
+    0,
+  );
 }

@@ -6,7 +6,11 @@ import type { Ref } from "react";
 import { phaseTempo, type LabWinState } from "../lib/buildGenerator";
 import type { WpStats } from "../api/wpStats";
 import { CounterAddRow, ItemRow } from "../components/ItemRow";
-import { CategoryBar, OvertimeColumn, PhaseTempoLines } from "../components/panels";
+import {
+  CategoryBar,
+  OvertimeColumn,
+  PhaseTempoLines,
+} from "../components/panels";
 import type {
   BuildItem,
   BuildPhase,
@@ -65,7 +69,8 @@ function swapTargetFor(
     (b) => b.item.slot === c.item.slot && b.role !== "universal",
   );
   if (!slotCore.length) return undefined;
-  const sc = (b: BuildItem) => (b.compEdge ?? 0) + (b.adjustedWinRate - baseline);
+  const sc = (b: BuildItem) =>
+    (b.compEdge ?? 0) + (b.adjustedWinRate - baseline);
   const worst = slotCore.reduce((w, b) => (sc(b) < sc(w) ? b : w));
   return { id: worst.item.id, name: worst.item.name };
 }

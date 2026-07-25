@@ -22,6 +22,7 @@ import {
   type RankWindow,
   type TimeWindow,
 } from "../api/deadlock";
+import { guessSignatures } from "./signatureCache";
 
 /** A prefetch must never surface anything: a failed guess just leaves the real query to do the
  * work it would have done anyway (an errored analytics query holds no data, so it refetches). */
@@ -53,7 +54,10 @@ export function counterSliceQueries(
   // patch) and adds the pre-patch window as the prior; off, it's the selected window at the
   // endpoint's own default.
   return canBackfill
-    ? [{ ...base, ...dataWindow, minMatches: 5 }, { ...base, ...priorWin }]
+    ? [
+        { ...base, ...dataWindow, minMatches: 5 },
+        { ...base, ...priorWin },
+      ]
     : [{ ...base, ...dataWindow }];
 }
 
@@ -69,17 +73,32 @@ export function counterSliceQueries(
 export function prefetchBuild(heroId: number, slice: DataSlice): void {
   const { minBadge, maxBadge, dataWindow, priorWin, canBackfill } = slice;
   atPrefetchPriority(() => {
-    getItemFlowStats({
-      heroId,
-      minBadge,
-      maxBadge,
-      ...dataWindow,
-      ...(canBackfill ? { minMatches: 10 } : {}),
-    }).catch(swallow);
-    if (canBackfill)
-      getItemFlowStats({ heroId, minBadge, maxBadge, ...priorWin }).catch(
-        swallow,
-      );
+    const flow = (includeItemIds?: number[]) => {
+      getItemFlowStats({
+        heroId,
+        minBadge,
+        maxBadge,
+        ...dataWindow,
+        ...(canBackfill ? { minMatches: 10 } : {}),
+        includeItemIds,
+      }).catch(swallow);
+      if (canBackfill)
+        getItemFlowStats({
+          heroId,
+          minBadge,
+          maxBadge,
+          ...priorWin,
+          includeItemIds,
+        }).catch(swallow);
+    };
+    flow();
+    // The conditioned flows are the slow half of a hero switch and the half a prefetch used to
+    // miss entirely, because their include_item_ids are only known once the base flow lands. With
+    // a remembered signature pair we can warm them too (lib/signatureCache) — and being at
+    // prefetch priority, a stale guess costs nothing anyone is waiting on.
+    const guess = guessSignatures(heroId, minBadge, maxBadge);
+    if (guess?.gun) flow([guess.gun]);
+    if (guess?.spirit) flow([guess.spirit]);
     for (const q of counterSliceQueries(heroId, slice))
       getItemStats(q).catch(swallow);
     getItemPermutationStats({

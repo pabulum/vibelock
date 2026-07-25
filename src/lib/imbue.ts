@@ -4,7 +4,7 @@
 // that breaks win rate down by target — so the best signal we have is author popularity: the
 // plurality target across the hero's builds, same epistemic class as the skill order.
 
-import type { Ability, CommunityBuild, ImbueTarget } from '../types';
+import type { Ability, CommunityBuild, ImbueTarget } from "../types";
 
 // Authors often leave the target unset, so the populated set is sparse. Don't claim a target
 // until enough builds have committed to one, and only when a single ability is a clear

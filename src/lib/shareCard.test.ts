@@ -128,12 +128,10 @@ describe("shareLinks", () => {
   const base = "/vibelock/";
 
   test("app link carries the encoded selection", () => {
-    const { app } = shareLinks(
-      { hero: "paradox", tier: 11 },
-      origin,
-      base,
+    const { app } = shareLinks({ hero: "paradox", tier: 11 }, origin, base);
+    expect(app).toBe(
+      "https://pabulum.github.io/vibelock/?hero=paradox&rank=11",
     );
-    expect(app).toBe("https://pabulum.github.io/vibelock/?hero=paradox&rank=11");
   });
 
   test("shim link points at the per-hero OG page with the same query", () => {

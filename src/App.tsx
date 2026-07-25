@@ -614,8 +614,7 @@ function AppInner() {
       // A "vs …" add from the main palette starts a counter-adding run: switch into enemies mode
       // so the next bare name is another pick. Already-in-enemies-mode adds carry no chain flag.
       if (a.chain) setPalette("enemies");
-    }
-    else if (a.kind === "mode") setPalette(a.mode);
+    } else if (a.kind === "mode") setPalette(a.mode);
     else if (a.kind === "jump") pendingJump.current = a.id;
     else if (a.kind === "why") setWhyItem(items?.get(a.id) ?? null);
     else if (a.kind === "toggle") {

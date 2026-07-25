@@ -10,6 +10,7 @@
 import * as v from "valibot";
 import { queryOptions } from "@tanstack/react-query";
 import { queryClient } from "../queryClient";
+import { cacheGet, cachePut } from "../lib/idbCache";
 import {
   AbilityOrderRowSchema,
   HeroBuildStatRowSchema,
@@ -88,12 +89,15 @@ function retryAfterMs(res: Response, attempt: number): number {
 
 type AnySchema = v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>;
 
-async function getJson<TSchema extends AnySchema>(
+/** The response body, with the retry policy applied — no schema validation yet, so the caller can
+ * store the raw body (lib/idbCache) and validate it on the way out. `bytes` is the payload size,
+ * which the cache's budget is accounted in. */
+async function getBody(
   url: string,
-  schema: TSchema,
-): Promise<v.InferOutput<TSchema>> {
+  signal?: AbortSignal,
+): Promise<{ body: unknown; bytes: number }> {
   for (let attempt = 0; ; attempt++) {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal });
     // Retry rate limits (per the server's hint) and transient 5xx flaps (the API intermittently
     // 500s under load; one page load fans out enough queries that a single flap otherwise lands
     // the error banner on a healthy session).
@@ -104,8 +108,16 @@ async function getJson<TSchema extends AnySchema>(
     if (!res.ok) {
       throw new Error(`${res.status} ${res.statusText} for ${url}`);
     }
-    return parseAs(schema, await res.json(), url);
+    const text = await res.text();
+    return { body: JSON.parse(text) as unknown, bytes: text.length };
   }
+}
+
+async function getJson<TSchema extends AnySchema>(
+  url: string,
+  schema: TSchema,
+): Promise<v.InferOutput<TSchema>> {
+  return parseAs(schema, (await getBody(url)).body, url);
 }
 
 // Cap how many analytics requests are in flight at once. A single session stays well
@@ -138,9 +150,9 @@ function pump(): void {
     // LIFO within a tier, deliberately. When several selections are queued at once the newest is
     // the one the player is waiting on; the older ones are for a hero or rank they already clicked
     // past. Draining oldest-first meant an abandoned burst *delayed* the wanted result — five
-    // slots' worth of dead requests ahead of it, seconds each. Nothing is dropped here: some of
-    // those URLs are still wanted by a query whose own key never changed (the counter matrix
-    // survives a hero switch), and we have no way yet to tell which. They just go last.
+    // slots' worth of dead requests ahead of it, seconds each. Queued work for a selection that has
+    // since been abandoned is cheap now rather than merely late: its signal is already aborted, so
+    // it reaches `fetch` and returns immediately without touching the network (see `acquire`).
     const next = queues[tier].pop()!;
     inflight++;
     if (tier === "prefetch") prefetchInflight++;
@@ -182,22 +194,84 @@ export function atPrefetchPriority(fn: () => void): void {
   }
 }
 
+// Live interest in each in-flight URL. A single URL is routinely awaited by more than one query
+// (the base item-stats slice serves both the build and the counters), so "my caller went away"
+// is NOT license to abort — only the departure of the *last* caller is. Each entry counts the
+// callers still waiting and owns the controller that aborts the fetch when that count reaches zero.
+const waiters = new Map<
+  string,
+  { count: number; controller: AbortController }
+>();
+
+/** Register a caller's interest in `url`, returning the signal the fetch should use and a
+ * `release` to call exactly once when that caller is done or gone. A caller with no signal of its
+ * own (a prefetch) still counts — it just never triggers the abort. */
+function acquire(
+  url: string,
+  signal: AbortSignal | undefined,
+): { signal: AbortSignal; release: () => void } {
+  let w = waiters.get(url);
+  if (!w) {
+    w = { count: 0, controller: new AbortController() };
+    waiters.set(url, w);
+  }
+  const entry = w;
+  entry.count++;
+  let released = false;
+  const release = () => {
+    if (released) return; // settle and abort can both fire; the count must move once
+    released = true;
+    if (--entry.count > 0) return;
+    waiters.delete(url);
+    if (signal?.aborted) {
+      entry.controller.abort();
+      // Drop the cache entry too. A caller arriving after the abort must start a fresh request
+      // rather than attach to the promise that is about to reject.
+      queryClient.removeQueries({ queryKey: ["analytics", url], exact: true });
+    }
+  };
+  signal?.addEventListener("abort", release, { once: true });
+  return { signal: entry.controller.signal, release };
+}
+
 // Analytics endpoints recompute server-side and return small payloads, but a cold query can take
 // several seconds. Each response is cached by URL in the query cache (staleTime Infinity = one
 // round trip per session), so revisiting a hero/rank/patch — or two composed queries asking for
-// the same underlying URL — is free. Failures aren't cached (an errored query with no data
-// refetches on the next ask). Not persisted: the `analytics` prefix is outside the persister's
-// `assets` filter, so multi-MB payloads never touch localStorage.
+// the same underlying URL — is free, and by lib/idbCache that survives a reload. Failures aren't
+// cached (an errored query with no data refetches on the next ask). Not in the localStorage
+// persister: the `analytics` prefix is outside its `assets` filter, so multi-MB payloads never go
+// near it.
 function getAnalytics<TSchema extends AnySchema>(
   url: string,
   schema: TSchema,
+  callerSignal?: AbortSignal,
 ): Promise<v.InferOutput<TSchema>> {
   // Captured here rather than read inside queryFn: the priority belongs to the moment the request
   // was asked for, and fetchQuery gives no promise about when it runs the function.
   const tier = currentTier;
   return queryClient.fetchQuery({
     queryKey: ["analytics", url],
-    queryFn: () => throttle(() => getJson(url, schema), tier),
+    queryFn: async () => {
+      // A previous session may already have this exact slice (lib/idbCache). Checked before the
+      // throttle queue, not inside it: a disk hit shouldn't wait behind five network requests, and
+      // it shouldn't hold one of their slots either.
+      const stored = await cacheGet(url);
+      if (stored !== undefined) return parseAs(schema, stored, url);
+      const { signal, release } = acquire(url, callerSignal);
+      try {
+        const { body, bytes } = await throttle(
+          () => getBody(url, signal),
+          tier,
+        );
+        // Validate before storing, so a response that can't satisfy its schema is never persisted;
+        // the write itself is fire-and-forget.
+        const parsed = parseAs(schema, body, url);
+        cachePut(url, body, bytes);
+        return parsed;
+      } finally {
+        release();
+      }
+    },
   });
 }
 
@@ -546,6 +620,9 @@ function applyRank(params: URLSearchParams, q: RankWindow): void {
 
 export interface FlowQuery extends TimeWindow, RankWindow {
   heroId: number;
+  /** Cancels the fetch when the query that asked for it is superseded — but only once every other
+   * caller of the same URL has gone too (see `acquire`). */
+  signal?: AbortSignal;
   /** Drop nodes/edges below this many matches (server-side noise floor). */
   minMatches?: number;
   /**
@@ -577,11 +654,14 @@ export function getItemFlowStats(q: FlowQuery): Promise<ItemFlowStats> {
   return getAnalytics(
     `${BASE}/v1/analytics/item-flow-stats?${params}`,
     ItemFlowStatsSchema,
+    q.signal,
   );
 }
 
 export interface ItemStatsQuery extends TimeWindow, RankWindow {
   heroId: number;
+  /** See {@link FlowQuery.signal}. */
+  signal?: AbortSignal;
   /** Filter to matches where any of these heroes were on the enemy team. */
   enemyHeroIds?: number[];
   minMatches?: number;
@@ -589,6 +669,8 @@ export interface ItemStatsQuery extends TimeWindow, RankWindow {
 
 export interface PermutationQuery extends TimeWindow, RankWindow {
   heroId: number;
+  /** See {@link FlowQuery.signal}. */
+  signal?: AbortSignal;
   /** Size of the item permutations to return (default 2 = pairs). `item_ids` mode is mutually exclusive
    * with this and unused — we want every pair for the hero, then aggregate orderings client-side. */
   combSize?: number;
@@ -613,6 +695,7 @@ export function getItemPermutationStats(
   return getAnalytics(
     `${BASE}/v1/analytics/item-permutation-stats?${params}`,
     ItemPermutationStatsRowsSchema,
+    q.signal,
   );
 }
 
@@ -630,6 +713,7 @@ export function getItemStats(q: ItemStatsQuery): Promise<ItemStat[]> {
   return getAnalytics(
     `${BASE}/v1/analytics/item-stats?${params}`,
     ItemStatRowsSchema,
+    q.signal,
   );
 }
 

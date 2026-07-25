@@ -51,8 +51,10 @@ test("Ctrl+K enemy add chains and releases scroll on close", async () => {
 
   pressCtrlK();
   await expect
-    .poll(() =>
-      screen.container.querySelector<HTMLDialogElement>("dialog.palette")?.open,
+    .poll(
+      () =>
+        screen.container.querySelector<HTMLDialogElement>("dialog.palette")
+          ?.open,
     )
     .toBe(true);
   const dialog =
@@ -63,7 +65,9 @@ test("Ctrl+K enemy add chains and releases scroll on close", async () => {
   const input = screen.container.querySelector<HTMLInputElement>(".pal-in")!;
   typeAndEnter(input, "vs bebop");
   await expect
-    .poll(() => screen.container.querySelector(".pal-opt.on .pal-lbl")?.textContent)
+    .poll(
+      () => screen.container.querySelector(".pal-opt.on .pal-lbl")?.textContent,
+    )
     .toContain("Bebop");
   input.dispatchEvent(
     new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
@@ -73,8 +77,10 @@ test("Ctrl+K enemy add chains and releases scroll on close", async () => {
   // the enemies-picker copy, so the next bare name is another counter, not a hero switch.
   await expect.poll(() => dialog?.open).toBe(true);
   await expect
-    .poll(() =>
-      screen.container.querySelector<HTMLInputElement>(".pal-in")?.placeholder,
+    .poll(
+      () =>
+        screen.container.querySelector<HTMLInputElement>(".pal-in")
+          ?.placeholder,
     )
     .toContain("enemies");
   expect(
@@ -84,7 +90,9 @@ test("Ctrl+K enemy add chains and releases scroll on close", async () => {
   // Second counter by BARE name (no "vs" prefix) — proof the chain works.
   typeAndEnter(input, "lash");
   await expect
-    .poll(() => screen.container.querySelector(".pal-opt.on .pal-lbl")?.textContent)
+    .poll(
+      () => screen.container.querySelector(".pal-opt.on .pal-lbl")?.textContent,
+    )
     .toContain("Lash");
   input.dispatchEvent(
     new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
@@ -119,8 +127,10 @@ test("opening a modal from the palette does not strip scroll (overlap lock)", as
 
   pressCtrlK();
   await expect
-    .poll(() =>
-      screen.container.querySelector<HTMLDialogElement>("dialog.palette")?.open,
+    .poll(
+      () =>
+        screen.container.querySelector<HTMLDialogElement>("dialog.palette")
+          ?.open,
     )
     .toBe(true);
 
@@ -133,9 +143,11 @@ test("opening a modal from the palette does not strip scroll (overlap lock)", as
   )!.set!;
   setValue.call(input, "lab experimental");
   input.dispatchEvent(new Event("input", { bubbles: true }));
-  await expect.poll(() =>
-    screen.container.querySelector(".pal-opt.on .pal-lbl")?.textContent,
-  ).toContain("Lab");
+  await expect
+    .poll(
+      () => screen.container.querySelector(".pal-opt.on .pal-lbl")?.textContent,
+    )
+    .toContain("Lab");
   input.dispatchEvent(
     new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
   );

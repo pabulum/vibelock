@@ -12,13 +12,7 @@ import { climbAdvice, type FundamentalRow } from "../lib/fundamentals";
 import { rankFloorLabel } from "../lib/ranks";
 import type { HeroFarmProfile } from "../lib/matchAnalysis";
 import type { FundamentalsData } from "./useProfile";
-import type {
-  Ability,
-  CommunityMatch,
-  Hero,
-  Item,
-  SkillBuild,
-} from "../types";
+import type { Ability, CommunityMatch, Hero, Item, SkillBuild } from "../types";
 
 export function DashGrid(props: {
   hero: Hero | null;

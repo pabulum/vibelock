@@ -117,7 +117,8 @@ export function useProfile(opts: {
   // Keyed off the committed value too, or a half-typed id gets persisted and restored next session.
   useEffect(() => {
     const v = committedId.trim();
-    if (typedAccountId(v) !== null) localStorage.setItem("vibelock-steam-id", v);
+    if (typedAccountId(v) !== null)
+      localStorage.setItem("vibelock-steam-id", v);
     else if (v === "") localStorage.removeItem("vibelock-steam-id");
   }, [committedId]);
 

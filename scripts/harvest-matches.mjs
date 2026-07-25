@@ -85,10 +85,13 @@ async function fetchJson(url, { label = url, retries = FETCH_RETRIES } = {}) {
       }
       return await res.json();
     } catch (e) {
-      const retryable = e.status === undefined || RETRYABLE_STATUS.has(e.status);
+      const retryable =
+        e.status === undefined || RETRYABLE_STATUS.has(e.status);
       if (!retryable || attempt >= maxAttempts) throw e;
       const wait = Math.min(30000, 6000 * attempt);
-      const why = e.status ? `HTTP ${e.status}` : e.code || e.cause?.code || e.name;
+      const why = e.status
+        ? `HTTP ${e.status}`
+        : e.code || e.cause?.code || e.name;
       console.warn(
         `${label}: ${why} — retry ${attempt}/${retries} in ${wait / 1000}s`,
       );

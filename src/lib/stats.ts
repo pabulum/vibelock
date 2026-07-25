@@ -34,9 +34,18 @@ export function winRateSE(winRate: number, n: number): number {
  * to pass, a large sample only needs to clear the effect floor. Pass `nb = Infinity` for a fixed,
  * well-sampled reference (e.g. the hero baseline or an aggregated lean), whose own noise is negligible.
  */
-export function significantlyHigher(a: number, na: number, b: number, nb: number, margin = 0): boolean {
+export function significantlyHigher(
+  a: number,
+  na: number,
+  b: number,
+  nb: number,
+  margin = 0,
+): boolean {
   if (a < b + margin) return false; // effect-size floor: clear the threshold on the point estimate first
-  const se = Math.hypot(winRateSE(a, na), nb === Number.POSITIVE_INFINITY ? 0 : winRateSE(b, nb));
+  const se = Math.hypot(
+    winRateSE(a, na),
+    nb === Number.POSITIVE_INFINITY ? 0 : winRateSE(b, nb),
+  );
   if (se === 0) return true; // no sampling noise at all ⇒ the effect-size pass already settles it
   return (a - b) / se >= GATE_Z;
 }
@@ -49,7 +58,9 @@ function erf(x: number): number {
   const t = 1 / (1 + 0.3275911 * ax);
   const y =
     1 -
-    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
+    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) *
+      t +
+      0.254829592) *
       t *
       Math.exp(-ax * ax);
   return sign * y;
@@ -76,7 +87,8 @@ export function benjaminiHochberg(pValues: number[], q: number): boolean[] {
   if (m === 0) return accept;
   const order = pValues.map((p, i) => ({ p, i })).sort((a, b) => a.p - b.p);
   let cutoffRank = -1; // largest 0-based rank whose p clears (k/m)·q
-  for (let r = 0; r < m; r++) if (order[r].p <= ((r + 1) / m) * q) cutoffRank = r;
+  for (let r = 0; r < m; r++)
+    if (order[r].p <= ((r + 1) / m) * q) cutoffRank = r;
   for (let r = 0; r <= cutoffRank; r++) accept[order[r].i] = true; // accept all up to the cutoff
   return accept;
 }

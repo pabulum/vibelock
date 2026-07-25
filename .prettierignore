@@ -1,0 +1,6 @@
+dist
+package-lock.json
+
+# Captured API responses (scripts/capture-fixtures.mjs rewrites these wholesale) — reformatting
+# them is churn that shows up as a diff every time the fixtures are refreshed.
+src/test/fixtures

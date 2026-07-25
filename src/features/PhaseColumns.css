@@ -70,7 +70,8 @@
     background: linear-gradient(180deg, var(--accent-wash), transparent 170px);
     /* A bloom off the head rule only — the column is marked by light spilling from its own edge
        rather than by a differently-shaped container. */
-    box-shadow: 0 -6px 18px -8px color-mix(in oklab, var(--accent) 70%, transparent);
+    box-shadow: 0 -6px 18px -8px
+      color-mix(in oklab, var(--accent) 70%, transparent);
   }
   /* At one column wide the negative margin would push the tint past the page gutter. */
   @media (max-width: 620px) {

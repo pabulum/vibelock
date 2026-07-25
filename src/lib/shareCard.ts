@@ -274,7 +274,8 @@ export async function drawShareCard(
   const loaded = new Map<string, HTMLImageElement | null>(
     await Promise.all(
       [...urls].map(
-        async (u) => [u, await loadImage(u)] as [string, HTMLImageElement | null],
+        async (u) =>
+          [u, await loadImage(u)] as [string, HTMLImageElement | null],
       ),
     ),
   );

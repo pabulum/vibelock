@@ -10,12 +10,7 @@
 // they have a real sample (there's nothing to test them against).
 
 import { benjaminiHochberg, normalCdf } from "./stats";
-import type {
-  BuildItem,
-  GeneratedBuild,
-  Item,
-  ItemStat,
-} from "../types";
+import type { BuildItem, GeneratedBuild, Item, ItemStat } from "../types";
 
 const MOVER_MIN_N = 40; // decided games needed in BOTH windows to test an item at all
 const MOVER_FDR = 0.1; // expected share of false movers among those we call

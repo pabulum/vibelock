@@ -10,7 +10,12 @@ import type {
 import { PHASE_META } from "./phaseFill";
 import { itemVerdict } from "./verdict";
 
-const item = (id: number, name: string, cost = 1000, slot: Item["slot"] = "weapon"): Item => ({
+const item = (
+  id: number,
+  name: string,
+  cost = 1000,
+  slot: Item["slot"] = "weapon",
+): Item => ({
   id,
   name,
   tier: 2,

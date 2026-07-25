@@ -280,7 +280,8 @@ function splitBuffer(
 /** An int64/uint64 as a plain number when it's exactly representable, else a bigint — build ids and
  * timestamps stay ergonomic, and huge ids don't silently lose precision. */
 function narrow(v: bigint): number | bigint {
-  return v >= BigInt(Number.MIN_SAFE_INTEGER) && v <= BigInt(Number.MAX_SAFE_INTEGER)
+  return v >= BigInt(Number.MIN_SAFE_INTEGER) &&
+    v <= BigInt(Number.MAX_SAFE_INTEGER)
     ? Number(v)
     : v;
 }
@@ -611,7 +612,8 @@ function isSameLineScalar(v: Kv3Value): boolean {
 function serialize(v: Kv3Value, level: number, inDict: boolean): string {
   const indent = "\t".repeat(level);
   const indentNested = "\t".repeat(level + 1);
-  if (v instanceof Kv3Flagged) return `${v.flag}:${serialize(v.value, 0, false)}`;
+  if (v instanceof Kv3Flagged)
+    return `${v.flag}:${serialize(v.value, 0, false)}`;
   if (v === null) return "null";
   if (v === false) return "false";
   if (v === true) return "true";
@@ -624,7 +626,8 @@ function serialize(v: Kv3Value, level: number, inDict: boolean): string {
     if (v.length <= 6 && v.every(isSameLineScalar))
       return `[${v.map((x) => serialize(x, 0, false)).join(", ")}]`;
     let s = `\n${indent}[\n`;
-    for (const item of v) s += `${indentNested}${serialize(item, level + 1, false)},\n`;
+    for (const item of v)
+      s += `${indentNested}${serialize(item, level + 1, false)},\n`;
     return `${s}${indent}]`;
   }
   // Map — a KV3 object.

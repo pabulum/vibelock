@@ -11,7 +11,7 @@ docs/METHODOLOGY.md before touching anything statistical.
   compiler memoizes automatically and bails out per-component on anything unsafe.
   Existing hand-memoization predates the compiler: harmless, remove it opportunistically
   when editing a component, don't add more.
-- **Comment culture**: comments state constraints, gotchas, and *why* — never what the
+- **Comment culture**: comments state constraints, gotchas, and _why_ — never what the
   next line does. Match the density and voice of the file you're in.
 - **Never `git commit`** — the user commits their own work. Keep changes chunked
   feature-by-feature so the tree stays splittable into commits.
@@ -39,7 +39,7 @@ docs/METHODOLOGY.md before touching anything statistical.
   meaning-only — a delta inside ±2pt gets none.
 - **Mode-dependent rules that aren't colours** must key off `:root[data-theme="dark"|"light"]`,
   never `@media (prefers-color-scheme:)`. `light-dark()` resolves to a `<color>` and nothing
-  else, and the media query reports the *OS* — so with the theme toggle (src/lib/theme.ts,
+  else, and the media query reports the _OS_ — so with the theme toggle (src/lib/theme.ts,
   which writes both `color-scheme` and `data-theme` to `<html>`) a forced light theme on a
   dark machine would otherwise get light colours with dark-mode grain. Current users: grain
   opacity, shadow recipe, and the invert() that makes Deadlock's white ability art — pure

@@ -43,8 +43,10 @@ const MOON = (
  * reaching for it wants. Subscribed rather than plain state: with nothing stored the page is still
  * following the OS, and this has to re-render when the OS flips under it. */
 function ThemeToggle() {
-  const theme = useSyncExternalStore(subscribeTheme, resolvedTheme, () =>
-    "dark" as const,
+  const theme = useSyncExternalStore(
+    subscribeTheme,
+    resolvedTheme,
+    () => "dark" as const,
   );
   const target = theme === "dark" ? "light" : "dark";
   return (

@@ -132,11 +132,7 @@ export interface ItemRef {
  * guaranteed a slot because it's the plurality answer to a near-universal need (see
  * {@link NeedKind}), not because its own pick rate or win rate cleared a gate. */
 export type BuildRole =
-  | "universal"
-  | "value"
-  | "situational"
-  | "filler"
-  | "need";
+  "universal" | "value" | "situational" | "filler" | "need";
 
 export interface BuildItem {
   item: Item;

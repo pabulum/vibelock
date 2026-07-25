@@ -153,7 +153,9 @@ test("the palette flips into enemies mode in place for chained adds", async () =
   const input = screen.getByRole("combobox", { name: "Search commands" });
   await expect.element(input).toBeVisible();
   await input.fill("counter");
-  await screen.getByRole("option", { name: /add enemies \(counters\)/ }).click();
+  await screen
+    .getByRole("option", { name: /add enemies \(counters\)/ })
+    .click();
 
   // Same dialog, flipped in place: query cleared, now scoped to bare-name enemy toggles.
   await expect.element(input).toHaveValue("");
@@ -187,8 +189,8 @@ test("the palette jumps to a build item's row and flashes it", async () => {
     ...screen.container.querySelectorAll("dialog.palette .pal-hdr"),
   ].find((h) => h.textContent === "Items");
   expect(itemsHdr).toBeDefined();
-  const name = itemsHdr!.nextElementSibling?.querySelector(".pal-lbl")
-    ?.textContent;
+  const name =
+    itemsHdr!.nextElementSibling?.querySelector(".pal-lbl")?.textContent;
   expect(name).toBeTruthy();
 
   await input.fill(name!);
