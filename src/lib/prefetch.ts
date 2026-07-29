@@ -15,6 +15,7 @@
 
 import {
   atPrefetchPriority,
+  getHeroLadderStats,
   getItemFlowStats,
   getItemPermutationStats,
   getItemStats,
@@ -28,11 +29,18 @@ import { guessSignatures } from "./signatureCache";
  * work it would have done anyway (an errored analytics query holds no data, so it refetches). */
 const swallow = () => {};
 
-/** The rank + patch slice a build is generated from — everything a query needs beyond the hero. */
-export interface DataSlice extends RankWindow {
+/** The windows the counters queries read: the selected patch and the blend's borrow window. */
+export interface CounterSlice extends RankWindow {
   dataWindow: TimeWindow;
   priorWin: TimeWindow;
   canBackfill: boolean;
+}
+
+/** The rank + patch slice a build is generated from — everything a query needs beyond the hero. */
+export interface DataSlice extends CounterSlice {
+  /** The movers' comparator window (lib/patchWindows) — see features/useBuildData. Only the build
+   * fan-out reads it; counters don't, which is why they take the narrower slice above. */
+  moversWin: TimeWindow;
 }
 
 /**
@@ -45,7 +53,7 @@ export interface DataSlice extends RankWindow {
  */
 export function counterSliceQueries(
   heroId: number,
-  slice: DataSlice,
+  slice: CounterSlice,
   enemyHeroIds?: number[],
 ): ItemStatsQuery[] {
   const { minBadge, maxBadge, dataWindow, priorWin, canBackfill } = slice;
@@ -71,7 +79,8 @@ export function counterSliceQueries(
  * feels, and the concurrency cap keeps a wrong guess from crowding anything out.
  */
 export function prefetchBuild(heroId: number, slice: DataSlice): void {
-  const { minBadge, maxBadge, dataWindow, priorWin, canBackfill } = slice;
+  const { minBadge, maxBadge, dataWindow, priorWin, moversWin, canBackfill } =
+    slice;
   atPrefetchPriority(() => {
     const flow = (includeItemIds?: number[]) => {
       getItemFlowStats({
@@ -101,6 +110,20 @@ export function prefetchBuild(heroId: number, slice: DataSlice): void {
     if (guess?.spirit) flow([guess.spirit]);
     for (const q of counterSliceQueries(heroId, slice))
       getItemStats(q).catch(swallow);
+    // The movers' own slice: the comparator window's item-stats plus the hero's ladder row in both
+    // windows (see features/useBuildData). Matching those calls exactly, so a hover warms the URLs
+    // the real query asks for rather than doing the work twice.
+    if (canBackfill) {
+      getItemStats({
+        heroId,
+        minBadge,
+        maxBadge,
+        ...moversWin,
+        minMatches: 5,
+      }).catch(swallow);
+      getHeroLadderStats({ minBadge, maxBadge, ...dataWindow }).catch(swallow);
+      getHeroLadderStats({ minBadge, maxBadge, ...moversWin }).catch(swallow);
+    }
     getItemPermutationStats({
       heroId,
       minBadge,

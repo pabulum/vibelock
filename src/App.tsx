@@ -11,7 +11,12 @@ import {
   slugify,
   type UrlState,
 } from "./lib/urlState";
-import { priorWindowFor, windowFor } from "./lib/patchWindows";
+import {
+  moversWindowFor,
+  priorWindowFor,
+  SESSION_NOW_S,
+  windowFor,
+} from "./lib/patchWindows";
 import { switchTransition } from "./lib/viewTransition";
 import { foldTrendingBreakouts } from "./lib/patchMovers";
 import { heroFarmProfile } from "./lib/matchAnalysis";
@@ -290,6 +295,12 @@ function AppInner() {
     () => priorWindowFor(patches, sel.patchIdx),
     [patches, sel.patchIdx],
   );
+  // The movers' comparator: as much time before the patch as it has run for (see patchWindows for
+  // why the clock is the session's, not a live one).
+  const moversWin = useMemo(
+    () => moversWindowFor(patches, sel.patchIdx, SESSION_NOW_S),
+    [patches, sel.patchIdx],
+  );
   // Backfill needs a patch boundary to blend across; when the patch feed is down (empty list,
   // see patchesQueryOptions) we degrade to the plain window instead of dead-ending queries.
   const canBackfill = backfillOn && patches.length > 0;
@@ -404,6 +415,7 @@ function AppInner() {
     maxBadge,
     dataWindow,
     priorWin,
+    moversWin,
     canBackfill,
     priorKey,
     lineAware,
@@ -483,7 +495,14 @@ function AppInner() {
   // now, behind everything the player has actually asked for (lib/prefetch). Same handler for every
   // surface that can signal intent: hovering a hero chip or a matchup chip, resting on a palette
   // row. Actions with nothing to fetch (jump, why, panels, toggles) simply fall through.
-  const dataSlice = { minBadge, maxBadge, dataWindow, priorWin, canBackfill };
+  const dataSlice = {
+    minBadge,
+    maxBadge,
+    dataWindow,
+    priorWin,
+    moversWin,
+    canBackfill,
+  };
   const prefetchIntent = (a: PaletteAction) => {
     if (a.kind === "hero") {
       prefetchBuild(a.id, dataSlice);
@@ -499,6 +518,7 @@ function AppInner() {
         ...dataSlice,
         dataWindow: windowFor(patches, a.idx),
         priorWin: priorWindowFor(patches, a.idx),
+        moversWin: moversWindowFor(patches, a.idx, SESSION_NOW_S),
       });
   };
 

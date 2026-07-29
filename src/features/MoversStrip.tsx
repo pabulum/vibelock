@@ -5,6 +5,10 @@ import type { Ref } from "react";
 import type { AdoptionMover, PatchMover } from "../lib/patchMovers";
 import type { Hero } from "../types";
 
+/** A win-rate gap in points, always signed — these are differences, never levels. */
+const signed = (x: number) =>
+  `${x >= 0 ? "+" : "−"}${(Math.abs(x) * 100).toFixed(1)}pt`;
+
 export function MoversStrip(props: {
   movers: PatchMover[];
   adoption: AdoptionMover[] | null;
@@ -16,7 +20,7 @@ export function MoversStrip(props: {
     <div className="movers" ref={moversRef}>
       <span
         className="lbl"
-        title="Items whose win rate for this hero verifiably moved across the patch — every sufficiently-sampled item is tested between the pre- and post-patch windows, false discoveries are rate-controlled, and only ≥2pt moves make the list. New items appear once they have a real sample."
+        title="Items whose win rate for this hero verifiably moved across the patch, measured against the hero's own win rate so that a hero buff or nerf doesn't read as its whole item pool moving. Every sufficiently-sampled item is tested between the post-patch window and the equal-length window before it, false discoveries are rate-controlled, and only ≥2pt moves make the list. New items appear once they have a real sample."
       >
         Patch movers
       </span>
@@ -35,7 +39,9 @@ export function MoversStrip(props: {
               : "") +
             (m.isNew
               ? `New this patch — ${(m.newWinRate * 100).toFixed(1)}% over ${Math.round(m.nNew)} decided games`
-              : `${(m.prevWinRate * 100).toFixed(1)}% → ${(m.newWinRate * 100).toFixed(1)}% (${Math.round(m.nPrev).toLocaleString()} → ${Math.round(m.nNew).toLocaleString()} decided games)`)
+              : // Both framings, because they can disagree and the gap is the point: the raw rates
+                // are what you'd see on the item, the edges are what the patch actually did to it.
+                `${(m.prevWinRate * 100).toFixed(1)}% → ${(m.newWinRate * 100).toFixed(1)}% raw (${Math.round(m.nPrev).toLocaleString()} → ${Math.round(m.nNew).toLocaleString()} decided games). Against this hero's own win rate: ${signed(m.prevEdge)} → ${signed(m.newEdge)}, a ${signed(m.delta)} move.`)
           }
         >
           {m.changed && <span className="patchtag">✎ </span>}
@@ -52,7 +58,7 @@ export function MoversStrip(props: {
         <>
           <span
             className="lbl trending"
-            title="Emerging meta: items the player base is moving toward this patch (pick rate rising vs the pre-patch window). A ↑ breakout is rising AND winning above this hero's average — get ahead of it; a hype pick is rising but not (yet) paying off, so it's a caution, not a recommendation."
+            title="Emerging meta: items the player base is moving toward this patch — pick rate now vs the equal-length window right before the patch, so a trend that was already under way doesn't read as a patch jump. A ↑ breakout is rising AND winning above this hero's average — get ahead of it; a hype pick is rising but not (yet) paying off, so it's a caution, not a recommendation."
           >
             Trending
           </span>

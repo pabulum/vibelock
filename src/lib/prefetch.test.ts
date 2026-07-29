@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { counterSliceQueries, type DataSlice } from "./prefetch";
+import { counterSliceQueries, type CounterSlice } from "./prefetch";
 
 // A prefetch only pays off if it resolves the *same* URL the real query asks for — the analytics
 // layer is keyed by URL, so a near-miss is invisible and just does the work twice. These pin the
 // query shape that features/useCounters and the build fan-out both read through this helper.
-const SLICE: DataSlice = {
+const SLICE: CounterSlice = {
   minBadge: 110,
   dataWindow: { minUnixTimestamp: 2000, maxUnixTimestamp: 3000 },
   priorWin: { minUnixTimestamp: 1000, maxUnixTimestamp: 2000 },

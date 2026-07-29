@@ -8,6 +8,7 @@ import {
   getAbilityOrder,
   getCommunityBuilds,
   getHeroBuildStats,
+  getHeroLadderStats,
   getItemFlowStats,
   getItemPermutationStats,
   getItemStats,
@@ -31,6 +32,7 @@ import type {
   Ability,
   ArchetypeKey,
   Hero,
+  HeroLadderStat,
   ImbueTarget,
   Item,
   ItemStat,
@@ -46,6 +48,10 @@ export function useBuildData(opts: {
   maxBadge?: number;
   dataWindow: TimeWindow;
   priorWin: TimeWindow;
+  /** The movers' comparator window: as much time immediately before the patch as it has run for
+   * (lib/patchWindows). Separate from `priorWin`, which is the blend's 30-day borrow window — the
+   * blend wants all the evidence it can get, the movers want a like-for-like contrast. */
+  moversWin: TimeWindow;
   canBackfill: boolean;
   priorKey: TimeWindow | null;
   lineAware: boolean;
@@ -63,6 +69,7 @@ export function useBuildData(opts: {
     maxBadge,
     dataWindow,
     priorWin,
+    moversWin,
     canBackfill,
     priorKey,
     lineAware,
@@ -83,6 +90,7 @@ export function useBuildData(opts: {
     rankLabel,
     dataWindow,
     priorKey,
+    canBackfill ? moversWin : null,
     lineAware,
   ];
   const buildQ = useQuery({
@@ -159,7 +167,15 @@ export function useBuildData(opts: {
       // the pre-patch one (timing barely drifts across patches; ordering stability wins). Permutation
       // stats span both windows in ONE fetch — synergy is a centered, shrunk tiebreak, so the mixed
       // window is fine and the payload is too big to double.
-      const [baseBlend, statsFresh, statsPrior, permRows] = await Promise.all([
+      const [
+        baseBlend,
+        statsFresh,
+        statsPrior,
+        statsPrev,
+        ladderFresh,
+        ladderPrev,
+        permRows,
+      ] = await Promise.all([
         flowFor(),
         getItemStats({
           heroId: h.id,
@@ -178,6 +194,27 @@ export function useBuildData(opts: {
               signal,
             })
           : Promise.resolve([] as ItemStat[]),
+        // The movers' comparator window + the hero's own record in both windows. These are the
+        // movers' three extra requests: the blend's 30-day prior can't answer "did this patch
+        // change it" (it's a monthly mean), and without the hero's per-window baseline a hero
+        // nerf reads as its entire item pool moving. The two ladder payloads are one row per
+        // hero — the cost that matters here is the item-stats slice.
+        canBackfill
+          ? getItemStats({
+              heroId: h.id,
+              minBadge,
+              maxBadge,
+              ...moversWin,
+              minMatches: 5,
+              signal,
+            })
+          : Promise.resolve([] as ItemStat[]),
+        canBackfill
+          ? getHeroLadderStats({ minBadge, maxBadge, ...dataWindow, signal })
+          : Promise.resolve([] as HeroLadderStat[]),
+        canBackfill
+          ? getHeroLadderStats({ minBadge, maxBadge, ...moversWin, signal })
+          : Promise.resolve([] as HeroLadderStat[]),
         getItemPermutationStats({
           heroId: h.id,
           minBadge,
@@ -196,12 +233,34 @@ export function useBuildData(opts: {
       // one riding a meta shift (lib/patchChanges). Null when the feed carried no notes.
       const touched =
         canBackfill && patchNotes ? touchedItems(patchNotes, itemMap) : null;
-      // Movers compare the RAW windows (blending them first would test the prior against itself).
+      // The hero's own record in each movers window, from one endpoint so the two are comparable.
+      // Rates only, never the match counts: on short historical windows this endpoint's counts
+      // disagree with item-stats and flow-stats (which agree with each other) by as much as 60%,
+      // while its win rates track them to within a few tenths of a point. See lib/patchMovers for
+      // what dividing by the wrong count does to a pick rate.
+      const heroRecord = (rows: HeroLadderStat[]) => {
+        const row = rows.find((r) => r.hero_id === h.id);
+        const decided = row ? row.wins + row.losses : 0;
+        return { rate: decided > 0 ? row!.wins / decided : 0, decided };
+      };
+      const heroFresh = heroRecord(ladderFresh);
+      const heroPrev = heroRecord(ladderPrev);
+      const heroWindows = {
+        freshRate: heroFresh.rate,
+        freshDecided: heroFresh.decided,
+        prevRate: heroPrev.rate,
+        prevDecided: heroPrev.decided,
+      };
+      // Movers compare the RAW windows (blending them first would test the prior against itself),
+      // and every item is measured against the hero's shift over the same pair — an item "moved"
+      // this patch only if it moved relative to its hero (see lib/patchMovers).
       const movers = canBackfill
-        ? findPatchMovers(statsFresh, statsPrior, itemMap).map((m) => ({
-            ...m,
-            changed: touched?.has(m.item.id) ?? false,
-          }))
+        ? findPatchMovers(statsFresh, statsPrev, itemMap, heroWindows).map(
+            (m) => ({
+              ...m,
+              changed: touched?.has(m.item.id) ?? false,
+            }),
+          )
         : null;
       const BUY_TIME_MIN_MATCHES = 40;
       const timeStats = new Map(statsPrior.map((s) => [s.item_id, s]));
@@ -220,16 +279,19 @@ export function useBuildData(opts: {
       // items that reinforce the build; absent pairs ⇒ the build ranks on win rate alone (unchanged).
       const decided = base.baseline.wins + base.baseline.losses;
       const baseline = decided > 0 ? base.baseline.wins / decided : 0.5;
-      // Adoption movers reuse the same raw windows + the honest per-window game totals from the blend:
-      // items the player base is moving toward this patch (rising pick rate), split into breakouts
-      // (rising *and* winning) and hype (rising but not paying off).
+      // Adoption movers read the same matched pair: items the player base is moving toward this
+      // patch (rising pick rate), split into breakouts (rising *and* winning) and hype (rising but
+      // not paying off). The post-patch game count comes from the raw fresh flow — item-stats and
+      // flow-stats agree, and the comparator window is sized off the payloads themselves. The
+      // win-edge baseline is the fresh window's, not the blend's: a blended baseline mixes in the
+      // pre-patch month, so an edge against it compares a post-patch win rate to a partly
+      // pre-patch reference.
       const adoption = canBackfill
         ? findAdoptionMovers(
             statsFresh,
-            statsPrior,
+            statsPrev,
             baseBlend.freshGames,
-            baseBlend.priorGames,
-            baseline,
+            heroFresh.rate,
             itemMap,
           ).map((a) => ({ ...a, changed: touched?.has(a.item.id) ?? false }))
         : null;

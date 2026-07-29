@@ -1,13 +1,20 @@
 // "What changed this patch" — the items whose win rate for this hero verifiably moved across the
-// patch boundary, computed from the same two item-stats windows the backfill blend already fetches
-// (so the panel is free: no extra queries). This is the flip side of the blend's contradiction
+// patch boundary, computed from the post-patch window and the equal-length window immediately
+// before it (lib/patchWindows moversWindowFor). This is the flip side of the blend's contradiction
 // discount: there it *protects* estimates from patch-changed items; here it *names* them.
 //
-// Rigor notes: every sufficiently-sampled item is tested (two-proportion z across the windows), the
-// family is FDR-controlled with Benjamini-Hochberg — day one tests ~100 items at once, and without
-// it ~10 would "move" by luck — and an effect floor keeps a significant-but-trivial 0.4pt drift on a
-// huge sample from headlining. Items with no pre-patch record are reported separately as new, once
-// they have a real sample (there's nothing to test them against).
+// Everything is measured RELATIVE TO THE HERO'S OWN WIN RATE in each window, because the raw rates
+// answer the wrong question. When a patch nerfs the hero, every item they buy loses win rate
+// together, and testing raw rates turns one hero change into a strip full of item movers: measured
+// on 07-28-2026, Haze's baseline fell 1.99pt and the raw test reported 8 "movers", all negative
+// (Hunter's Aura −13.1pt, Magic Carpet −11.5pt …), every one of which vanished once the hero-level
+// shift was taken out. An item moved this patch only if it moved *against its hero*.
+//
+// Rigor notes: every sufficiently-sampled item is tested (two-proportion z on the re-based rates),
+// the family is FDR-controlled with Benjamini-Hochberg — day one tests ~100 items at once, and
+// without it ~10 would "move" by luck — and an effect floor keeps a significant-but-trivial 0.4pt
+// drift on a huge sample from headlining. Items with no pre-patch record are reported separately as
+// new, once they have a real sample (there's nothing to test them against).
 
 import { benjaminiHochberg, normalCdf } from "./stats";
 import type { BuildItem, GeneratedBuild, Item, ItemStat } from "../types";
@@ -18,13 +25,28 @@ const MOVER_MIN_DELTA = 0.02; // effect floor: a headline mover moved ≥2pts, n
 const NEW_ITEM_MIN_N = 100; // a brand-new item needs this many decided games before we announce it
 const MOVERS_MAX = 8; // a glanceable list, biggest movement first
 
+/** The hero's own record in each of the two windows — the reference every item is measured
+ * against, so that a hero buff or nerf doesn't read as its whole item pool moving. Decided counts
+ * come along because on day one the post-patch baseline is itself a small sample. */
+export interface HeroWindows {
+  freshRate: number;
+  freshDecided: number;
+  prevRate: number;
+  prevDecided: number;
+}
+
 export interface PatchMover {
   item: Item;
-  /** Win rate in the pre-patch window (0 for a new item). */
+  /** Raw win rate in the pre-patch window (0 for a new item) — for display. */
   prevWinRate: number;
-  /** Win rate since the patch. */
+  /** Raw win rate since the patch — for display. */
   newWinRate: number;
-  /** newWinRate − prevWinRate, in win-rate points. */
+  /** The same rates as a gap against the hero's win rate in that window. These are what moved:
+   * `delta` is their difference, and a mover with a big raw swing but a flat edge is the hero
+   * moving, not the item. */
+  prevEdge: number;
+  newEdge: number;
+  /** newEdge − prevEdge, in win-rate points: how much the item gained or lost *on its hero*. */
   delta: number;
   /** Decided games behind each side. */
   nNew: number;
@@ -38,22 +60,40 @@ export interface PatchMover {
 
 /**
  * The FDR-controlled patch movers for one hero+rank, biggest |Δ| first, plus well-sampled new items
- * at the end. `fresh`/`prior` are the two item-stats windows; pass the raw (unblended) rows — the
- * whole point is to compare the windows, so blended inputs would test the prior against itself.
+ * at the end. `fresh`/`prev` are the post-patch and matched pre-patch item-stats windows; pass the
+ * raw (unblended) rows — the whole point is to compare the windows, so blended inputs would test
+ * the prior against itself. `hero` is the hero's record in those same two windows; without it there
+ * is nothing to separate an item moving from its hero moving, so an empty baseline yields no movers.
  */
 export function findPatchMovers(
   fresh: ItemStat[],
-  prior: ItemStat[],
+  prev: ItemStat[],
   items: Map<number, Item>,
+  hero: HeroWindows,
 ): PatchMover[] {
-  const priorById = new Map(prior.map((r) => [r.item_id, r]));
+  if (hero.freshDecided <= 0 || hero.prevDecided <= 0) return [];
+  const prevById = new Map(prev.map((r) => [r.item_id, r]));
+
+  // Variance of the hero-baseline shift we subtract from every item. Both windows are the hero's
+  // whole population, so this term is usually small next to the item's own — but on day one the
+  // post-patch baseline is thin enough to matter, and ignoring it would let baseline noise leak
+  // through as item movement. Note the item's games are a *subset* of the hero's, so the two rates
+  // are positively correlated and adding the variances overstates the standard error; that errs
+  // toward calling fewer movers, which is the right way to be wrong here.
+  const basePooled =
+    (hero.freshRate * hero.freshDecided + hero.prevRate * hero.prevDecided) /
+    (hero.freshDecided + hero.prevDecided);
+  const baseVar =
+    basePooled *
+    (1 - basePooled) *
+    (1 / hero.freshDecided + 1 / hero.prevDecided);
 
   // Candidates: testable pairs (both windows sampled). p-values for the whole family first —
   // BH needs every test, not a pre-filtered subset (pre-filtering on the noisy delta biases the
   // null p-values and breaks the FDR guarantee; same ordering lesson as the counters gate).
   const tested: Array<{ mover: PatchMover; p: number }> = [];
   for (const f of fresh) {
-    const q = priorById.get(f.item_id);
+    const q = prevById.get(f.item_id);
     const item = items.get(f.item_id);
     if (!q || !item) continue;
     const nN = f.wins + f.losses;
@@ -61,16 +101,20 @@ export function findPatchMovers(
     if (nN < MOVER_MIN_N || nP < MOVER_MIN_N) continue;
     const rN = f.wins / nN;
     const rP = q.wins / nP;
+    const newEdge = rN - hero.freshRate;
+    const prevEdge = rP - hero.prevRate;
     const pooled = (f.wins + q.wins) / (nN + nP);
-    const se = Math.sqrt(pooled * (1 - pooled) * (1 / nN + 1 / nP));
-    const z = se > 0 ? (rN - rP) / se : 0;
+    const se = Math.sqrt(pooled * (1 - pooled) * (1 / nN + 1 / nP) + baseVar);
+    const z = se > 0 ? (newEdge - prevEdge) / se : 0;
     const p = 2 * (1 - normalCdf(Math.abs(z)));
     tested.push({
       mover: {
         item,
         prevWinRate: rP,
         newWinRate: rN,
-        delta: rN - rP,
+        prevEdge,
+        newEdge,
+        delta: newEdge - prevEdge,
         nNew: nN,
         nPrev: nP,
       },
@@ -91,7 +135,7 @@ export function findPatchMovers(
   // New this patch: no pre-patch record, real sample. Reported, not tested (nothing to compare to).
   const news: PatchMover[] = [];
   for (const f of fresh) {
-    if (priorById.has(f.item_id)) continue;
+    if (prevById.has(f.item_id)) continue;
     const item = items.get(f.item_id);
     const n = f.wins + f.losses;
     if (!item || n < NEW_ITEM_MIN_N) continue;
@@ -99,6 +143,8 @@ export function findPatchMovers(
       item,
       prevWinRate: 0,
       newWinRate: f.wins / n,
+      prevEdge: 0,
+      newEdge: f.wins / n - hero.freshRate,
       delta: 0,
       nNew: n,
       nPrev: 0,
@@ -115,19 +161,43 @@ export function findPatchMovers(
 // player base moving TOWARD this item" — the leading signal that a new build is materializing, which
 // is the whole point of the app (surface good-but-underplayed picks before they're consensus). We
 // measure it from the same two windows: each item's pick rate (games it was bought in ÷ total games)
-// post-patch vs pre-patch. A real adoption jump splits by whether it's paying off:
+// post-patch vs the equal-length window right before the patch. A real adoption jump splits by
+// whether it's paying off:
 //   - RISING + winning above baseline  ⇒ a breakout (get ahead of it).
 //   - RISING + at/below baseline       ⇒ hype: being tried, not (yet) working — the honest caution
 //     (measured live: Drifter's Melee-Lifesteal build rose +7pt adoption while losing 1.7pt).
-// Pick rate needs a per-window game total; the raw windows give it (BlendResult.fresh/priorGames).
+//
+// The comparator window has to be the matched one, not the 30-day borrow window: adoption trends
+// run for weeks, so against a monthly *average* an item halfway up an existing ramp shows the
+// biggest "jump" of all, and every breakout this surfaced on 07-28-2026 turned out to already be at
+// its post-patch pick rate before the patch (see lib/patchWindows moversWindowFor).
+//
+// The other half of getting this right is the denominator, which is the more dangerous half because
+// it moves every item at once. A pick rate is a *ratio* of two numbers the API reports separately,
+// and on short historical windows they disagree: for Abrams' 40h pre-patch window, hero-stats
+// reported 23,292 games while item-stats and flow-stats independently implied ~14,500 (they agree
+// with each other, and with the ~17 purchase-events per game that holds on every window where all
+// three agree). Divide by the wrong one and every item's pre-patch pick rate reads ~40% too low,
+// which is a strip full of fabricated breakouts — Melee Charge showed 48%→79% that way, against a
+// true 78%→79%. So the comparator's size is derived from the item-stats payloads themselves rather
+// than from any reported game count: the two windows are put on one scale by their total purchase
+// volume, which cancels the discrepancy exactly because numerator and denominator then come from
+// the same response.
 
 const ADOPT_MIN_RISE = 0.04; // pick rate must climb ≥4pt post-patch to count as "being adopted"
 const ADOPT_MIN_N = 200; // decided post-patch games needed to read its win rate at all
 const ADOPT_WIN_MARGIN = 0.005; // above baseline by this ⇒ "breakout"; within/below ⇒ "hype"
 const ADOPT_MAX = 6;
+// The rise must also clear sampling noise. At day-one volumes the 4pt floor is already ~8σ, so this
+// binds only where a window is genuinely thin — a high rank floor on a young patch — which is
+// exactly where a 4pt "rise" is otherwise free. No FDR here: the effect floor does the heavy
+// filtering, and unlike the win-rate movers this family is small and pre-filtered by that floor.
+const ADOPT_MIN_Z = 3;
 
 export interface AdoptionMover {
   item: Item;
+  /** Pick rate in the comparator window, expressed on the post-patch window's scale (see the
+   * denominator note above) — comparable to `pickNew`, which is what it exists for. */
   pickPrev: number;
   pickNew: number;
   /** pickNew − pickPrev, in pick-rate points (always ≥ ADOPT_MIN_RISE here). */
@@ -144,32 +214,44 @@ export interface AdoptionMover {
 }
 
 /**
- * Items the player base is moving toward this patch, biggest pick-rate rise first. `fresh`/`prior`
- * are the raw item-stats windows (a row's `matches` = games the item was bought in); `gFresh`/`gPrior`
- * are the total games per window (from {@link BlendResult}); `baseline` is the hero's current win
- * rate, to split breakouts from hype. Returns [] when there's no prior window (gPrior ≤ 0).
+ * Items the player base is moving toward this patch, biggest pick-rate rise first. `fresh`/`prev`
+ * are the raw item-stats windows (a row's `matches` = games the item was bought in) — the post-patch
+ * window and the matched one before it, fetched at the SAME `min_matches` floor, since the totals
+ * below are sums over the rows that survived it. `gFresh` is the post-patch window's game count, used
+ * only to put the shares on a familiar scale; `baseline` is the hero's win rate *in the post-patch
+ * window* (not a blended one — the win edge below is otherwise a comparison across two populations).
+ * Returns [] when either window is empty.
  */
 export function findAdoptionMovers(
   fresh: ItemStat[],
-  prior: ItemStat[],
+  prev: ItemStat[],
   gFresh: number,
-  gPrior: number,
   baseline: number,
   items: Map<number, Item>,
 ): AdoptionMover[] {
-  if (gFresh <= 0 || gPrior <= 0) return [];
-  const priorById = new Map(prior.map((r) => [r.item_id, r]));
+  const buysFresh = fresh.reduce((s, r) => s + r.matches, 0);
+  const buysPrev = prev.reduce((s, r) => s + r.matches, 0);
+  if (gFresh <= 0 || buysFresh <= 0 || buysPrev <= 0) return [];
+  // The comparator's size on the post-patch window's own scale: same purchases per game in both
+  // windows (a property of how long games run, not of the patch), so their total purchase volumes
+  // stand in for their game counts — and unlike the reported counts, these two numbers come from
+  // the same pair of responses as the numerators they divide.
+  const gPrev = gFresh * (buysPrev / buysFresh);
+  const prevById = new Map(prev.map((r) => [r.item_id, r]));
   const out: AdoptionMover[] = [];
   for (const f of fresh) {
     const item = items.get(f.item_id);
     if (!item) continue;
     const nNew = f.wins + f.losses;
     if (nNew < ADOPT_MIN_N) continue; // need a real post-patch WR to classify it
-    const q = priorById.get(f.item_id);
+    const q = prevById.get(f.item_id);
     const pickNew = f.matches / gFresh;
-    const pickPrev = q ? q.matches / gPrior : 0; // no prior row ⇒ adoption from ~zero
+    const pickPrev = q ? q.matches / gPrev : 0; // no prior row ⇒ adoption from ~zero
     const pickDelta = pickNew - pickPrev;
     if (pickDelta < ADOPT_MIN_RISE) continue;
+    const pooled = (f.matches + (q?.matches ?? 0)) / (gFresh + gPrev);
+    const pickSe = Math.sqrt(pooled * (1 - pooled) * (1 / gFresh + 1 / gPrev));
+    if (pickSe > 0 && pickDelta / pickSe < ADOPT_MIN_Z) continue;
     const winRate = f.wins / nNew;
     out.push({
       item,

@@ -875,9 +875,11 @@ export async function getPlayerRankTier(
 const HeroLadderStatsSchema = v.array(HeroLadderStatSchema);
 
 /** Every hero's ladder record at a rank floor + window — the "meta strength" side of the
- * what-to-queue ranking on the your-heroes row. */
+ * what-to-queue ranking on the your-heroes row, and the per-window hero baseline the patch movers
+ * re-base against (lib/patchMovers). One small payload, and crucially one *source*: the movers
+ * compare two windows, so both their denominators have to come from the same endpoint. */
 export function getHeroLadderStats(
-  q: RankWindow & TimeWindow,
+  q: RankWindow & TimeWindow & { signal?: AbortSignal },
 ): Promise<HeroLadderStat[]> {
   const params = new URLSearchParams();
   applyRank(params, q);
@@ -885,6 +887,7 @@ export function getHeroLadderStats(
   return getAnalytics(
     `${BASE}/v1/analytics/hero-stats?${params}`,
     HeroLadderStatsSchema,
+    q.signal,
   );
 }
 
