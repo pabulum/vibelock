@@ -57,6 +57,31 @@ test("boots to a populated build for the default hero", async () => {
   expect(api.unmatched).toEqual([]);
 });
 
+test("renders the news strip, including announcements that aren't patches", async () => {
+  const screen = await render(<App />);
+  const { container } = screen;
+
+  await expect
+    .poll(() => container.querySelectorAll(".news .entry").length, BAKE)
+    .toBeGreaterThan(0);
+
+  // The fixture's newest entry is the 2026-07-30 matchmaking announcement: it has no date in its
+  // title, so it is news but NOT a patch boundary. That distinction is the reason the strip
+  // exists, so assert both halves of it — it is shown, and it never became a patch.
+  const first = container.querySelector(".news .entry")!;
+  expect(first.textContent).toContain("Matchmaking");
+  expect(first.classList.contains("note")).toBe(true);
+  expect(first.getAttribute("href")).toContain("steampowered.com");
+
+  // The patch selector lists only real boundaries, so the announcement must be absent from it.
+  const patchPicker = screen.getByRole("combobox", { name: "Patch" });
+  await expect.element(patchPicker).toBeVisible();
+  expect(patchPicker.element().textContent).not.toContain("Matchmaking");
+
+  expect(container.querySelector(".banner.error")).toBeNull();
+  expect(api.unmatched).toEqual([]);
+});
+
 test("honors a deep link's hero and rank", async () => {
   history.replaceState(null, "", "?hero=grey-talon&rank=8");
   const screen = await render(<App />);

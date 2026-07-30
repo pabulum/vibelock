@@ -14,7 +14,9 @@
 // html is flattened to plain lines first.
 import type { Item } from "../types";
 
-function stripHtml(s: string): string {
+/** Flatten the feed's bbcode/html to plain lines. Shared with lib/patchFeed, which needs the same
+ * flattening to build a news excerpt out of the same bodies. */
+export function stripHtml(s: string): string {
   return s
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(li|p|div|h[1-6]|tr)>/gi, "\n")

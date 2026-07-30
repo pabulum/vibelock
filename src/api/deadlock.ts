@@ -11,6 +11,7 @@ import * as v from "valibot";
 import { queryOptions } from "@tanstack/react-query";
 import { queryClient } from "../queryClient";
 import { cacheGet, cachePut } from "../lib/idbCache";
+import { parsePatchFeed, type PatchFeed } from "../lib/patchFeed";
 import {
   AbilityOrderRowSchema,
   HeroBuildStatRowSchema,
@@ -54,6 +55,7 @@ import type {
   MatchHistoryRow,
   MatchInfo,
   NeedKind,
+  NewsItem,
   Patch,
   PlayerHeroStat,
   PlayerMetrics,
@@ -922,16 +924,19 @@ export function getPlayerMetrics(
 }
 
 const RawPatchesSchema = v.array(RawPatchSchema);
-const PATCHES_KEY = ["assets", "patches", "v2"];
+const PATCHES_KEY = ["assets", "patches", "v3"];
 
-// /v2/patches unifies the Forum + Steam feeds, so it has minor updates too. But the
-// Forum entries carry a bogus re-published pub_date (e.g. a 05-22 patch stamped 06-12),
-// so we key off the MM-DD-YYYY date in the *title*, which is reliable on every entry.
-// We window by day boundaries (00:00 UTC of the title date) to match the site's "May 22
-// – May 25"-style windows, and dedupe by day so the two feeds' copies collapse into one.
-export const patchesQueryOptions = queryOptions({
+const EMPTY_FEED: PatchFeed = { patches: [], news: [] };
+
+// /v2/patches unifies the Forum + Steam feeds, so it has minor updates and announcements too.
+// Splitting it into the patch list and the news list is pure and lives in lib/patchFeed (which is
+// also where the trust rules for title-date vs pub_date are written down); this query only fetches.
+//
+// ONE cache entry feeds both views: the two exported options below share this key and differ only
+// in `select`, so the strip costs no extra round trip and no extra persisted bytes.
+const patchFeedQueryOptions = queryOptions({
   queryKey: PATCHES_KEY,
-  queryFn: async (): Promise<Patch[]> => {
+  queryFn: async (): Promise<PatchFeed> => {
     let raw: RawPatch[];
     try {
       raw = await getJson(`${BASE}/v2/patches`, RawPatchesSchema);
@@ -941,35 +946,24 @@ export const patchesQueryOptions = queryOptions({
       // previous session by the persister); with nothing cached at all, run patch-less — an empty
       // list makes every window query fall back to the API's default last-30-days and disables
       // backfill until a reload succeeds.
-      return queryClient.getQueryData<Patch[]>(PATCHES_KEY) ?? [];
+      return queryClient.getQueryData<PatchFeed>(PATCHES_KEY) ?? EMPTY_FEED;
     }
-    const byDay = new Map<string, Patch>();
-    for (const p of raw) {
-      const title = p.title ?? "";
-      const m = title.match(/(\d{2})-(\d{2})-(\d{4})/); // MM-DD-YYYY
-      if (!m) continue;
-      const [, mm, dd, yyyy] = m;
-      const dayKey = `${yyyy}-${mm}-${dd}`;
-      const content = p.content || undefined;
-      const existing = byDay.get(dayKey);
-      if (existing) {
-        // Same patch from the other feed: keep whichever copy carries the notes text (Steam),
-        // so the changelog is available for the touched-item tag (see lib/patchChanges).
-        if (content && content.length > (existing.content?.length ?? 0))
-          existing.content = content;
-        continue;
-      }
-      byDay.set(dayKey, {
-        title: `${dayKey}${/minor/i.test(title) ? " · Minor" : ""} Update`,
-        ts: Math.floor(Date.UTC(+yyyy, +mm - 1, +dd) / 1000),
-        content,
-      });
-    }
-
-    return [...byDay.values()].sort((a, b) => b.ts - a.ts);
+    return parsePatchFeed(raw);
   },
   staleTime: ASSET_STALE_MS,
   gcTime: ASSET_GC_MS,
+});
+
+/** The patch list that time-boxes every analytics window, newest-first. */
+export const patchesQueryOptions = queryOptions({
+  ...patchFeedQueryOptions,
+  select: (f: PatchFeed): Patch[] => f.patches,
+});
+
+/** The same feed as a readable timeline, including announcements that are news but not boundaries. */
+export const newsQueryOptions = queryOptions({
+  ...patchFeedQueryOptions,
+  select: (f: PatchFeed): NewsItem[] => f.news,
 });
 
 // --- Single-match metadata (match analysis) ---

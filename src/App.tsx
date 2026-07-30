@@ -44,6 +44,7 @@ import { wpStatsQueryOptions } from "./api/wpStats";
 import { LoadingState } from "./components/panels";
 import { TopBar } from "./features/TopBar";
 import { MoversStrip } from "./features/MoversStrip";
+import { NewsStrip } from "./features/NewsStrip";
 import { MyHeroes } from "./features/MyHeroes";
 import { BuildMeta } from "./features/BuildMeta";
 import { DashGrid } from "./features/DashGrid";
@@ -86,6 +87,7 @@ function AppInner() {
     abilitiesQ,
     heroes,
     patches,
+    news,
     items,
     abilities,
     patchesReady,
@@ -760,6 +762,8 @@ function AppInner() {
       />
 
       {error && <div className="banner error">△ {error}</div>}
+
+      <NewsStrip news={news} />
 
       {movers && (
         <MoversStrip

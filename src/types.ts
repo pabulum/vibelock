@@ -410,6 +410,23 @@ export interface Patch {
   content?: string;
 }
 
+/** An entry in the news feed: everything the patch feed carries, including the announcements that
+ * never become patch boundaries. Distinct from {@link Patch} because the two answer different
+ * questions — a Patch time-boxes an analytics window and so must have a trustworthy day, while a
+ * news item only has to be readable and roughly ordered. */
+export interface NewsItem {
+  title: string;
+  /** Unix seconds used for ordering: the title's date when it has one (reliable), else pub_date. */
+  ts: number;
+  /** True when this entry is also a patch boundary — i.e. it appears in the Patch list. */
+  isPatch: boolean;
+  /** Permalink to the announcement at the source, when the feed carried one. */
+  link?: string;
+  /** First couple of lines of the notes body, as plain text — the feed's content is raw HTML and
+   * is never rendered as markup. Absent when the entry carried no body. */
+  excerpt?: string;
+}
+
 /** A notable matchup for the selected hero. */
 export interface Matchup {
   enemyHeroId: number;

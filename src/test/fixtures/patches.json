@@ -1,32 +1,152 @@
 [
-  { "title": "06-30-2026 Update" },
-  { "title": " Minor Update - 07-09-2026" },
-  { "title": " Minor Update - 07-01-2026" },
-  { "title": " Minor Update - 06-30-2026" },
-  { "title": "05-22-2026 Update" },
-  { "title": " Minor Update - 06-11-2026" },
-  { "title": " Minor Update - 06-04-2026" },
-  { "title": " Minor Update - 05-31-2026" },
-  { "title": " Minor Update - 05-28-2026" },
-  { "title": "Minor Update - 05-25-2026" },
-  { "title": "Gameplay Update - 05-22-2026" },
-  { "title": "04-30-2026 Update" },
-  { "title": "Gameplay Update - 04-30-2026" },
-  { "title": "04-10-2026 Update" },
-  { "title": "03-25-2026 Update" },
-  { "title": "03-21-2026 Update" },
-  { "title": "03-06-2026 Update" },
-  { "title": "01-30-2026 Update" },
-  { "title": "12-29-2025 Update" },
-  { "title": "12-16-2025 Update" },
-  { "title": "11-21-2025 Update" },
-  { "title": "10-24-2025 Update" },
-  { "title": "10-02-2025 Update" },
-  { "title": "09-04-2025 Update" },
-  { "title": "08-18-2025 Update" },
-  { "title": "07-29-2025 Update" },
-  { "title": "07-04-2025 Update" },
-  { "title": "06-17-2025 Update" },
-  { "title": "05-27-2025 Update" },
-  { "title": "05-21-2025 Update" }
+  {
+    "title": "Matchmaking Update",
+    "pub_date": "2026-07-30T19:14:37Z",
+    "link": "https://store.steampowered.com/news/app/1422450/view/680756685198854910"
+  },
+  {
+    "title": "06-30-2026 Update",
+    "pub_date": "2026-07-28T20:28:07Z",
+    "link": "https://forums.playdeadlock.com/threads/06-30-2026-update.146261/"
+  },
+  {
+    "title": " Minor Update - 07-28-2026",
+    "pub_date": "2026-07-28T20:24:35Z",
+    "link": "https://store.steampowered.com/news/app/1422450/view/680756685198855508"
+  },
+  {
+    "title": " Minor Update - 07-09-2026",
+    "pub_date": "2026-07-09T19:26:55Z",
+    "link": "https://store.steampowered.com/news/app/1422450/view/688635449342696590"
+  },
+  {
+    "title": " Minor Update - 07-01-2026",
+    "pub_date": "2026-07-01T22:54:59Z",
+    "link": "https://store.steampowered.com/news/app/1422450/view/688635449342693095"
+  },
+  {
+    "title": " Minor Update - 06-30-2026",
+    "pub_date": "2026-06-30T17:22:14Z",
+    "link": "https://store.steampowered.com/news/app/1422450/view/688635449342692003"
+  },
+  {
+    "title": "05-22-2026 Update",
+    "pub_date": "2026-06-12T00:59:45Z",
+    "link": "https://forums.playdeadlock.com/threads/05-22-2026-update.135477/"
+  },
+  {
+    "title": " Minor Update - 06-11-2026",
+    "pub_date": "2026-06-12T00:59:18Z",
+    "link": "https://store.steampowered.com/news/app/1422450/view/667242081733838158"
+  },
+  {
+    "title": " Minor Update - 06-04-2026",
+    "pub_date": "2026-06-04T17:30:11Z",
+    "link": "https://store.steampowered.com/news/app/1422450/view/714529243732640268"
+  },
+  {
+    "title": " Minor Update - 05-31-2026",
+    "pub_date": "2026-05-31T19:45:54Z",
+    "link": "https://store.steampowered.com/news/app/1422450/view/668366713382766678"
+  },
+  {
+    "title": " Minor Update - 05-28-2026",
+    "pub_date": "2026-05-28T17:14:59Z",
+    "link": "https://store.steampowered.com/news/app/1422450/view/668366713382765310"
+  },
+  {
+    "title": "Minor Update - 05-25-2026",
+    "pub_date": "2026-05-28T16:28:44Z",
+    "link": "https://store.steampowered.com/news/app/1422450/view/668366713382765308"
+  },
+  {
+    "title": "04-30-2026 Update",
+    "pub_date": "2026-05-01T23:49:47Z",
+    "link": "https://forums.playdeadlock.com/threads/04-30-2026-update.129989/"
+  },
+  {
+    "title": "04-10-2026 Update",
+    "pub_date": "2026-04-11T04:03:53Z",
+    "link": "https://forums.playdeadlock.com/threads/04-10-2026-update.125825/"
+  },
+  {
+    "title": "03-25-2026 Update",
+    "pub_date": "2026-03-31T01:35:20Z",
+    "link": "https://forums.playdeadlock.com/threads/03-25-2026-update.121766/"
+  },
+  {
+    "title": "03-21-2026 Update",
+    "pub_date": "2026-03-21T19:34:30Z",
+    "link": "https://forums.playdeadlock.com/threads/03-21-2026-update.120256/"
+  },
+  {
+    "title": "03-06-2026 Update",
+    "pub_date": "2026-03-11T04:39:40Z",
+    "link": "https://forums.playdeadlock.com/threads/03-06-2026-update.114328/"
+  },
+  {
+    "title": "01-30-2026 Update",
+    "pub_date": "2026-02-17T23:35:49Z",
+    "link": "https://forums.playdeadlock.com/threads/01-30-2026-update.102822/"
+  },
+  {
+    "title": "12-29-2025 Update",
+    "pub_date": "2026-01-21T02:10:58Z",
+    "link": "https://forums.playdeadlock.com/threads/12-29-2025-update.95233/"
+  },
+  {
+    "title": "12-16-2025 Update",
+    "pub_date": "2025-12-17T20:33:46Z",
+    "link": "https://forums.playdeadlock.com/threads/12-16-2025-update.93983/"
+  },
+  {
+    "title": "11-21-2025 Update",
+    "pub_date": "2025-12-04T00:34:27Z",
+    "link": "https://forums.playdeadlock.com/threads/11-21-2025-update.90383/"
+  },
+  {
+    "title": "10-24-2025 Update",
+    "pub_date": "2025-10-24T23:54:51Z",
+    "link": "https://forums.playdeadlock.com/threads/10-24-2025-update.87198/"
+  },
+  {
+    "title": "10-02-2025 Update",
+    "pub_date": "2025-10-05T18:05:47Z",
+    "link": "https://forums.playdeadlock.com/threads/10-02-2025-update.84332/"
+  },
+  {
+    "title": "09-04-2025 Update",
+    "pub_date": "2025-09-04T23:33:38Z",
+    "link": "https://forums.playdeadlock.com/threads/09-04-2025-update.80693/"
+  },
+  {
+    "title": "08-18-2025 Update",
+    "pub_date": "2025-08-30T00:36:28Z",
+    "link": "https://forums.playdeadlock.com/threads/08-18-2025-update.75046/"
+  },
+  {
+    "title": "07-29-2025 Update",
+    "pub_date": "2025-08-08T19:07:41Z",
+    "link": "https://forums.playdeadlock.com/threads/07-29-2025-update.72760/"
+  },
+  {
+    "title": "07-04-2025 Update",
+    "pub_date": "2025-07-04T20:03:43Z",
+    "link": "https://forums.playdeadlock.com/threads/07-04-2025-update.70156/"
+  },
+  {
+    "title": "06-17-2025 Update",
+    "pub_date": "2025-06-17T20:34:00Z",
+    "link": "https://forums.playdeadlock.com/threads/06-17-2025-update.68401/"
+  },
+  {
+    "title": "05-27-2025 Update",
+    "pub_date": "2025-05-27T23:47:06Z",
+    "link": "https://forums.playdeadlock.com/threads/05-27-2025-update.66453/"
+  },
+  {
+    "title": "05-21-2025 Update",
+    "pub_date": "2025-05-21T22:55:33Z",
+    "link": "https://forums.playdeadlock.com/threads/05-21-2025-update.65674/"
+  }
 ]

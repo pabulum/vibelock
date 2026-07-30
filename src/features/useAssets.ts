@@ -6,22 +6,27 @@ import {
   abilityListQueryOptions,
   heroesQueryOptions,
   itemListQueryOptions,
+  newsQueryOptions,
   patchesQueryOptions,
 } from "../api/deadlock";
-import type { Hero, Patch } from "../types";
+import type { Hero, NewsItem, Patch } from "../types";
 
 // Stable empty fallbacks for asset queries that haven't resolved — fresh [] per render would
 // re-fire every effect and memo that lists them as a dep.
 const NO_HEROES: Hero[] = [];
 const NO_PATCHES: Patch[] = [];
+const NO_NEWS: NewsItem[] = [];
 
 export function useAssets() {
   const heroesQ = useQuery(heroesQueryOptions);
   const itemListQ = useQuery(itemListQueryOptions);
   const patchesQ = useQuery(patchesQueryOptions);
+  // Same cache entry as patchesQ — a second `select` over one fetch, not a second request.
+  const newsQ = useQuery(newsQueryOptions);
   const abilitiesQ = useQuery(abilityListQueryOptions);
   const heroes = heroesQ.data ?? NO_HEROES;
   const patches = patchesQ.data ?? NO_PATCHES;
+  const news = newsQ.data ?? NO_NEWS;
   const items = useMemo(
     () =>
       itemListQ.data ? new Map(itemListQ.data.map((i) => [i.id, i])) : null,
@@ -43,6 +48,7 @@ export function useAssets() {
     abilitiesQ,
     heroes,
     patches,
+    news,
     items,
     abilities,
     patchesReady,

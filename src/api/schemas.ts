@@ -351,13 +351,19 @@ export const RawItemSchema = v.object({
 });
 export type RawItem = v.InferOutput<typeof RawItemSchema>;
 
-/** /v2/patches entry — only the title is read (the MM-DD-YYYY date in it is the reliable key;
- * the feed's pub_date is re-stamped on Forum entries and can't be trusted). */
+/** /v2/patches entry. The MM-DD-YYYY date in the *title* is the reliable key for a patch's day;
+ * the feed's pub_date is re-stamped on Forum entries and can't be trusted for that. pub_date is
+ * still read as the only ordering signal available for entries with no date in the title —
+ * announcements like "Matchmaking Update", which are news but not patch boundaries. */
 export const RawPatchSchema = v.object({
   title: v.optional(v.string()),
   /** The notes body. Forum-feed entries carry only a link-unfurl (empty text); the Steam-feed copy
    * of the same patch carries the real changelog, which lib/patchChanges parses for touched items. */
   content: v.optional(v.string()),
+  /** RFC-3339 publish time. Trustworthy on Steam entries, re-stamped on Forum ones. */
+  pub_date: v.optional(v.string()),
+  /** Permalink to the announcement, for the news feed's "read it at the source" link. */
+  link: v.optional(v.string()),
 });
 export type RawPatch = v.InferOutput<typeof RawPatchSchema>;
 

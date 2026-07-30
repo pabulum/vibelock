@@ -142,8 +142,14 @@ const captures = [
   {
     file: "patches.json",
     url: `${BASE}/v2/patches`,
-    // Only the title is read (the MM-DD-YYYY in it); 40 entries ≈ a year of windows.
-    project: (rows) => rows.slice(0, 40).map((p) => pick(p, { title: true })),
+    // Title carries the MM-DD-YYYY that keys a patch window; pub_date + link are what the news
+    // strip needs for the entries with no date in their title. `content` stays out — it's the
+    // whole changelog on every row, which would dwarf every other fixture, and both the
+    // touched-item tag and the news excerpt degrade cleanly without it.
+    project: (rows) =>
+      rows
+        .slice(0, 40)
+        .map((p) => pick(p, { title: true, pub_date: true, link: true })),
   },
   {
     file: "heroes.json",
