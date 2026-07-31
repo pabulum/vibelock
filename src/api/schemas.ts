@@ -351,6 +351,12 @@ export const RawItemSchema = v.object({
 });
 export type RawItem = v.InferOutput<typeof RawItemSchema>;
 
+/** One row of /v1/analytics/badge-distribution — matches per average-badge value in a window. */
+export const BadgeDistributionRowSchema = v.object({
+  badge_level: v.number(),
+  total_matches: v.number(),
+});
+
 /** /v2/patches entry. The MM-DD-YYYY date in the *title* is the reliable key for a patch's day;
  * the feed's pub_date is re-stamped on Forum entries and can't be trusted for that. pub_date is
  * still read as the only ordering signal available for entries with no date in the title —

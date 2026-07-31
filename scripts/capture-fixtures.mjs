@@ -204,6 +204,11 @@ const captures = [
     url: `${BASE}/v1/analytics/hero-stats`,
   },
   {
+    // Read only to pick a default rank floor that isn't empty (lib/ranks highestPopulatedFloor).
+    file: "badgeDistribution.json",
+    url: `${BASE}/v1/analytics/badge-distribution`,
+  },
+  {
     file: "wpStats.json",
     url: "https://raw.githubusercontent.com/pabulum/vibelock/data/wp-stats.json",
   },

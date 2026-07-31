@@ -8,7 +8,9 @@
 //
 // It is predictable because a signature is just "the most-bought T3+ weapon / spirit item for this
 // hero", which barely moves. Measured across two heroes: identical across patches, and identical
-// across ranks for one of them but not the other (Infernus swaps both between Archon+ and Eternus).
+// across ranks for one of them but not the other (Infernus swaps both between tier 7 and Eternus —
+// tier 7 was "Archon+" when this was measured, and is "Emissary+" since the 2026-07-30 rank rename;
+// see lib/ranks).
 // So the key is hero + rank band, and the guess is *verified* against the real pickSignatures once
 // the base flow arrives — a miss costs two wasted requests and falls back to exactly today's path,
 // never a wrong build.

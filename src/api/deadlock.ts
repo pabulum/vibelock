@@ -12,8 +12,10 @@ import { queryOptions } from "@tanstack/react-query";
 import { queryClient } from "../queryClient";
 import { cacheGet, cachePut } from "../lib/idbCache";
 import { parsePatchFeed, type PatchFeed } from "../lib/patchFeed";
+import { FLOW_PHASE_COUNT, FLOW_PHASE_INTERVAL_S } from "../lib/phases";
 import {
   AbilityOrderRowSchema,
+  BadgeDistributionRowSchema,
   HeroBuildStatRowSchema,
   HeroCounterRowSchema,
   HeroLadderStatSchema,
@@ -40,6 +42,7 @@ import {
 import type {
   Ability,
   AbilityOrderRow,
+  BadgeDistributionRow,
   CardSection,
   CardStat,
   CommunityBuild,
@@ -644,6 +647,12 @@ export function getItemFlowStats(q: FlowQuery): Promise<ItemFlowStats> {
     // ALL-HEROES aggregate (≈6× inflated samples), which looks plausible until the baseline is wrong.
     hero_ids: String(q.heroId),
     min_matches: String(q.minMatches ?? 100),
+    // Sent explicitly rather than inherited from the API's defaults (which happen to agree today):
+    // these two decide what a `column` MEANS, and every phase label, sell-time boundary and buy-time
+    // bucket in the app is derived from the same constants in lib/phases. Leaving them implicit is
+    // how the columns came to be 10-minute windows labelled "0–9 min".
+    phase_interval_s: String(FLOW_PHASE_INTERVAL_S),
+    phase_count: String(FLOW_PHASE_COUNT),
   });
   applyRank(params, q);
   if (q.lockedItemIds?.length && q.lockedColumns?.length) {
@@ -805,6 +814,23 @@ function parseCommunityBuild(
     skillOrder,
     imbueTargets,
   };
+}
+
+const BadgeDistributionRowsSchema = v.array(BadgeDistributionRowSchema);
+
+/** How the window's matches are spread across average badge — read only to pick a sane default
+ * rank floor (lib/ranks highestPopulatedFloor), never to weight a statistic. Tiny payload, and it
+ * has to be windowed the same way the build is or it would answer for the wrong patch. */
+export function getBadgeDistribution(
+  q: TimeWindow & { signal?: AbortSignal },
+): Promise<BadgeDistributionRow[]> {
+  const params = new URLSearchParams();
+  applyWindow(params, q);
+  return getAnalytics(
+    `${BASE}/v1/analytics/badge-distribution?${params}`,
+    BadgeDistributionRowsSchema,
+    q.signal,
+  );
 }
 
 export interface CounterMatrixQuery extends TimeWindow, RankWindow {

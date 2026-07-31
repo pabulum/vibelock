@@ -44,9 +44,11 @@
 
 import type { ItemCounters, Item, ItemStat } from "../types";
 import { GATE_Z } from "./stats";
+import { PHASE_LABELS, bucketForTime, phaseForTime } from "./phases";
 
-const PHASE_BOUNDS_S = [540, 1200, 1800]; // 9m / 20m / 30m
-const PHASE_LABELS = ["Lane", "Early mid", "Mid", "Late"];
+// Phase geometry comes from lib/phases — the same constants the flow request is built from. This
+// module used to keep its own copy with a 9-minute Lane boundary, which put an item bought at 9:30
+// in a different phase here than in the build's own columns.
 
 const MIN_SAMPLE = 50; // candidacy floor: below this a cell can't inform the lean or earn a mark. Kept low
 // because the shrink + lower-bound below does the real noise control — it's not a hard significance cutoff.
@@ -232,14 +234,4 @@ export function computeItemCounters(
   for (const e of counters) e.marks.sort((a, b) => b.delta - a.delta);
   counters.sort((a, b) => b.topDelta - a.topDelta);
   return { counters, edgeByItem };
-}
-
-function bucketForTime(s: number): number {
-  let i = 0;
-  while (i < PHASE_BOUNDS_S.length && s >= PHASE_BOUNDS_S[i]) i++;
-  return i;
-}
-
-function phaseForTime(s: number): string {
-  return PHASE_LABELS[bucketForTime(s)];
 }

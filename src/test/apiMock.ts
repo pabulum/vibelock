@@ -18,6 +18,7 @@ import permutationStats from "./fixtures/permutationStats.json";
 import abilityOrder from "./fixtures/abilityOrder.json";
 import counterMatrix from "./fixtures/counterMatrix.json";
 import heroLadder from "./fixtures/heroLadder.json";
+import badgeDistribution from "./fixtures/badgeDistribution.json";
 import wpStats from "./fixtures/wpStats.json";
 import { setAnalyticsCacheEnabled } from "../lib/idbCache";
 
@@ -33,6 +34,7 @@ const routes: Array<[RegExp, unknown]> = [
   [/^\/v1\/analytics\/ability-order-stats$/, abilityOrder],
   [/^\/v1\/analytics\/hero-counter-stats$/, counterMatrix],
   [/^\/v1\/analytics\/hero-stats$/, heroLadder],
+  [/^\/v1\/analytics\/badge-distribution$/, badgeDistribution],
   [/\/wp-stats\.json$/, wpStats],
 ];
 

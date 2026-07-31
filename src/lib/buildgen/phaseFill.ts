@@ -13,6 +13,7 @@ import type {
   SlotType,
 } from "../../types";
 import { significantlyHigher } from "../stats";
+import { PHASE_END_S, PHASE_LABELS, PHASE_TIME_LABELS } from "../phases";
 import {
   EB_DEFAULT_K,
   FILL_WR_FLOOR,
@@ -38,12 +39,12 @@ import {
 } from "./lines";
 import { categorySouls } from "./slotEconomy";
 
-export const PHASE_META = [
-  { label: "Lane", timeLabel: "0–9 min" },
-  { label: "Early mid", timeLabel: "9–20 min" },
-  { label: "Mid", timeLabel: "20–30 min" },
-  { label: "Late", timeLabel: "30+ min" },
-];
+// Derived from lib/phases, which owns the geometry and is the same source the API request is
+// built from — so a column's label can never drift from the window the API actually sliced.
+export const PHASE_META = PHASE_LABELS.map((label, i) => ({
+  label,
+  timeLabel: PHASE_TIME_LABELS[i],
+}));
 
 // --- Tuning knobs (top of module on purpose; no math needed to adjust) ---
 const CO_OCCUR_MIN = 1; // two comparable-cost every-game picks in a slot are assumed to co-occur
@@ -93,9 +94,8 @@ const FILL_ORDER: Array<"weapon" | "vitality" | "spirit"> = [
   "weapon",
 ];
 
-// End of each phase's time window (seconds): Lane 0–9, Early mid 9–20, Mid 20–30, Late 30+. Used to
-// reject re-homing a cheap placeholder into a phase it's typically already sold within (see buildPhase).
-const PHASE_END_S = [540, 1200, 1800, Number.POSITIVE_INFINITY];
+// PHASE_END_S (from lib/phases) is used here to reject re-homing a cheap placeholder into a phase
+// it's typically already sold within — see buildPhase.
 
 /** Options for {@link generateBuild}. */
 export interface BuildOptions {

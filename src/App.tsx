@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { getBadgeDistribution } from "./api/deadlock";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import "./App.css";
 import { persistOptions, queryClient } from "./queryClient";
@@ -29,6 +30,7 @@ import {
 } from "./lib/palette";
 import {
   bandForTier,
+  highestPopulatedFloor,
   rankSelLabel,
   rankSelToBadges,
   tierOf,
@@ -70,6 +72,10 @@ function flashItemRow(id: number) {
   });
 }
 
+/** Rank floor we'd prefer to show when nothing else has spoken: the top of the ladder, where builds
+ * are cleanest and most converged. Only walked down when that slice is genuinely empty. */
+const DEFAULT_RANK_FLOOR = 11;
+
 function AppInner() {
   // Selection parsed once from the URL on first load (a deep link), via a lazy initializer so it's
   // computed a single time and stays stable. Consumed by the deep-link effect and the first build
@@ -103,9 +109,11 @@ function AppInner() {
     switchTransition(() => setHeroId(id));
   };
   // Rank selection: a floor tier ("Emissary+") or a band ("around my rank" — profile-anchored, or
-  // whatever resolved band a shared link carried). Default Eternus floor until a profile pre-selects.
+  // whatever resolved band a shared link carried). Starts at the Eternus floor and is walked down
+  // by the effect below if the ladder's top turns out to be empty in this patch's window; a profile
+  // then overrides it with the player's own band.
   const [rankSel, setRankSel] = useState<RankSel>(
-    () => url0.band ?? url0.tier ?? 11,
+    () => url0.band ?? url0.tier ?? DEFAULT_RANK_FLOOR,
   );
   const [patchIdx, setPatchIdx] = useState<number>(0); // newest patch (backfilled from pre-patch data)
   // Pre-patch backfill toggle (lib/patchBlend). Default on — a young patch alone starves the
@@ -303,6 +311,17 @@ function AppInner() {
     () => moversWindowFor(patches, sel.patchIdx, SESSION_NOW_S),
     [patches, sel.patchIdx],
   );
+  // How this window's matches spread across the ladder — read once, only to decide whether the
+  // default rank floor has any data behind it (see the effect below). Deliberately NOT gated on
+  // `patchesReady`: an empty window is the API's own last-30-days, which is the right thing to ask
+  // about when we don't yet know the patch. A failure here is silent by design — the default just
+  // stays where it was, which is exactly today's behaviour.
+  const badgeDistQ = useQuery({
+    queryKey: ["analytics", "badge-distribution", dataWindow],
+    queryFn: () => getBadgeDistribution(dataWindow),
+  });
+  const badgeDist = badgeDistQ.data ?? null;
+
   // Backfill needs a patch boundary to blend across; when the patch feed is down (empty list,
   // see patchesQueryOptions) we degrade to the plain window instead of dead-ending queries.
   const canBackfill = backfillOn && patches.length > 0;
@@ -382,6 +401,22 @@ function AppInner() {
       setRankAutoSet(null);
     }
   }, [profile, heroPool]);
+
+  // Fall back off the top of the ladder only when the top is actually empty. The default is a
+  // deliberately high floor — high-rank games have the cleanest builds — but "high" has to exist:
+  // after the 2026-07-30 ranked reset, calibration capped everyone at Oracle VI and tiers 9–11 held
+  // zero matches, so the Eternus default rendered a build over no data at all (and said "50% avg
+  // WR · 0 matches" while doing it). Runs only when nothing better has spoken: a deep link and a
+  // manual pick set tierTouched, and the profile band above wins on its own rank.
+  useEffect(() => {
+    if (tierTouched.current || !badgeDist || profile?.rankTier != null) return;
+    const floor = highestPopulatedFloor(badgeDist);
+    if (floor !== null && floor < DEFAULT_RANK_FLOOR) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot: walks an untouched default down to a ladder shape only known once the distribution lands
+      setRankSel(floor);
+      setRankAutoSet(rankSelLabel(floor));
+    }
+  }, [badgeDist, profile]);
 
   // The build feature (features/useBuildData): the generator query split by archetype, the
   // skill-order and community-build queries that hang off it, and all their derived state.

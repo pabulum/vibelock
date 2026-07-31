@@ -7,20 +7,44 @@
 // floor below the mode is dominated by games well above the player — a capped
 // band actually is their neighborhood.
 
+import type { BadgeDistributionRow } from "../types";
+
 export interface RankTier {
   tier: number;
   name: string;
 }
 
+/** Share of a window's matches a rank FLOOR must still hold to be offered as the default.
+ * Deliberately low: this is an "is this slice effectively empty" guard, not a quality bar. The
+ * top of the ladder is always thin — Eternus+ is ~3% of matches in a normal week and is a perfectly
+ * good default — so anything stricter would quietly drag the default down the ladder for no reason. */
+const FLOOR_MIN_SHARE = 0.01;
+
+// Renamed by the 2026-07-30 Ranked-mode rewrite and verified against /v1/assets/ranks after
+// deadlock-api picked the change up: Alchemist→Acolyte, Arcanist→Sentinel, Archon is gone, and
+// Mystic is inserted at 5 — which shifts Ritualist and Emissary up one slot each. The tier
+// NUMBERS are unchanged (still 12 tiers × 6 subranks), so the badge encoding, every saved URL,
+// and every cached query key survive the rename untouched; only the labels move.
+//
+// READING OLDER COMMENTS: calibration notes written before 2026-07-30 name their rank slice in the
+// OLD scheme, where the same word can mean a different tier. Map them through this table before
+// re-deriving anything against a rank:
+//
+//   tier   3          4          5           6           7          8
+//   old    Alchemist  Arcanist   Ritualist   Emissary    Archon     Oracle
+//   new    Acolyte    Sentinel   Mystic      Ritualist   Emissary   Oracle
+//
+// So a pre-rename "Paradox @ Emissary+" was measured at tier 6, which is now called Ritualist+;
+// tiers 0–2 and 8–11 kept both their number and their name.
 export const RANK_TIERS: RankTier[] = [
   { tier: 0, name: "Obscurus" },
   { tier: 1, name: "Initiate" },
   { tier: 2, name: "Seeker" },
-  { tier: 3, name: "Alchemist" },
-  { tier: 4, name: "Arcanist" },
-  { tier: 5, name: "Ritualist" },
-  { tier: 6, name: "Emissary" },
-  { tier: 7, name: "Archon" },
+  { tier: 3, name: "Acolyte" },
+  { tier: 4, name: "Sentinel" },
+  { tier: 5, name: "Mystic" },
+  { tier: 6, name: "Ritualist" },
+  { tier: 7, name: "Emissary" },
   { tier: 8, name: "Oracle" },
   { tier: 9, name: "Phantom" },
   { tier: 10, name: "Ascendant" },
@@ -96,4 +120,35 @@ export function rankSelLabel(sel: RankSel): string {
   return typeof sel === "number"
     ? rankFloorLabel(sel)
     : rankBandLabel(sel.lo, sel.hi);
+}
+
+/**
+ * The highest rank floor that still has data in this window — the honest default when nobody has
+ * told us a rank.
+ *
+ * A floor of `t` queries `average_badge >= t*10`, so what matters is the CUMULATIVE share at or
+ * above `t`, not that tier's own slice. Preferring the top of the ladder is deliberate: high-rank
+ * games have the cleanest, most converged builds. But the top can be genuinely empty — after the
+ * 2026-07-30 ranked reset, calibration capped everyone at Oracle VI, so tiers 9–11 held *zero*
+ * matches while the app still defaulted to Eternus and rendered a confident, item-less build over
+ * a sample of nothing. This walks down from the top until it finds a floor that actually exists.
+ *
+ * Returns null when the window has no matches at all, so the caller can keep its own fallback
+ * rather than be handed a fabricated tier.
+ */
+export function highestPopulatedFloor(
+  rows: BadgeDistributionRow[],
+  minShare: number = FLOOR_MIN_SHARE,
+): number | null {
+  const total = rows.reduce((s, r) => s + r.total_matches, 0);
+  if (total <= 0) return null;
+  for (let tier = 11; tier >= 1; tier--) {
+    const atOrAbove = rows.reduce(
+      (s, r) =>
+        s + (r.badge_level >= tierToMinBadge(tier) ? r.total_matches : 0),
+      0,
+    );
+    if (atOrAbove / total >= minShare) return tier;
+  }
+  return null;
 }

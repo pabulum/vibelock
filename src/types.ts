@@ -400,6 +400,12 @@ export interface CommunityMatch {
   agree: boolean;
 }
 
+/** One row of /v1/analytics/badge-distribution — how many matches sat at a given average badge. */
+export interface BadgeDistributionRow {
+  badge_level: number;
+  total_matches: number;
+}
+
 /** A game patch, used to time-box the analytics window. */
 export interface Patch {
   title: string;
