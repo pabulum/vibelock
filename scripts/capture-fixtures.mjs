@@ -196,7 +196,8 @@ const captures = [
   },
   {
     file: "counterMatrix.json",
-    url: `${BASE}/v1/analytics/hero-counter-stats?min_matches=500`,
+    // same_lane_filter=false to match the client (the API default is true — see getHeroCounters).
+    url: `${BASE}/v1/analytics/hero-counter-stats?min_matches=500&same_lane_filter=false`,
   },
   {
     file: "heroLadder.json",

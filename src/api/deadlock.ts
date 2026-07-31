@@ -815,11 +815,19 @@ const HeroCounterRowsSchema = v.array(HeroCounterRowSchema);
 
 // hero-counter-stats ignores hero filters and returns the whole hero-vs-hero matrix,
 // so we fetch it once per rank/patch and filter to the selected hero client-side.
+//
+// same_lane_filter MUST be sent explicitly: the API defaults it to *true*, which restricts the
+// matrix to games where the two heroes drew the same lane. That is the wrong question for this
+// panel — a matchup is something you live with for the whole game, not just the laning phase —
+// and it silently disagreed with item-stats, whose own same_lane_filter defaults to false, so the
+// item counters were already whole-game while these matchups were lane-only. Sending false also
+// roughly triples the sample per cell (Bebop vs Ivy: 21k lane games → 74k whole-game).
 export function getHeroCounters(
   q: CounterMatrixQuery,
 ): Promise<HeroCounterRow[]> {
   const params = new URLSearchParams({
     min_matches: String(q.minMatches ?? 100),
+    same_lane_filter: "false",
   });
   applyRank(params, q);
   applyWindow(params, q);

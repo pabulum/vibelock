@@ -6,8 +6,10 @@
 // them); well above, you're favoured. These feed the counters panel: one click
 // adds a tough hero to the enemy list and the build-vs-them items appear.
 //
-// Note: the win rate is whole-game "this hero was on the enemy team", not lane-only
-// (the API's same_lane_filter is a no-op here). `laneCsDelta` is a separate lane hint.
+// Note: the win rate is whole-game "this hero was on the enemy team", not lane-only. That holds
+// only because api/deadlock.ts sends same_lane_filter=false explicitly — the API's default is
+// TRUE, and this comment used to claim the parameter was a no-op, which it never was.
+// `laneCsDelta` is a separate lane hint.
 
 import type { HeroCounterRow, HeroMatchups, Matchup } from "../types";
 
