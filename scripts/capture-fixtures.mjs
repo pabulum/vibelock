@@ -152,6 +152,20 @@ const captures = [
         .map((p) => pick(p, { title: true, pub_date: true, link: true })),
   },
   {
+    // Ranked-season intervals: the boundaries the patch list is split on (lib/patchFeed). The
+    // eligibility fields the client never reads (min wins, party sizes, calibration length) are
+    // dropped.
+    file: "rankedSeasons.json",
+    url: `${BASE}/v1/assets/ranked-seasons`,
+    project: (rows) =>
+      rows.map((s) => ({
+        ...pick(s, { name: true, class_name: true }),
+        intervals: (s.intervals ?? []).map((iv) =>
+          pick(iv, { interval: true, start_timestamp: true }),
+        ),
+      })),
+  },
+  {
     file: "heroes.json",
     url: `${BASE}/v1/assets/heroes?only_active=true`,
     project: (rows) => rows.map(projHero),

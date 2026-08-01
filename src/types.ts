@@ -406,6 +406,17 @@ export interface BadgeDistributionRow {
   total_matches: number;
 }
 
+/** One stretch of time the ranked ladder was scaled the same way, from /v1/assets/ranked-seasons.
+ * A season (or a split within one) opens with a soft reset, so `average_badge` means something
+ * different on either side of `startTs` — which makes it a window boundary in its own right, on
+ * equal footing with a patch. See lib/patchFeed. */
+export interface SeasonInterval {
+  /** Display name, e.g. "Beta Season 1" — splits within a season name themselves. */
+  name: string;
+  /** Unix seconds the interval's data begins. */
+  startTs: number;
+}
+
 /** A game patch, used to time-box the analytics window. */
 export interface Patch {
   title: string;
@@ -414,6 +425,10 @@ export interface Patch {
   /** The changelog notes body, when the feed carried one (the Steam copy). Parsed by
    * lib/patchChanges into the set of items this patch touched — the causal tag on patch movers. */
   content?: string;
+  /** The ranked season this window falls inside; absent for patches predating the first one. Its
+   * `startTs` is the floor every backwards-looking window is clamped to (lib/patchWindows), and
+   * a patch whose own `ts` equals it IS the season boundary. */
+  season?: SeasonInterval;
 }
 
 /** An entry in the news feed: everything the patch feed carries, including the announcements that

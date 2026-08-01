@@ -32,10 +32,12 @@ import {
   RawHeroSchema,
   RawItemSchema,
   RawPatchSchema,
+  RawRankedSeasonSchema,
   SteamPlayerMatchSchema,
   type RawBuildEnvelope,
   type RawItem,
   type RawPatch,
+  type RawRankedSeason,
   type RawProp,
   type SteamPlayerMatch,
 } from "./schemas";
@@ -62,6 +64,7 @@ import type {
   Patch,
   PlayerHeroStat,
   PlayerMetrics,
+  SeasonInterval,
   SlotType,
   TextSegment,
 } from "../types";
@@ -958,19 +961,52 @@ export function getPlayerMetrics(
 }
 
 const RawPatchesSchema = v.array(RawPatchSchema);
-const PATCHES_KEY = ["assets", "patches", "v3"];
+const RawRankedSeasonsSchema = v.array(RawRankedSeasonSchema);
+const PATCHES_KEY = ["assets", "patches", "v4"];
 
 const EMPTY_FEED: PatchFeed = { patches: [], news: [] };
 
+/** Ranked-season intervals, newest-first, flattened out of the season assets: a split break inside
+ * a season is its own interval and so its own boundary, and it names itself accordingly. Returns
+ * an empty list on any failure — a missing season asset costs the season split, nothing else. */
+async function fetchSeasonIntervals(): Promise<SeasonInterval[]> {
+  let raw: RawRankedSeason[];
+  try {
+    raw = await getJson(
+      `${BASE}/v1/assets/ranked-seasons`,
+      RawRankedSeasonsSchema,
+    );
+  } catch {
+    return [];
+  }
+  const out: SeasonInterval[] = [];
+  for (const s of raw) {
+    const name = s.name || s.class_name || "Season";
+    for (const iv of s.intervals) {
+      out.push({
+        name:
+          s.intervals.length > 1
+            ? `${name} · Split ${iv.interval ?? "?"}`
+            : name,
+        startTs: iv.start_timestamp,
+      });
+    }
+  }
+  return out.sort((a, b) => b.startTs - a.startTs);
+}
+
 // /v2/patches unifies the Forum + Steam feeds, so it has minor updates and announcements too.
 // Splitting it into the patch list and the news list is pure and lives in lib/patchFeed (which is
-// also where the trust rules for title-date vs pub_date are written down); this query only fetches.
+// also where the trust rules for title-date vs pub_date are written down, and where the ranked
+// seasons fetched alongside it become boundaries); this query only fetches.
 //
 // ONE cache entry feeds both views: the two exported options below share this key and differ only
 // in `select`, so the strip costs no extra round trip and no extra persisted bytes.
 const patchFeedQueryOptions = queryOptions({
   queryKey: PATCHES_KEY,
   queryFn: async (): Promise<PatchFeed> => {
+    // Started first so the two requests overlap; awaited only once the feed is in hand.
+    const seasons = fetchSeasonIntervals();
     let raw: RawPatch[];
     try {
       raw = await getJson(`${BASE}/v2/patches`, RawPatchesSchema);
@@ -982,7 +1018,7 @@ const patchFeedQueryOptions = queryOptions({
       // backfill until a reload succeeds.
       return queryClient.getQueryData<PatchFeed>(PATCHES_KEY) ?? EMPTY_FEED;
     }
-    return parsePatchFeed(raw);
+    return parsePatchFeed(raw, await seasons);
   },
   staleTime: ASSET_STALE_MS,
   gcTime: ASSET_GC_MS,

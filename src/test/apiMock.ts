@@ -8,6 +8,7 @@
 // scripts/capture-fixtures.mjs — rerun it to refresh them after an API change.
 
 import patches from "./fixtures/patches.json";
+import rankedSeasons from "./fixtures/rankedSeasons.json";
 import heroes from "./fixtures/heroes.json";
 import items from "./fixtures/items.json";
 import itemStats from "./fixtures/itemStats.json";
@@ -24,6 +25,7 @@ import { setAnalyticsCacheEnabled } from "../lib/idbCache";
 
 const routes: Array<[RegExp, unknown]> = [
   [/^\/v2\/patches$/, patches],
+  [/^\/v1\/assets\/ranked-seasons$/, rankedSeasons],
   [/^\/v1\/assets\/heroes$/, heroes],
   [/^\/v1\/assets\/items$/, items],
   [/^\/v1\/analytics\/item-stats$/, itemStats],

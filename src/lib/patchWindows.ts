@@ -11,14 +11,44 @@ export function windowFor(patches: Patch[], idx: number): TimeWindow {
   };
 }
 
-/** The borrow window that backfills a young patch: the month *before* the patch dropped. This is
- * where the old "Last 30 days" default went — instead of mixing patches at full weight, the
- * pre-patch month enters the build as a capped, drift-discounted prior (see lib/patchBlend). */
+/**
+ * How far back a window looking *before* a patch may reach: never past the start of the ranked
+ * season that patch ran under (lib/patchFeed).
+ *
+ * The two windows below both borrow from before the patch, and both would otherwise reach across a
+ * ranked reset. That reset re-scales `average_badge`, so the borrowed half of a rank-filtered query
+ * answers about a different population than the fresh half — a blend that reads as patch drift and
+ * isn't. Where a patch changes what an item *does*, a reset changes who the sample is; the blend's
+ * contradiction discount is built for the first and blind to the second.
+ *
+ * Returns -Infinity for a patch predating the first season, i.e. no clamp at all.
+ */
+function seasonFloor(patch: Patch): number {
+  return patch.season?.startTs ?? Number.NEGATIVE_INFINITY;
+}
+
+/** True when a window covers a non-zero span of time. A season boundary collapses the windows
+ * below to nothing (there is no admissible time before it), and the caller has to switch the
+ * borrowing off rather than issue the query: `{}` would silently mean the API's default last-30-
+ * days, and min === max means an empty result dressed up as data. */
+export function hasSpan(w: TimeWindow): boolean {
+  return (
+    w.minUnixTimestamp !== undefined &&
+    (w.maxUnixTimestamp === undefined ||
+      w.maxUnixTimestamp > w.minUnixTimestamp)
+  );
+}
+
+/** The borrow window that backfills a young patch: the month *before* the patch dropped, clamped
+ * at the season start (see {@link seasonFloor}). This is where the old "Last 30 days" default went
+ * — instead of mixing patches at full weight, the pre-patch month enters the build as a capped,
+ * drift-discounted prior (see lib/patchBlend). */
 export function priorWindowFor(patches: Patch[], idx: number): TimeWindow {
-  if (!patches[idx]) return {};
+  const patch = patches[idx];
+  if (!patch) return {};
   return {
-    minUnixTimestamp: patches[idx].ts - PRIOR_WINDOW_S,
-    maxUnixTimestamp: patches[idx].ts,
+    minUnixTimestamp: Math.max(patch.ts - PRIOR_WINDOW_S, seasonFloor(patch)),
+    maxUnixTimestamp: patch.ts,
   };
 }
 
@@ -44,7 +74,9 @@ export const SESSION_NOW_S = Math.floor(Date.now() / 1000);
  *
  * `nowSec` decides the span only for the newest patch — the one still running; every older patch
  * ends where the next one begins. Capped at the borrow window because past a month the question is
- * stale, and a comparator from two months ago measures drift rather than the patch.
+ * stale, and a comparator from two months ago measures drift rather than the patch — and clamped
+ * at the season start for the reason in {@link seasonFloor}, which costs the two sides their equal
+ * length in the same way the monthly cap already can.
  */
 export function moversWindowFor(
   patches: Patch[],
@@ -54,7 +86,11 @@ export function moversWindowFor(
   const patch = patches[idx];
   if (!patch) return {};
   const end = idx > 0 ? patches[idx - 1].ts : nowSec;
-  const span = Math.min(PRIOR_WINDOW_S, Math.max(0, end - patch.ts));
+  const span = Math.min(
+    PRIOR_WINDOW_S,
+    Math.max(0, end - patch.ts),
+    patch.ts - seasonFloor(patch),
+  );
   return {
     minUnixTimestamp: patch.ts - span,
     maxUnixTimestamp: patch.ts,

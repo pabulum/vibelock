@@ -41,10 +41,10 @@ describe("parsePatchFeed — patch list", () => {
 });
 
 describe("parsePatchFeed — news list", () => {
-  it("keeps undated announcements as news but never as patch boundaries", () => {
-    // The 2026-07-30 matchmaking rewrite: no date in the title, no item changes, but the single
-    // most consequential thing to happen to the underlying data. It must be sayable, and it must
-    // not open an analytics window.
+  it("keeps undated announcements as news, and out of the patch list on their own", () => {
+    // A title with no MM-DD-YYYY never becomes a boundary by itself. The 2026-07-30 matchmaking
+    // rewrite is one, and it opens a window only because a ranked season matches it — with no
+    // season asset (the API down, or an announcement that starts nothing) it stays news.
     const raw = [
       { title: "Matchmaking Update", pub_date: "2026-07-30T19:14:37Z" },
       { title: " Minor Update - 07-28-2026", pub_date: "2026-07-28T20:24:35Z" },
@@ -93,6 +93,111 @@ describe("parsePatchFeed — news list", () => {
       [...news.map((n) => n.ts)].sort((a, b) => b - a),
     );
     expect(news[0].title).toBe("Matchmaking Update");
+  });
+});
+
+describe("parsePatchFeed — ranked-season boundaries", () => {
+  // The live shape: Beta Season 1's declared start is 17:00 UTC, the announcement that shipped it
+  // landed at 19:14 UTC, and the nearest patch is two days earlier.
+  const SEASON_START = D("2026-07-30T17:00:00Z");
+  const ANNOUNCED = D("2026-07-30T19:14:37Z");
+  const seasons = [{ name: "Beta Season 1", startTs: SEASON_START }];
+  const feed = [
+    {
+      title: "Matchmaking Update",
+      pub_date: "2026-07-30T19:14:37Z",
+      content: "<p>Ranked Mode has seasons.</p>",
+    },
+    { title: " Minor Update - 07-28-2026", pub_date: "2026-07-28T20:24:35Z" },
+    { title: " Minor Update - 07-09-2026", pub_date: "2026-07-09T19:26:55Z" },
+  ];
+
+  it("opens the boundary on the announcement, not the season's declared start", () => {
+    // Matches between 17:00 and 19:14 were still played on the old build; the post is when it
+    // actually went live, and it's the boundary deadlock-api's own picker uses.
+    const { patches } = parsePatchFeed(feed, seasons);
+    expect(patches[0]).toMatchObject({
+      title: "2026-07-30 · Beta Season 1",
+      ts: ANNOUNCED,
+      content: "<p>Ranked Mode has seasons.</p>",
+      season: { name: "Beta Season 1", startTs: ANNOUNCED },
+    });
+  });
+
+  it("promotes the matched announcement in the news strip instead of duplicating it", () => {
+    const { news } = parsePatchFeed(feed, seasons);
+    expect(news.filter((n) => n.ts === ANNOUNCED)).toEqual([
+      expect.objectContaining({ title: "Matchmaking Update", isPatch: true }),
+    ]);
+  });
+
+  it("tells every patch which season it ran under, and leaves older ones with none", () => {
+    const { patches } = parsePatchFeed(feed, seasons);
+    expect(patches.map((p) => p.season?.name)).toEqual([
+      "Beta Season 1",
+      undefined, // 07-28 — the season boundary is what makes these two un-mixable
+      undefined, // 07-09
+    ]);
+  });
+
+  it("lets a patch that shipped with the season be the boundary itself", () => {
+    // No second entry hours apart: the changelog patch is already a boundary, and it keeps its own
+    // midnight-UTC day key — imprecise by a few hours in exactly the way every patch boundary is.
+    const { patches } = parsePatchFeed(
+      [
+        {
+          title: " Minor Update - 07-30-2026",
+          pub_date: "2026-07-30T17:02:00Z",
+        },
+      ],
+      seasons,
+    );
+    expect(patches).toHaveLength(1);
+    expect(patches[0]).toMatchObject({
+      title: "2026-07-30 · Minor Update",
+      season: { startTs: D("2026-07-30T00:00:00Z") },
+    });
+  });
+
+  it("still opens a boundary when the feed says nothing about the season", () => {
+    // A season the announcement feed never mentioned (or one that scrolled off the 30-entry feed)
+    // is still a reset. The boundary matters with no story attached, so the strip gets a bare one.
+    const { patches, news } = parsePatchFeed(
+      [
+        {
+          title: " Minor Update - 07-09-2026",
+          pub_date: "2026-07-09T19:26:55Z",
+        },
+      ],
+      seasons,
+    );
+    expect(patches[0]).toMatchObject({
+      title: "2026-07-30 · Beta Season 1",
+      ts: SEASON_START,
+      content: undefined,
+    });
+    expect(news[0]).toEqual({
+      title: "Beta Season 1",
+      ts: SEASON_START,
+      isPatch: true,
+    });
+  });
+
+  it("takes splits as their own boundaries", () => {
+    // Anticipating the shape the API already allows: a mid-season split is a second interval, and
+    // a split break adjusts ranks — another reset, another boundary, no code change.
+    const split = D("2026-09-01T17:00:00Z");
+    const { patches } = parsePatchFeed(feed, [
+      { name: "Beta Season 1 · Split 2", startTs: split },
+      ...seasons,
+    ]);
+    expect(patches.map((p) => p.title)).toEqual([
+      "2026-09-01 · Beta Season 1 · Split 2",
+      "2026-07-30 · Beta Season 1",
+      "2026-07-28 · Minor Update",
+      "2026-07-09 · Minor Update",
+    ]);
+    expect(patches[1].season?.name).toBe("Beta Season 1");
   });
 });
 

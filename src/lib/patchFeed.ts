@@ -8,13 +8,22 @@
 // 06-12). News only has to be readable and roughly ordered, so entries with no date in the title
 // are kept too, ordered by pub_date.
 //
-// That difference is the whole point, and 2026-07-30's "Matchmaking Update" is the case that
-// motivated it: a matchmaking rewrite ships no item changes, so opening an analytics window on it
-// would blank every build for nothing — but it is the most consequential thing to happen to the
-// data in months, so it has to be *sayable*. News, not a patch.
+// A RANKED SEASON is the third source of boundaries, and it doesn't come from this feed at all —
+// it comes from the client's own season definitions (/v1/assets/ranked-seasons). A season, or a
+// split inside one, opens with a soft reset of everyone's badge, so the same `average_badge`
+// filter selects a different population on either side of it: after 2026-07-30 calibration capped
+// the ladder at Oracle VI and tiers 9–11 held *zero* matches, while the same window's pre-reset
+// half had Eternus at 3%. That is a boundary by exactly the logic that makes a patch one, and it
+// is the split deadlock-api's own tool draws its patch list on ("Before Beta Season 1" /
+// "Beta Season 1"). Seasons the game hasn't defined yet — the next season, a mid-season split —
+// become boundaries here the moment they appear in that asset, with no code change.
+//
+// So 2026-07-30's "Matchmaking Update" is a boundary after all, but not because of its title: it
+// carries no MM-DD-YYYY and never will. It is the announcement the ranked season *matched*, and
+// the title rule below is untouched by it.
 
 import { stripHtml } from "./patchChanges";
-import type { NewsItem, Patch } from "../types";
+import type { NewsItem, Patch, SeasonInterval } from "../types";
 import type { RawPatch } from "../api/schemas";
 
 export interface PatchFeed {
@@ -28,6 +37,29 @@ const TITLE_DATE = /(\d{2})-(\d{2})-(\d{4})/; // MM-DD-YYYY
 
 /** How much of a body the strip shows before the "read at source" link takes over. */
 const EXCERPT_MAX = 180;
+
+/** How far from a season's declared start we look for the announcement that shipped it. The two
+ * disagree by hours — the KV3 timestamp is when the season's *accounting* starts (2026-07-30
+ * 17:00 UTC), the Steam post is when the build actually went live (19:14 UTC) — and matches in
+ * between were played on the old build, so the announcement is the better boundary of the two.
+ * A day is wide enough for that gap and far too narrow to reach the neighbouring patch. */
+const SEASON_ANNOUNCE_WINDOW_S = 86400;
+
+const dayKeyOf = (ts: number) => new Date(ts * 1000).toISOString().slice(0, 10);
+
+/** The entry closest to `ts`, if one is within {@link SEASON_ANNOUNCE_WINDOW_S} of it. */
+function nearestEntry<T extends { ts: number }>(
+  entries: T[],
+  ts: number,
+): T | undefined {
+  let best: T | undefined;
+  for (const e of entries) {
+    const d = Math.abs(e.ts - ts);
+    if (d > SEASON_ANNOUNCE_WINDOW_S) continue;
+    if (!best || d < Math.abs(best.ts - ts)) best = e;
+  }
+  return best;
+}
 
 /** A one-line plain-text lede for a feed body. The feed's content is raw HTML from Steam/forum and
  * is never rendered as markup — this is the only thing we ever show from it. */
@@ -50,10 +82,16 @@ export function excerptOf(html: string | undefined): string | undefined {
   return `${cut.slice(0, stop > 80 ? stop : EXCERPT_MAX).trimEnd()}…`;
 }
 
-/** Split the raw feed into its patch list and its news list. Pure — the query layer only fetches. */
-export function parsePatchFeed(raw: RawPatch[]): PatchFeed {
+/** Split the raw feed into its patch list and its news list, opening a window boundary at each
+ * ranked-season interval as well. Pure — the query layer only fetches. */
+export function parsePatchFeed(
+  raw: RawPatch[],
+  seasons: SeasonInterval[] = [],
+): PatchFeed {
   const byDay = new Map<string, Patch & { newsTitle: string; link?: string }>();
-  const undated: NewsItem[] = [];
+  // `content` rides along only so a season can adopt its announcement's notes below; it is dropped
+  // again when the news list is built (the strip shows an excerpt, never the body).
+  const undated: Array<NewsItem & { content?: string }> = [];
 
   for (const p of raw) {
     const title = p.title ?? "";
@@ -71,6 +109,7 @@ export function parsePatchFeed(raw: RawPatch[]): PatchFeed {
         isPatch: false,
         link: p.link,
         excerpt: excerptOf(content),
+        content,
       });
       continue;
     }
@@ -106,6 +145,35 @@ export function parsePatchFeed(raw: RawPatch[]): PatchFeed {
     ts,
     content,
   }));
+  const extraNews: NewsItem[] = [];
+
+  // Settle each season on the moment its data actually begins, and give the patch list a boundary
+  // there. Order of preference, and why:
+  //   1. A dated patch within a day — the season shipped with a changelog, so that entry already
+  //      IS the boundary and a second one beside it would only split the window in two. It keeps
+  //      its own midnight-UTC day key, imprecise by a few hours in exactly the way every other
+  //      patch boundary already is.
+  //   2. The announcement that shipped it (2026-07-30's "Matchmaking Update"), promoted from news
+  //      to a boundary and lending the entry its notes.
+  //   3. The season's declared start, when the feed says nothing at all — the boundary matters
+  //      even with no story attached to it, so the strip gets a bare entry for it.
+  const settled: SeasonInterval[] = [];
+  for (const s of seasons) {
+    const onPatch = nearestEntry(dated, s.startTs);
+    const announcement = onPatch ? undefined : nearestEntry(undated, s.startTs);
+    const startTs = onPatch?.ts ?? announcement?.ts ?? s.startTs;
+    settled.push({ name: s.name, startTs });
+    if (onPatch) continue;
+    if (announcement) announcement.isPatch = true;
+    else extraNews.push({ title: s.name, ts: startTs, isPatch: true });
+    patches.push({
+      title: `${dayKeyOf(startTs)} · ${s.name}`,
+      ts: startTs,
+      content: announcement?.content,
+    });
+  }
+  settled.sort((a, b) => b.startTs - a.startTs);
+
   const news: NewsItem[] = [
     ...dated.map((p) => ({
       title: p.newsTitle,
@@ -114,8 +182,22 @@ export function parsePatchFeed(raw: RawPatch[]): PatchFeed {
       link: p.link,
       excerpt: excerptOf(p.content),
     })),
-    ...undated,
+    // Rebuilt field by field to drop `content`, carried this far only so a season could adopt it.
+    ...undated.map(({ title, ts, isPatch, link, excerpt }) => ({
+      title,
+      ts,
+      isPatch,
+      link,
+      excerpt,
+    })),
+    ...extraNews,
   ].sort((a, b) => b.ts - a.ts);
 
-  return { patches, news };
+  return {
+    patches: patches
+      .sort((a, b) => b.ts - a.ts)
+      // Newest-first, so the first season at or below a patch is the one it ran under.
+      .map((p) => ({ ...p, season: settled.find((s) => p.ts >= s.startTs) })),
+    news,
+  };
 }

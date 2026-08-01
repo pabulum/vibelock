@@ -62,6 +62,24 @@ function ThemeToggle() {
   );
 }
 
+/** The patch list as the picker shows it: one group per ranked season, with everything older under
+ * a "Before <first season>" heading — the same split deadlock-api's own tool draws, and the point
+ * where a rank filter stops meaning the same thing (lib/patchFeed). One group ⇒ no headings. */
+function groupBySeason(
+  patches: Patch[],
+): Array<{ label: string; entries: Array<[Patch, number]> }> {
+  // Patches are newest-first, so the last one carrying a season names the earliest one.
+  const earliest = [...patches].reverse().find((p) => p.season)?.season?.name;
+  const groups: Array<{ label: string; entries: Array<[Patch, number]> }> = [];
+  patches.forEach((p, i) => {
+    const label = p.season?.name ?? (earliest ? `Before ${earliest}` : "");
+    const last = groups.at(-1);
+    if (last?.label === label) last.entries.push([p, i]);
+    else groups.push({ label, entries: [[p, i]] });
+  });
+  return groups;
+}
+
 export function TopBar(props: {
   items: Map<number, Item> | null;
   shuffleSeed: string;
@@ -77,11 +95,14 @@ export function TopBar(props: {
   patches: Patch[];
   backfillOn: boolean;
   setBackfillOn: (v: boolean) => void;
+  /** Name of the ranked season that leaves this patch nothing to borrow from, else null. */
+  backfillBlocked: string | null;
   steamId: string;
   setSteamId: (v: string) => void;
   steamMatches: SteamPlayerMatch[] | null;
   setSteamMatches: (m: SteamPlayerMatch[] | null) => void;
-  rankAutoSet: string | null;
+  /** The rank the app picked for itself, and the reason to show beside it. */
+  rankAutoSet: { label: string; why: string } | null;
   setPalette: (m: PaletteMode) => void;
   onOpenGuide: () => void;
   onOpenLab: () => void;
@@ -103,6 +124,7 @@ export function TopBar(props: {
     patches,
     backfillOn,
     setBackfillOn,
+    backfillBlocked,
     steamId,
     setSteamId,
     steamMatches,
@@ -160,8 +182,12 @@ export function TopBar(props: {
             ))}
           </select>
           {rankAutoSet && (
-            <span className="autoset" key={rankAutoSet} aria-live="polite">
-              set to {rankAutoSet} from your profile
+            <span
+              className="autoset"
+              key={rankAutoSet.label}
+              aria-live="polite"
+            >
+              set to {rankAutoSet.label} {rankAutoSet.why}
             </span>
           )}
         </label>
@@ -174,22 +200,40 @@ export function TopBar(props: {
             {patches.length === 0 && (
               <option value={0}>Last 30 days (patch list unavailable)</option>
             )}
-            {patches.map((p, i) => (
-              <option key={p.ts} value={i}>
-                {p.title}
-                {i === 0 ? " (latest)" : ""}
-              </option>
-            ))}
+            {groupBySeason(patches).map((g) =>
+              g.label ? (
+                <optgroup key={g.label} label={g.label}>
+                  {g.entries.map(([p, i]) => (
+                    <option key={p.ts} value={i}>
+                      {p.title}
+                      {i === 0 ? " (latest)" : ""}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : (
+                g.entries.map(([p, i]) => (
+                  <option key={p.ts} value={i}>
+                    {p.title}
+                    {i === 0 ? " (latest)" : ""}
+                  </option>
+                ))
+              ),
+            )}
           </select>
         </label>
         <label
           className="checkctl"
-          title="Pad a young patch's thin data with the 30 days before it, as a capped prior that fades out as the patch accumulates games (see How it works). Off = the selected window only."
+          title={
+            backfillBlocked
+              ? `Nothing to borrow: ${backfillBlocked} soft-reset the ladder at this boundary, so the window before it was measured on a different rank scale and blending the two would compare different populations. This patch runs on its own data.`
+              : "Pad a young patch's thin data with the 30 days before it, as a capped prior that fades out as the patch accumulates games (see How it works). Off = the selected window only."
+          }
         >
           Backfill
           <input
             type="checkbox"
-            checked={backfillOn}
+            checked={backfillOn && !backfillBlocked}
+            disabled={backfillBlocked !== null}
             onChange={(e) => setBackfillOn(e.target.checked)}
           />
         </label>

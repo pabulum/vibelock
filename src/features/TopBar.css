@@ -81,6 +81,16 @@
     accent-color: var(--accent-ui);
     cursor: pointer;
   }
+  /* Backfill on a ranked-season boundary: there is no admissible window before it to borrow from
+     (lib/patchWindows), so the control reads as unavailable rather than as a lie. The title says
+     why. */
+  .controls .checkctl:has(input:disabled) {
+    color: var(--ink-3);
+    cursor: default;
+  }
+  .controls .checkctl input:disabled {
+    cursor: default;
+  }
 
   /* One-time cue when a Steam profile auto-selects the rank band — without it the silent re-slice
      reads as "Steam ID changes the items". Fades itself out; pointer-events off so the stale note

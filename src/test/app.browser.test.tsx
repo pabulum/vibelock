@@ -65,18 +65,26 @@ test("renders the news strip, including announcements that aren't patches", asyn
     .poll(() => container.querySelectorAll(".news .entry").length, BAKE)
     .toBeGreaterThan(0);
 
-  // The fixture's newest entry is the 2026-07-30 matchmaking announcement: it has no date in its
-  // title, so it is news but NOT a patch boundary. That distinction is the reason the strip
-  // exists, so assert both halves of it — it is shown, and it never became a patch.
+  // The fixture's newest entry is the 2026-07-30 matchmaking announcement. Its title carries no
+  // date, so the title rule alone would keep it out of the patch list — but the ranked-seasons
+  // fixture opens Beta Season 1 on it, which makes it a boundary. Both halves are asserted: the
+  // strip shows it, and the strip knows it is a patch (no "note" class).
   const first = container.querySelector(".news .entry")!;
   expect(first.textContent).toContain("Matchmaking");
-  expect(first.classList.contains("note")).toBe(true);
+  expect(first.classList.contains("note")).toBe(false);
   expect(first.getAttribute("href")).toContain("steampowered.com");
 
-  // The patch selector lists only real boundaries, so the announcement must be absent from it.
+  // ...and the picker offers it under the season's own name, grouped away from the patches that
+  // ran on the pre-reset ladder.
   const patchPicker = screen.getByRole("combobox", { name: "Patch" });
   await expect.element(patchPicker).toBeVisible();
-  expect(patchPicker.element().textContent).not.toContain("Matchmaking");
+  const picker = patchPicker.element() as HTMLSelectElement;
+  expect(picker.options[0].textContent).toContain("Beta Season 1");
+  expect(
+    [...picker.querySelectorAll("optgroup")].map((g) =>
+      g.getAttribute("label"),
+    ),
+  ).toEqual(["Beta Season 1", "Before Beta Season 1"]);
 
   expect(container.querySelector(".banner.error")).toBeNull();
   expect(api.unmatched).toEqual([]);

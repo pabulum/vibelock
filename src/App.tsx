@@ -13,6 +13,7 @@ import {
   type UrlState,
 } from "./lib/urlState";
 import {
+  hasSpan,
   moversWindowFor,
   priorWindowFor,
   SESSION_NOW_S,
@@ -192,10 +193,16 @@ function AppInner() {
   const tierTouched = useRef(
     url0.tier !== undefined || url0.band !== undefined,
   );
-  // One-time cue when a Steam profile silently re-slices the data: the auto-selected band's label,
-  // shown as a note under the Rank control (friend feedback: the rank flip read as "Steam ID changes
-  // the items"). Cleared on a deliberate rank pick or a profile change; also fades out via CSS.
-  const [rankAutoSet, setRankAutoSet] = useState<string | null>(null);
+  // One-time cue when the rank silently re-slices the data on its own: the auto-selected label and
+  // *why*, shown as a note under the Rank control (friend feedback: the rank flip read as "Steam ID
+  // changes the items"). Two things can move it and they aren't interchangeable — a profile knows
+  // the player's own rank, the ladder walk-down below only knows the top of the ladder was empty —
+  // so the reason travels with the label. Cleared on a deliberate rank pick or a profile change;
+  // also fades out via CSS.
+  const [rankAutoSet, setRankAutoSet] = useState<{
+    label: string;
+    why: string;
+  } | null>(null);
   // A deliberate rank choice, shared by the Rank select and the command palette: stops the
   // profile pre-selecting, clears its cue, and runs inside the switch view transition.
   const pickRank = (sel: RankSel) => {
@@ -323,8 +330,16 @@ function AppInner() {
   const badgeDist = badgeDistQ.data ?? null;
 
   // Backfill needs a patch boundary to blend across; when the patch feed is down (empty list,
-  // see patchesQueryOptions) we degrade to the plain window instead of dead-ending queries.
-  const canBackfill = backfillOn && patches.length > 0;
+  // see patchesQueryOptions) we degrade to the plain window instead of dead-ending queries. It
+  // also needs somewhere to borrow *from*: on a ranked-season boundary the prior window is clamped
+  // to nothing (lib/patchWindows) because the data before it was measured on a different ladder,
+  // so the build runs on the fresh window alone however thin that is.
+  const canBackfill = backfillOn && patches.length > 0 && hasSpan(priorWin);
+  // Told to the toggle so "Backfill on, nothing backfilled" isn't a silent contradiction.
+  const backfillBlocked =
+    backfillOn && patches.length > 0 && !hasSpan(priorWin)
+      ? (patches[sel.patchIdx]?.season?.name ?? null)
+      : null;
   // The prior window's contribution to query keys: null when backfill is off, so toggling it
   // re-keys (and re-fetches) exactly the queries whose results it changes.
   const priorKey = canBackfill ? priorWin : null;
@@ -396,7 +411,7 @@ function AppInner() {
 
       setRankSel(band);
 
-      setRankAutoSet(rankSelLabel(band));
+      setRankAutoSet({ label: rankSelLabel(band), why: "from your profile" });
     } else {
       setRankAutoSet(null);
     }
@@ -414,7 +429,10 @@ function AppInner() {
     if (floor !== null && floor < DEFAULT_RANK_FLOOR) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot: walks an untouched default down to a ladder shape only known once the distribution lands
       setRankSel(floor);
-      setRankAutoSet(rankSelLabel(floor));
+      setRankAutoSet({
+        label: rankSelLabel(floor),
+        why: "— nothing above it this window",
+      });
     }
   }, [badgeDist, profile]);
 
@@ -550,13 +568,18 @@ function AppInner() {
     if (a.kind === "enemy") prefetchEnemy(sel.heroId, a.id, dataSlice);
     else if (a.kind === "rank")
       prefetchBuild(sel.heroId, { ...dataSlice, ...rankSelToBadges(a.sel) });
-    else if (a.kind === "patch")
+    else if (a.kind === "patch") {
+      // Whether that patch *can* backfill is its own question — hovering a season boundary from a
+      // patch that borrows would otherwise speculatively fetch a prior window the click won't use.
+      const prior = priorWindowFor(patches, a.idx);
       prefetchBuild(sel.heroId, {
         ...dataSlice,
         dataWindow: windowFor(patches, a.idx),
-        priorWin: priorWindowFor(patches, a.idx),
+        priorWin: prior,
         moversWin: moversWindowFor(patches, a.idx, SESSION_NOW_S),
+        canBackfill: canBackfill && hasSpan(prior),
       });
+    }
   };
 
   // Empty patch list = the feed failed and the patches query degraded (see api/deadlock) —
@@ -781,6 +804,7 @@ function AppInner() {
         patches={patches}
         backfillOn={backfillOn}
         setBackfillOn={setBackfillOn}
+        backfillBlocked={backfillBlocked}
         steamId={steamId}
         setSteamId={setSteamId}
         steamMatches={steamMatches}

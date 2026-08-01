@@ -373,6 +373,27 @@ export const RawPatchSchema = v.object({
 });
 export type RawPatch = v.InferOutput<typeof RawPatchSchema>;
 
+/** /v1/assets/ranked-seasons entry — the ranked-season definitions the game client ships, parsed
+ * out of its KV3 source. Everything about eligibility (min wins, party sizes, calibration length)
+ * is dropped: only the intervals matter here, as the timestamps the ladder was re-scaled at. */
+export const RawRankedSeasonSchema = v.object({
+  name: v.nullish(v.string()),
+  class_name: v.nullish(v.string()),
+  /** One per continuous stretch of the season — a split break puts a second entry here. A missing
+   * `start_timestamp` would be a season nobody can place on the timeline, so it's required and a
+   * malformed payload degrades the whole asset to "no seasons" rather than a wrong boundary. */
+  intervals: v.optional(
+    v.array(
+      v.object({
+        interval: v.nullish(v.number()),
+        start_timestamp: v.number(),
+      }),
+    ),
+    [],
+  ),
+});
+export type RawRankedSeason = v.InferOutput<typeof RawRankedSeasonSchema>;
+
 export const RawBuildEnvelopeSchema = v.object({
   hero_build: v.optional(
     v.object({
