@@ -176,11 +176,13 @@ export const SteamPlayerMatchSchema = v.object({
 });
 export type SteamPlayerMatch = v.InferOutput<typeof SteamPlayerMatchSchema>;
 
-/** One row of the batch mmr endpoint (/v1/players/mmr) — only `division` is read. */
-export const MmrRowSchema = v.object({
-  division: v.optional(v.number()),
+/** /v1/players/{account_id}/rank — Valve reports one account-wide rank, read off the player's
+ * latest ranked match. `rank` is already the tier (0 = no ranked record); the sibling `badge` is
+ * tier·10 + subrank, and `subrank` the progress within the tier. Neither is read here. */
+export const PlayerRankSchema = v.object({
+  rank: v.number(),
 });
-export type MmrRow = v.InferOutput<typeof MmrRowSchema>;
+export type PlayerRank = v.InferOutput<typeof PlayerRankSchema>;
 
 // ---- Single-match metadata (match analysis) ----
 // The slice of /v1/matches/{id}/metadata the analyzer reads. The full payload is ~1MB with dozens

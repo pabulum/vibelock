@@ -24,7 +24,7 @@ import {
   ItemStatSchema,
   MatchHistoryRowSchema,
   MatchMetadataResponseSchema,
-  MmrRowSchema,
+  PlayerRankSchema,
   parseAs,
   PlayerHeroStatSchema,
   PlayerMetricsSchema,
@@ -871,12 +871,16 @@ export function getHeroCounters(
 const PlayerHeroStatsSchema = v.array(PlayerHeroStatSchema);
 
 /** The player's all-time record per hero — drives the "your heroes" quick-pick. Returns [] for an
- * account with no Deadlock games (or an unknown id). */
+ * account with no Deadlock games (or an unknown id).
+ *
+ * The batch form, not the `/v1/players/{id}/hero-stats` path: the per-account one still answers but
+ * has been dropped from the published spec. Unlike the analytics endpoints this one carries no
+ * default time window, so the record stays all-time. */
 export function getPlayerHeroStats(
   accountId: number,
 ): Promise<PlayerHeroStat[]> {
   return getAnalytics(
-    `${BASE}/v1/players/${accountId}/hero-stats`,
+    `${BASE}/v1/players/hero-stats?account_ids=${accountId}`,
     PlayerHeroStatsSchema,
   );
 }
@@ -893,22 +897,21 @@ export function searchSteamPlayers(query: string): Promise<SteamPlayerMatch[]> {
   );
 }
 
-const MmrRowsSchema = v.array(MmrRowSchema);
-
-/** The player's current rank tier on the app's 0–11 rank-floor scale (11 = Eternus), from the batch
- * mmr endpoint's latest entry (`division` is already tier-scaled; `rank` is the full badge). Null
- * when the account has no ranked record yet (division 0 = Obscurus/unranked). */
+/** The player's current rank tier on the app's 0–11 rank-floor scale (11 = Eternus). Null when the
+ * account has no ranked record yet (tier 0 = Obscurus/unranked).
+ *
+ * Not the batch `/v1/players/mmr` endpoint: the MMR estimate is gone, so that one is deprecated and
+ * capped at a *global* 50req/min shared across every caller of the API — a rank chip that vanishes
+ * whenever someone else is busy. This per-account endpoint reads the same number (its `rank` is the
+ * old `division`) off the player's latest ranked match, with no such ceiling. */
 export async function getPlayerRankTier(
   accountId: number,
 ): Promise<number | null> {
-  const rows = await getAnalytics(
-    `${BASE}/v1/players/mmr?account_ids=${accountId}`,
-    MmrRowsSchema,
+  const { rank } = await getAnalytics(
+    `${BASE}/v1/players/${accountId}/rank`,
+    PlayerRankSchema,
   );
-  const division = rows[0]?.division;
-  return typeof division === "number" && division > 0
-    ? Math.min(division, 11)
-    : null;
+  return rank > 0 ? Math.min(rank, 11) : null;
 }
 
 const HeroLadderStatsSchema = v.array(HeroLadderStatSchema);
