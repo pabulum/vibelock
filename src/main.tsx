@@ -19,6 +19,7 @@ import "@fontsource/ibm-plex-mono/latin-600.css";
 import "./tokens.css";
 import "./index.css";
 import App from "./App.tsx";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { applyTheme } from "./lib/theme";
 
 // Before the first render, not inside a component: a pinned light/dark preference has to reach
@@ -27,8 +28,13 @@ import { applyTheme } from "./lib/theme";
 // runs early enough, since the only thing painted before it is an empty page background.
 applyTheme();
 
+// The boundary wraps <App/> here rather than inside it: a throw from the query provider itself (a
+// corrupt persisted cache is the realistic one) has to be caught by something *outside* the
+// provider, and that's also the only place a fallback can still render after the tree unmounts.
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary scope="root" what="Vibelock">
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 );

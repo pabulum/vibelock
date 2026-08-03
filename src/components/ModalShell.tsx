@@ -3,6 +3,7 @@
 // features/AppModals.css) animates enter/exit. Replaces the old portal + .guide-backdrop overlay.
 
 import { useEffect, useRef, type ReactNode } from "react";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { useScrollLock } from "./useScrollLock";
 
 // How long the exit transition runs (keep in sync with the `dialog.guide` transition duration in
@@ -77,7 +78,16 @@ export function ModalShell({
           ✕
         </button>
       </header>
-      <div className="guide-body">{children}</div>
+      {/* Scoped boundary, so a panel that throws stays a broken panel instead of a blank page.
+          These are the app's deepest readers of upstream payloads — the Match view has already been
+          taken down once by a shape change — and every one of them is reachable from a page that
+          was working fine a moment earlier. The shell (and its ✕) survives, so the way out is the
+          way you came in. */}
+      <div className="guide-body">
+        <ErrorBoundary scope="panel" what="This panel">
+          {children}
+        </ErrorBoundary>
+      </div>
     </dialog>
   );
 }

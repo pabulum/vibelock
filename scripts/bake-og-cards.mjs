@@ -172,6 +172,9 @@ for (const hero of heroes) {
   const slug = slugify(hero.name);
   // networkidle so the portrait (the page's one network fetch) is painted before the shot.
   await page.setContent(cardHtml(hero), { waitUntil: "networkidle" });
+  // page.evaluate's callback is serialized and run in the browser, so `document` here is the
+  // page's, not this node script's — which is why it needs the exemption below.
+  // eslint-disable-next-line no-undef
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: join(outDir, `${slug}.png`) });
   writeFileSync(join(outDir, `${slug}.html`), shimHtml(hero, slug));

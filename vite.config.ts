@@ -62,6 +62,9 @@ export default defineConfig({
         test: {
           name: "unit",
           include: ["src/**/*.test.ts"],
+          // The live contract suite is a *.test.ts too, but it talks to the real API — see the
+          // `contract` project below for why it must not run as part of `npm test`.
+          exclude: ["src/**/*.live.test.ts"],
           environment: "node",
         },
       },
@@ -80,6 +83,23 @@ export default defineConfig({
             instances: [{ browser: "chromium" }],
             screenshotFailures: false,
           },
+        },
+      },
+      // The live schema-drift canary (src/test/contract.live.test.ts). NOT in `npm test`: it needs
+      // the network, and it fails on upstream's deploys rather than on our commits, so gating a PR
+      // on it would mean a red build nobody in this repo can fix. `npm run test:contract` runs it;
+      // a nightly workflow files an issue when it goes red.
+      //
+      // `fileParallelism: false` and a single-threaded pool because the suite's whole budget is a
+      // rate limit — requests have to go out in the order written, one file at a time.
+      {
+        extends: true,
+        test: {
+          name: "contract",
+          include: ["src/**/*.live.test.ts"],
+          environment: "node",
+          fileParallelism: false,
+          retry: 0,
         },
       },
     ],

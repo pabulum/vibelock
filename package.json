@@ -7,9 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "vitest run --project unit --project browser",
+    "test:contract": "vitest run --project contract",
+    "size": "node scripts/check-bundle-size.mjs",
     "format": "prettier --write .",
-    "check": "prettier --check . && npm run lint && npm test && npm run build",
+    "check": "prettier --check . && npm run lint && npm test && npm run build && npm run size",
     "preview": "vite preview"
   },
   "dependencies": {

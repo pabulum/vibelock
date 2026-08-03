@@ -186,7 +186,12 @@
     }
   }
 
-  /* Centered cold-load state — the shuffling mark bobbing over a label. */
+  /* Centered cold-load state — the shuffling mark bobbing over a label.
+
+     Do not reserve a screen of height here to "fix" layout shift: it was tried and measured, and
+     CLS got worse (0.38 → 0.47 on mobile emulation), because the placeholder then has to collapse
+     as well as be replaced. The page's shift comes from the strips above the fold arriving one
+     query at a time, not from this. */
   .loadstate {
     display: flex;
     flex-direction: column;
@@ -445,6 +450,66 @@
       width: 100%;
       min-width: 0;
       font-size: 16px; /* ≥16px stops iOS Safari zooming in when the field is tapped */
+    }
+    /* The rank-outage note joins the flow instead of floating over its neighbour. On desktop it
+       hangs under the Rank select into empty masthead space; here the controls are packed two-up,
+       so the same absolute box lands squarely on top of the Backfill checkbox — and unlike the
+       transient `.autoset` cue (pointer-events: none, so it can never block anything) this variant
+       takes pointer events for its tooltip. The result was a Backfill toggle that could not be
+       tapped at all on a phone, for as long as the upstream rank outage lasts.
+
+       Only the `.warn` variant: it's persistent, so giving it real layout costs nothing. The plain
+       cue must stay absolute — it fades to opacity 0 and would otherwise leave a hole behind. */
+    .controls .autoset.warn {
+      position: static;
+      max-width: none;
+      margin-top: 5px;
+    }
+
+    /* ---- Small-type floor on phones ---------------------------------------
+       Nothing below 10.5px on a handset. The desktop scale is deliberate and stays as it is: at
+       arm's length on a monitor, an 8–9.5px mono label with wide tracking is a margin note, and
+       shrinking it is what keeps a dense table readable as a table. Held to a phone at half that
+       distance, the same label is simply hard to read — and the ones this affects are not
+       decoration. They carry meaning a reader is meant to act on: the CORE/VALUE/PART/SELL role on
+       every item row, the COMEBACK / WIN MORE state tags, the tempo line, the labels naming which
+       control is which.
+
+       This is NOT the Lighthouse `font-size` audit being satisfied — that audit wants ≥12px on
+       ~60% of text and will keep failing, correctly ignored (see lighthouserc.cjs), because the
+       11px mono data column IS the design. It's the bottom tier only, where the audit and the eye
+       happen to agree. Measured: the sub-10px tier is ~6% of the page's characters, so this
+       changes almost nothing about the page's texture and quite a lot about its worst moment.
+
+       Every rule under 10px in the codebase is listed here on purpose; a grep for
+       `font-size: 8`/`9` should return this block and nothing outside it. */
+    .role,
+    .statetag,
+    .controls label,
+    .tact,
+    .tlbl,
+    .ctag,
+    .climbmark,
+    .bp-flag,
+    .amax,
+    .fpop,
+    .fyou,
+    .fyoup,
+    .pip,
+    .ecovs,
+    .labtag,
+    .labstyle,
+    .pal-ico,
+    .metaarch {
+      font-size: 10.5px;
+    }
+    /* The category-ratio bar's own percentages, held one step below the floor: they sit *inside*
+       proportional segments, and the smallest segment is only as wide as its share. 10.5px clips
+       the narrow one; 10px fits, and unlike the labels above this number is redundant anyway —
+       the segment's width already says it. */
+    .catseg,
+    .bp-skrank {
+      font-size: 10px;
     }
     /* Share one row two-up rather than taking a full line each — a column of stacked full-width
        buttons pushed the build itself most of a screen down. Still a comfortable tap target. The

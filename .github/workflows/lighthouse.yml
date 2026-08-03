@@ -1,0 +1,52 @@
+name: Lighthouse
+
+# Audits the built app (accessibility, best practices, SEO; performance as a warning) against a
+# local `vite preview` — see lighthouserc.cjs for the thresholds and the reasoning behind each.
+#
+# Its own workflow rather than a step in ci.yml: it needs a build, a server and three browser runs,
+# which is a minute or two nobody should wait for on a docs typo. Runs on PRs that touch the things
+# an audit can actually judge — markup, styles, tokens, the build config — plus weekly, because a
+# Lighthouse release can change a score without this repo changing at all.
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "index.html"
+      - "vite.config.ts"
+      - "lighthouserc.cjs"
+      - ".github/workflows/lighthouse.yml"
+  schedule:
+    - cron: "27 7 * * 1" # Mondays, 07:27 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lighthouse-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+      # Pinned rather than floating: an audit tool that updates itself turns "this PR regressed the
+      # score" into "Lighthouse changed its mind", which is the fastest way to make a gate worthless.
+      # Bump it deliberately, and re-read the thresholds in lighthouserc.cjs when you do.
+      - run: npx --yes @lhci/cli@0.15.1 autorun --config=./lighthouserc.cjs
+
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-report
+          path: .lighthouseci
+          retention-days: 14

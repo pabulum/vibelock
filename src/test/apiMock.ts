@@ -20,6 +20,8 @@ import abilityOrder from "./fixtures/abilityOrder.json";
 import counterMatrix from "./fixtures/counterMatrix.json";
 import heroLadder from "./fixtures/heroLadder.json";
 import badgeDistribution from "./fixtures/badgeDistribution.json";
+import matchMetadata from "./fixtures/matchMetadata.json";
+import playerMetrics from "./fixtures/playerMetrics.json";
 import wpStats from "./fixtures/wpStats.json";
 import { setAnalyticsCacheEnabled } from "../lib/idbCache";
 
@@ -37,6 +39,10 @@ const routes: Array<[RegExp, unknown]> = [
   [/^\/v1\/analytics\/hero-counter-stats$/, counterMatrix],
   [/^\/v1\/analytics\/hero-stats$/, heroLadder],
   [/^\/v1\/analytics\/badge-distribution$/, badgeDistribution],
+  [/^\/v1\/analytics\/player-stats\/metrics$/, playerMetrics],
+  // Any match id resolves to the one captured game (routing is by pathname — see the header). The
+  // Match view is the only place that reads this, and it reads the same shape whatever the id.
+  [/^\/v1\/matches\/\d+\/metadata$/, matchMetadata],
   [/\/wp-stats\.json$/, wpStats],
 ];
 

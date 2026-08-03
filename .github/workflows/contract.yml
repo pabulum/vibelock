@@ -1,0 +1,108 @@
+name: API contract
+
+# Nightly schema-drift canary: validates every Valibot schema in src/api/schemas.ts against the
+# LIVE api.deadlock-api.com (see src/test/contract.live.test.ts for the full rationale).
+#
+# This watches for a failure mode no other job here can see. The fixtures the smoke tests run on are
+# captured responses, so they keep passing indefinitely after upstream changes the payload — which is
+# exactly how the Match view spent time dead in production on a 200 OK. The app is static, has no
+# backend and no telemetry, so without this the first report of a broken deploy is a person noticing.
+#
+# Deliberately NOT part of ci.yml: it fails on someone else's deploy rather than on a commit in this
+# repo, and a PR gate that a PR cannot fix is a gate people learn to ignore. It reports instead —
+# one open issue, updated in place, closed automatically when the API comes back into line.
+
+on:
+  schedule:
+    - cron: "43 5 * * *" # 05:43 UTC, before the 06:17 harvest so a drift is known first
+  workflow_dispatch:
+  # Also on changes to the schemas or the check itself: that's the one case where a PR *is* the
+  # thing being verified, and where a green run is the evidence the schema edit was right.
+  pull_request:
+    paths:
+      - "src/api/schemas.ts"
+      - "src/test/contract.live.test.ts"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: contract
+  cancel-in-progress: false
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - id: check
+        # The failure text is the report: it names the endpoint and the exact field path that
+        # drifted. Captured either way so it can go in the issue body verbatim.
+        run: |
+          set +e
+          npm run test:contract 2>&1 | tee contract.log
+          echo "status=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      # One issue, reopened and updated rather than one per night — a canary that produces a new
+      # issue every 24h is a canary someone mutes. Skipped on pull_request runs, where the red X on
+      # the PR is already the report.
+      - if: github.event_name != 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          FAILED: ${{ steps.check.outputs.status != '0' }}
+        with:
+          script: |
+            const fs = require('fs');
+            const failed = process.env.FAILED === 'true';
+            const title = 'API contract: a response schema no longer matches the live API';
+            const { owner, repo } = context.repo;
+            const existing = (await github.rest.issues.listForRepo({
+              owner, repo, state: 'open', labels: 'api-drift',
+            })).data.find((i) => i.title === title);
+
+            if (!failed) {
+              if (existing) {
+                await github.rest.issues.createComment({ owner, repo, issue_number: existing.number,
+                  body: `The contract check passed on ${context.sha.slice(0, 7)} — the API is back in line with the schemas. Closing.` });
+                await github.rest.issues.update({ owner, repo, issue_number: existing.number, state: 'closed' });
+              }
+              return;
+            }
+
+            // Only the failure lines: the full vitest log is mostly passing endpoints.
+            const log = fs.readFileSync('contract.log', 'utf8').split('\n')
+              .filter((l) => /drifted at|HTTP \d{3}|FAIL|Tests\s+\d/.test(l))
+              .join('\n').slice(0, 4000);
+            const body = [
+              'The nightly contract check failed: at least one live response no longer parses against',
+              'the schema the app compiles against (`src/api/schemas.ts`).',
+              '',
+              '**This means the shipped site is probably showing "Unexpected response shape" to users**',
+              'on whichever view reads that endpoint — the app is static, so it does not self-heal.',
+              '',
+              '```',
+              log,
+              '```',
+              '',
+              `[Full log](${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId})`,
+              '',
+              'Fix: widen or correct the schema, re-run `node scripts/capture-fixtures.mjs`, and ship.',
+              'The check closes this issue by itself once the API and the schemas agree again.',
+            ].join('\n');
+
+            if (existing) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: existing.number, body });
+            } else {
+              await github.rest.issues.create({ owner, repo, title, body, labels: ['api-drift'] });
+            }
+
+      - if: steps.check.outputs.status != '0'
+        run: exit 1

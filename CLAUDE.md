@@ -51,8 +51,26 @@ docs/METHODOLOGY.md before touching anything statistical.
   fixture API responses). One-time local setup: `npx playwright install chromium`.
 - The fetch mock (src/test/apiMock.ts) routes by URL pathname; a new API endpoint must
   get a fixture there or smoke tests fail loudly (by design). Refresh fixtures with
-  `node scripts/capture-fixtures.mjs`.
+  `node scripts/capture-fixtures.mjs` — pass names (`… matchMetadata`) to refresh only some,
+  since a full run rewrites all of them and buries a one-endpoint change.
+- **The match-metadata fixture is a real pinned game (97000027)** and the Match smoke tests assert
+  its actual numbers, so re-capturing it against a different match means updating
+  src/test/matchModal.browser.test.tsx with the new one. Note the capture projection drops nulls,
+  so the fixture proves nothing about nullability — that's src/api/schemas.test.ts's job, which
+  walks the schema and nulls every `nullish` field back in.
 - `npm run build` typechecks (`tsc -b`) then bundles. `npm run lint` must stay clean.
+- **`npm run test:contract` validates every Valibot schema against the LIVE API** (project
+  `contract`, src/test/contract.live.test.ts) — the guard fixtures structurally cannot provide,
+  since a captured response keeps passing forever after upstream changes shape. Not in `npm test`
+  (needs network, fails on upstream's deploys not ours); a nightly workflow runs it and files one
+  auto-closing issue. After any schema edit, run it before believing the edit.
+- `npm run size` enforces gzipped bundle budgets (scripts/check-bundle-size.mjs) after a build.
+  Over budget ⇒ raise the number _in the same commit_, with a note on what the weight buys.
+- Lighthouse runs on PRs touching src/ (lighthouserc.cjs). **Accessibility is gated at 100** and
+  contrast is pinned twice — once by the audit, once by src/tokens.test.ts, which reads tokens.css
+  and asserts every ink step clears WCAG AA on every substrate. Performance is a warning only
+  (the audited page fetches from a live third-party API on a shared runner IP). The `font-size`
+  audit is deliberately off: 10–11.5px mono labels are the design, not a lint failure.
 - End-to-end checks in a real browser: use the project's `verify` skill.
 - **Ground truth for anything statistical: `/v1/sql`.**
   `GET https://api.deadlock-api.com/v1/sql?query=<ClickHouse SQL>` runs read-only SQL over the

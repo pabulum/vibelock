@@ -23,3 +23,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# Lighthouse CI reports (npx @lhci/cli autorun — see lighthouserc.cjs); uploaded as a CI artifact.
+.lighthouseci

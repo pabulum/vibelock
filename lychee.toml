@@ -1,0 +1,36 @@
+# Link checker config (.github/workflows/links.yml).
+#
+# Almost every link this project ships points at something outside it — Valve's store page, the
+# deadlock-api docs, the methodology write-up, the deployed app itself — and all of them rot without
+# anything in the repo changing. That's the case for checking them on a schedule rather than only on
+# a PR: a link that broke last Tuesday broke because someone else moved a page, and the commit that
+# reveals it will be unrelated.
+
+# Markdown and HTML only. Deliberately NOT the TypeScript sources: they're full of API URLs in
+# comments (`${BASE}/v1/analytics/...`), which are endpoint documentation for a reader, not links to
+# a page — checking them would mean firing a request per comment at a rate-limited API to learn
+# nothing.
+include_verbatim = false
+
+# 429 is "we're being polite too slowly", not a broken link.
+accept = ["200", "206", "429"]
+
+# Some hosts are slow to first byte; a checker that fails on that just teaches people to ignore it.
+timeout = 20
+max_retries = 2
+retry_wait_time = 4
+
+# Be a well-behaved crawler: one request at a time per host, and a UA that says who's calling.
+max_concurrency = 8
+user_agent = "vibelock-link-check (+https://github.com/pabulum/vibelock)"
+
+exclude = [
+  # The API itself. Its endpoints need query parameters to answer at all, it's rate-limited per IP,
+  # and the live-schema question is already answered properly by the contract check
+  # (src/test/contract.live.test.ts) rather than by asking whether a URL 200s.
+  "^https://api\\.deadlock-api\\.com",
+  # The dev server, in the README's "run locally" block.
+  "^http://localhost",
+  # Asset host for game icons — image URLs built at runtime from ids, never literal in the docs.
+  "^https://assets-bucket\\.deadlock-api\\.com",
+]

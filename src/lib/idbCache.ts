@@ -50,6 +50,26 @@ export function setAnalyticsCacheEnabled(on: boolean): void {
   enabled = on;
 }
 
+/** Drop the whole store. The recovery path behind the crash screen's "clear cached data"
+ * (components/ErrorBoundary): a stored response a newer schema no longer accepts would otherwise
+ * reproduce the same crash on every reload. Resolves either way — an undeletable database is one
+ * we couldn't have opened either, which degrades to "no persistent cache". */
+export async function clearAnalyticsCache(): Promise<void> {
+  const db = await openDb();
+  db?.close();
+  dbPromise = null;
+  await new Promise<void>((resolve) => {
+    if (typeof indexedDB === "undefined") return resolve();
+    let req: IDBOpenDBRequest;
+    try {
+      req = indexedDB.deleteDatabase(DB_NAME);
+    } catch {
+      return resolve();
+    }
+    req.onsuccess = req.onerror = req.onblocked = () => resolve();
+  });
+}
+
 function openDb(): Promise<IDBDatabase | null> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise<IDBDatabase | null>((resolve) => {

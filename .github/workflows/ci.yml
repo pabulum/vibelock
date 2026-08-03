@@ -26,7 +26,13 @@ jobs:
       - run: npm ci
       # The browser smoke tests (src/test/) run the real app in headless Chromium.
       - run: npx playwright install --with-deps chromium
+      # Formatting is checked here and nowhere else: `npm run format` is the fix, and a repo where
+      # half the diff is whitespace churn is one where nobody reads diffs.
+      - run: npx prettier --check .
       - run: npm run lint
       - run: npm test
       # `npm run build` is `tsc -b && vite build`, so this also typechecks.
       - run: npm run build
+      # Gzipped entry/CSS/lazy-chunk budgets — see scripts/check-bundle-size.mjs. Needs the build
+      # above, and fails loudly rather than letting the first-paint cost drift up a KB at a time.
+      - run: npm run size

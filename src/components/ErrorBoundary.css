@@ -1,0 +1,74 @@
+@layer components {
+  /* The crash page. Same document voice as everything else — a ruled note on the paper, not a
+     browser-error look — because the page it replaced was made of these too, and a failure that
+     looks like a different application reads as "this site is gone" rather than "this went wrong". */
+  .crash {
+    max-width: 62ch;
+    margin: 64px auto;
+    padding: 0 var(--gutter);
+    color: var(--ink);
+    font: 400 13.5px/1.6 var(--font-text);
+  }
+  .crash .lbl {
+    margin: 0 0 10px;
+    color: var(--neg);
+  }
+  .crashlead {
+    margin: 0 0 14px;
+    font-family: var(--font-display);
+    font-size: 21px;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+  /* The thrown message. Mono and rule-bounded: it is a quotable identifier, not prose. */
+  .crashwhy {
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    border-left: 2px solid var(--neg);
+    background: var(--neg-wash);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .crashhint {
+    margin: 0 0 20px;
+    color: var(--ink-2);
+    font-size: 12.5px;
+  }
+  .crashacts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .crashacts button {
+    padding: 7px 14px;
+    background: var(--surface);
+    border: 1px solid var(--rule-strong);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .crashacts button:hover,
+  .crashacts button:focus-visible {
+    border-color: var(--accent-ui);
+    color: var(--accent-ui);
+  }
+
+  /* Scoped variant: one panel died, the page around it did not. Sits inline where the panel was,
+     and says so — no actions, because the recovery is "close it", which the modal already offers. */
+  .crash-panel {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
+  .crash-panel .crashlead {
+    font-family: var(--font-text);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .crash-panel .crashhint {
+    margin-bottom: 0;
+  }
+}

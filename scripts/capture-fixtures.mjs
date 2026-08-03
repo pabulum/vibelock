@@ -15,6 +15,13 @@ import { fileURLToPath } from "node:url";
 
 const BASE = "https://api.deadlock-api.com";
 const HERO_ID = 1; // Abrams — the app's alphabetical-first default selection
+// One real, finished, ingested match, for the Match-view smoke tests. PINNED rather than discovered
+// per run: the tests assert against this game's actual numbers, so a fixture that silently became a
+// different match would turn them into assertions about nothing. If it ever stops resolving, pick
+// another id and update the expectations in src/test/matchModal.browser.test.tsx with it.
+// `disable_steam=true` keeps the fetch on the free ingested-only probe rather than the ~3/hour
+// Steam-backed family — never take this off in anything scripted.
+const MATCH_ID = 97000027;
 const OUT = join(
   dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -136,6 +143,81 @@ const projBuild = (env) => ({
   }),
 });
 
+// Single-match metadata is ~900KB on the wire, nearly all of it fields nothing here reads. These
+// mirror the match slice of api/schemas.ts exactly — see the `nullish` rule documented there, which
+// is why `pick` dropping nulls is safe: every one of these is nullish on the way back in.
+const projGoldSource = (g) =>
+  pick(g, { source: true, gold: true, gold_orbs: true, kills: true });
+
+const projStatSample = (s) =>
+  pick(s, {
+    time_stamp_s: true,
+    net_worth: true,
+    kills: true,
+    deaths: true,
+    assists: true,
+    last_hits: true,
+    denies: true,
+    creep_kills: true,
+    neutral_kills: true,
+    shots_hit: true,
+    shots_missed: true,
+    player_damage: true,
+    player_healing: true,
+    player_damage_taken: true,
+    gold_death_loss: true,
+    gold_sources: (rows) => rows.map(projGoldSource),
+  });
+
+const projMatchPlayer = (p) =>
+  pick(p, {
+    account_id: true,
+    player_slot: true,
+    team: true,
+    hero_id: true,
+    kills: true,
+    deaths: true,
+    assists: true,
+    net_worth: true,
+    last_hits: true,
+    denies: true,
+    assigned_lane: true,
+    abandon_match_time_s: true,
+    items: (rows) =>
+      rows.map((i) =>
+        pick(i, {
+          game_time_s: true,
+          item_id: true,
+          sold_time_s: true,
+          upgrade_id: true,
+          imbued_ability_id: true,
+        }),
+      ),
+    stats: (rows) => rows.map(projStatSample),
+    death_details: (rows) =>
+      rows.map((d) =>
+        pick(d, {
+          game_time_s: true,
+          killer_player_slot: true,
+          time_to_kill_s: true,
+        }),
+      ),
+  });
+
+const projMatch = (env) => ({
+  match_info: {
+    ...pick(env.match_info, {
+      match_id: true,
+      start_time: true,
+      duration_s: true,
+      winning_team: true,
+      average_badge_team0: true,
+      average_badge_team1: true,
+    }),
+    players: env.match_info.players.map(projMatchPlayer),
+  },
+});
+
 // ---- Capture ----
 
 const captures = [
@@ -223,13 +305,44 @@ const captures = [
     url: `${BASE}/v1/analytics/badge-distribution`,
   },
   {
+    // The Match view's payload. The one endpoint whose shape has actually broken production (team
+    // ids, and optional-vs-null on the per-player arrays), so the fixture that stands in for it is
+    // captured from a real finished game rather than hand-written — a hand-written one would only
+    // ever contain the shapes we already thought of.
+    file: "matchMetadata.json",
+    url: `${BASE}/v1/matches/${MATCH_ID}/metadata?disable_steam=true`,
+    project: projMatch,
+  },
+  {
+    // Ladder distribution the Match view benchmarks a game against (lib/fundamentals). Unfiltered
+    // by rank on purpose — see the badge outage note in lib/badgeOutage; a rank-filtered capture
+    // would come back empty right now and bake an empty fixture.
+    file: "playerMetrics.json",
+    url: `${BASE}/v1/analytics/player-stats/metrics?hero_ids=${HERO_ID}`,
+  },
+  {
     file: "wpStats.json",
     url: "https://raw.githubusercontent.com/pabulum/vibelock/data/wp-stats.json",
   },
 ];
 
+// Optional name filter: `node scripts/capture-fixtures.mjs matchMetadata playerMetrics` refreshes
+// just those. Refreshing all of them rewrites every fixture wholesale, which is right after an API
+// change and pure noise when one endpoint is being added — and a diff where the real change is
+// buried in twelve unrelated re-captures is a diff nobody reviews.
+const only = process.argv.slice(2);
+const selected = only.length
+  ? captures.filter((c) => only.some((n) => c.file.startsWith(n)))
+  : captures;
+if (only.length && selected.length !== only.length) {
+  console.error(
+    `No fixture matches ${only.filter((n) => !captures.some((c) => c.file.startsWith(n))).join(", ")}`,
+  );
+  process.exit(1);
+}
+
 await mkdir(OUT, { recursive: true });
-for (const c of captures) {
+for (const c of selected) {
   const raw = await getJson(c.url);
   const data = c.project ? c.project(raw) : raw;
   const text = JSON.stringify(data);

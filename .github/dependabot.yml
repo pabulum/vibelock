@@ -1,0 +1,36 @@
+version: 2
+
+# Dependency updates, batched. The reasoning for having this at all: the app ships as static files
+# to GitHub Pages, so a dependency's fix only reaches users on the next deploy — there is no server
+# to patch behind them. And CI already runs lint, unit tests, browser smoke tests and a typechecked
+# build on every PR, which is exactly the evidence needed to merge a version bump without reading
+# the diff. Left un-batched it would be noise; grouped monthly it's one PR to glance at.
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      # Everything that only affects the build and the test harness. These are the safe ones: if
+      # they break, they break CI, which is the point.
+      dev-tooling:
+        dependency-type: development
+        update-types: [minor, patch]
+      # Runtime dependencies, patch/minor only. A major (React, TanStack Query, Valibot) gets its
+      # own PR deliberately — those carry migrations, and this repo's CLAUDE.md conventions assume a
+      # specific React Compiler / Vite pairing that a silent major would invalidate.
+      runtime:
+        dependency-type: production
+        update-types: [minor, patch]
+
+  # The workflows pin actions by major tag (actions/checkout@v4, …); this keeps those tags moving
+  # when a new major lands, rather than leaving them to be noticed when one is deprecated.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

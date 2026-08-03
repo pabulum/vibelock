@@ -46,10 +46,19 @@
 
     /* ---- Ink -------------------------------------------------------------
        Three steps only. If a thing needs a fourth, it wants a different weight
-       or size, not a fourth grey. */
+       or size, not a fourth grey.
+
+       Every step clears WCAG AA (4.5:1) against all three substrates, checked
+       by tokens.test.ts so a retune can't quietly drop below it. That floor is
+       what fixes the ramp's spacing: --ink-3 is the dimmest a step may be, and
+       --ink-2 sits where it does to keep three *distinguishable* steps above
+       it rather than crowding --ink-3. (Both were dimmer until an audit put
+       --ink-3 at 3.6:1 — the label voice this whole design leans on, failing
+       AA everywhere at 10px. The hue and chroma are unchanged: each was
+       relit in oklch, lightness only.) */
     --ink: light-dark(#191713, #e9e7e1);
-    --ink-2: light-dark(#57524a, #9b978e);
-    --ink-3: light-dark(#847d70, #6d6a65);
+    --ink-2: light-dark(#4b463e, #b0aca3);
+    --ink-3: light-dark(#6d6659, #898681);
 
     /* ---- Signal ----------------------------------------------------------
        Held at matched chroma in oklch so no single hue shouts over the others.

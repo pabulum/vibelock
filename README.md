@@ -40,7 +40,15 @@ npm run dev      # http://localhost:5173/vibelock/
 npm test         # unit + browser smoke tests (once: npx playwright install chromium)
 npm run lint
 npm run build    # also typechecks
+npm run size     # gzipped bundle budgets (after a build)
+npm run check    # everything above, in order
 ```
+
+`npm run test:contract` is separate and hits the real API: it validates every response schema
+against live api.deadlock-api.com. Fixtures are captured responses, so they keep passing after
+upstream changes a payload's shape — which is how the match view once spent time broken in
+production on an HTTP 200. It runs nightly in CI and opens an issue when the API and the schemas
+stop agreeing.
 
 ## How it works
 
