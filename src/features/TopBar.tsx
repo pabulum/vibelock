@@ -97,6 +97,9 @@ export function TopBar(props: {
   setBackfillOn: (v: boolean) => void;
   /** Name of the ranked season that leaves this patch nothing to borrow from, else null. */
   backfillBlocked: string | null;
+  /** TEMPORARY (lib/badgeOutage): this window's numbers are every rank's, because the API stopped
+   * reporting the badge the rank floor filters on. */
+  rankFilterBlind: boolean;
   steamId: string;
   setSteamId: (v: string) => void;
   steamMatches: SteamPlayerMatch[] | null;
@@ -125,6 +128,7 @@ export function TopBar(props: {
     backfillOn,
     setBackfillOn,
     backfillBlocked,
+    rankFilterBlind,
     steamId,
     setSteamId,
     steamMatches,
@@ -181,14 +185,26 @@ export function TopBar(props: {
               </option>
             ))}
           </select>
-          {rankAutoSet && (
+          {rankFilterBlind ? (
+            /* TEMPORARY — see lib/badgeOutage; delete with it. A rank floor that silently selects
+               nothing is worse than no rank floor, so the filter is dropped and said out loud. */
             <span
-              className="autoset"
-              key={rankAutoSet.label}
+              className="autoset warn"
               aria-live="polite"
+              title="Since 31 July the API has reported no rank on any match, so filtering by rank floor would select no games at all. These numbers are every rank's. Older patches are unaffected — pick one to compare by rank."
             >
-              set to {rankAutoSet.label} {rankAutoSet.why}
+              showing all ranks &mdash; rank missing upstream
             </span>
+          ) : (
+            rankAutoSet && (
+              <span
+                className="autoset"
+                key={rankAutoSet.label}
+                aria-live="polite"
+              >
+                set to {rankAutoSet.label} {rankAutoSet.why}
+              </span>
+            )
           )}
         </label>
         <label className="selctl">

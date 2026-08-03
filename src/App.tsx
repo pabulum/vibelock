@@ -19,6 +19,7 @@ import {
   SESSION_NOW_S,
   windowFor,
 } from "./lib/patchWindows";
+import { rankFilterUsable } from "./lib/badgeOutage";
 import { switchTransition } from "./lib/viewTransition";
 import { foldTrendingBreakouts } from "./lib/patchMovers";
 import { heroFarmProfile } from "./lib/matchAnalysis";
@@ -343,6 +344,10 @@ function AppInner() {
   // The prior window's contribution to query keys: null when backfill is off, so toggling it
   // re-keys (and re-fetches) exactly the queries whose results it changes.
   const priorKey = canBackfill ? priorWin : null;
+  // TEMPORARY (lib/badgeOutage): upstream stopped reporting the badge these queries filter on, so
+  // for a window inside the outage the rank floor is dropped and the numbers are every rank's.
+  // Told to the Rank control so the selection isn't silently meaningless.
+  const rankFilterBlind = !rankFilterUsable(dataWindow);
 
   // The player-identity feature (features/useProfile): Steam id + profile + your-heroes rows +
   // fundamentals benchmark + last-game overlay, with all their queries and derived state.
@@ -805,6 +810,7 @@ function AppInner() {
         backfillOn={backfillOn}
         setBackfillOn={setBackfillOn}
         backfillBlocked={backfillBlocked}
+        rankFilterBlind={rankFilterBlind}
         steamId={steamId}
         setSteamId={setSteamId}
         steamMatches={steamMatches}

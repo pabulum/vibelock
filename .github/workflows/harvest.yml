@@ -68,17 +68,18 @@ jobs:
           HARVEST_DAY: ${{ inputs.day }}
           OUT_DIR: _data/shards
           # RETENTION_DAYS comes from the workflow-level env.
-          # 10x the original sampling (same 12 requests/night — the 10/min limit binds on
-          # requests, not matches; every 2h bin holds 2,000+ matches so 1,000 is always there).
-          # This is the density at which the ROLLING window itself crosses the hero-item
-          # stabilization point (median cell ~6k vs k~3.2k), i.e. per-hero WPA becomes possible
-          # without accumulating beyond 30 days. Costs ~65MB/day — fine as release assets.
-          PER_BIN: "1000"
-          # Soul-economy subsample: per-source gold (incl. breakables, which the bulk endpoint can't
-          # return) for this many matches/bin, via single-match cached fetches (~120 × 12 bins ≈
-          # 1,440 extra requests/night, ~1 min at the concurrency cap). Feeds the match-analysis farm
-          # norms; enough per (hero, rank) cell to stabilize within a few nights, not the full window.
-          GOLD_PER_BIN: "120"
+          # The density at which the ROLLING window itself crosses the hero-item stabilization
+          # point (median cell ~6k vs k~3.2k), i.e. per-hero WPA becomes possible without
+          # accumulating beyond 30 days. Costs ~70MB/day — fine as release assets. Now one
+          # /v1/sql query rather than 12 paced bulk requests: 144k player rows, ~6s, and the
+          # sample is a uniform draw over the day instead of an equal quota per 2h bin.
+          MATCHES_PER_DAY: "12000"
+          # Soul-economy subsample: per-source gold (incl. breakables — measured 2026-08-02, it is
+          # NOT recoverable from the flat gold_* columns SQL exposes, so this pass stays) for this
+          # many of those matches, via single-match cached fetches (~1,440 requests/night, ~1 min at
+          # the concurrency cap). Feeds the match-analysis farm norms; enough per (hero, rank) cell
+          # to stabilize within a few nights, not the full window.
+          GOLD_SAMPLE: "1440"
         run: node scripts/harvest-matches.mjs
 
       # Refit the WP surface + item/hero stats over the full rolling window.

@@ -10,6 +10,8 @@
 import * as v from "valibot";
 import { queryOptions } from "@tanstack/react-query";
 import { queryClient } from "../queryClient";
+import { rankFilterUsable } from "../lib/badgeOutage";
+import { rankedOnlyUsable } from "../lib/rankedMode";
 import { cacheGet, cachePut } from "../lib/idbCache";
 import { parsePatchFeed, type PatchFeed } from "../lib/patchFeed";
 import { FLOW_PHASE_COUNT, FLOW_PHASE_INTERVAL_S } from "../lib/phases";
@@ -367,6 +369,7 @@ export function getAbilityOrder(
     min_matches: String(q.minMatches ?? 100),
   });
   applyRank(params, q);
+  applyMode(params, q);
   if (q.includeItemIds?.length)
     params.set("include_item_ids", q.includeItemIds.join(","));
   applyWindow(params, q);
@@ -605,6 +608,19 @@ export interface TimeWindow {
   maxUnixTimestamp?: number;
 }
 
+/**
+ * Scope a ladder query to Ranked games, when the window is one Ranked can answer — see
+ * lib/rankedMode for why that condition exists and what it costs to get wrong.
+ *
+ * Only for queries describing the *population*. A query about one player's own record is
+ * deliberately not scoped (see getPlayerHeroStats): their Standard games are still games they
+ * played, and with this Ranked era only days old, scoping personal history to it would empty the
+ * profile for almost everyone. Worth revisiting once accounts have real ranked history behind them.
+ */
+function applyMode(params: URLSearchParams, w: TimeWindow): void {
+  if (rankedOnlyUsable(w)) params.set("match_mode", "ranked");
+}
+
 function applyWindow(params: URLSearchParams, w?: TimeWindow): void {
   if (w?.minUnixTimestamp)
     params.set("min_unix_timestamp", String(w.minUnixTimestamp));
@@ -620,7 +636,10 @@ export interface RankWindow {
   maxBadge?: number;
 }
 
-function applyRank(params: URLSearchParams, q: RankWindow): void {
+function applyRank(params: URLSearchParams, q: RankWindow & TimeWindow): void {
+  // Upstream stopped reporting the field this filters on (see lib/badgeOutage — temporary), so a
+  // window that reaches into the outage has to ask for every rank or it gets nothing back at all.
+  if (!rankFilterUsable(q)) return;
   params.set("min_average_badge", String(q.minBadge));
   if (q.maxBadge !== undefined)
     params.set("max_average_badge", String(q.maxBadge));
@@ -658,6 +677,7 @@ export function getItemFlowStats(q: FlowQuery): Promise<ItemFlowStats> {
     phase_count: String(FLOW_PHASE_COUNT),
   });
   applyRank(params, q);
+  applyMode(params, q);
   if (q.lockedItemIds?.length && q.lockedColumns?.length) {
     params.set("locked_item_ids", q.lockedItemIds.join(","));
     params.set("locked_columns", q.lockedColumns.join(","));
@@ -705,6 +725,7 @@ export function getItemPermutationStats(
     comb_size: String(q.combSize ?? 2),
   });
   applyRank(params, q);
+  applyMode(params, q);
   applyWindow(params, q);
   return getAnalytics(
     `${BASE}/v1/analytics/item-permutation-stats?${params}`,
@@ -721,6 +742,7 @@ export function getItemStats(q: ItemStatsQuery): Promise<ItemStat[]> {
     min_matches: String(q.minMatches ?? 20),
   });
   applyRank(params, q);
+  applyMode(params, q);
   if (q.enemyHeroIds?.length)
     params.set("enemy_hero_ids", q.enemyHeroIds.join(","));
   applyWindow(params, q);
@@ -743,6 +765,7 @@ export function getHeroBuildStats(
     min_matches: String(q.minMatches ?? 20),
   });
   applyRank(params, q);
+  applyMode(params, q);
   applyWindow(params, q);
   return getAnalytics(
     `${BASE}/v1/analytics/hero-build-stats/${q.heroId}?${params}`,
@@ -829,6 +852,7 @@ export function getBadgeDistribution(
 ): Promise<BadgeDistributionRow[]> {
   const params = new URLSearchParams();
   applyWindow(params, q);
+  applyMode(params, q);
   return getAnalytics(
     `${BASE}/v1/analytics/badge-distribution?${params}`,
     BadgeDistributionRowsSchema,
@@ -859,6 +883,7 @@ export function getHeroCounters(
     same_lane_filter: "false",
   });
   applyRank(params, q);
+  applyMode(params, q);
   applyWindow(params, q);
   return getAnalytics(
     `${BASE}/v1/analytics/hero-counter-stats?${params}`,
@@ -947,6 +972,7 @@ export function getHeroLadderStats(
 ): Promise<HeroLadderStat[]> {
   const params = new URLSearchParams();
   applyRank(params, q);
+  applyMode(params, q);
   applyWindow(params, q);
   return getAnalytics(
     `${BASE}/v1/analytics/hero-stats?${params}`,
@@ -973,11 +999,17 @@ export function getPlayerMetrics(
 ): Promise<PlayerMetrics> {
   const params = new URLSearchParams();
   if (q.heroId !== undefined) params.set("hero_ids", String(q.heroId));
-  if (q.minBadge !== undefined)
-    params.set("min_average_badge", String(q.minBadge));
-  if (q.maxBadge !== undefined)
-    params.set("max_average_badge", String(q.maxBadge));
+  // Same temporary suppression as applyRank — see lib/badgeOutage.
+  if (rankFilterUsable(q)) {
+    if (q.minBadge !== undefined)
+      params.set("min_average_badge", String(q.minBadge));
+    if (q.maxBadge !== undefined)
+      params.set("max_average_badge", String(q.maxBadge));
+  }
   if (q.accountIds?.length) params.set("account_ids", q.accountIds.join(","));
+  // The ladder side is a population and gets scoped to Ranked; the account-scoped side is one
+  // player's own games and deliberately isn't — see applyMode.
+  else applyMode(params, q);
   applyWindow(params, q);
   return getAnalytics(
     `${BASE}/v1/analytics/player-stats/metrics?${params}`,
