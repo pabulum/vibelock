@@ -54,3 +54,14 @@ docs/METHODOLOGY.md before touching anything statistical.
   `node scripts/capture-fixtures.mjs`.
 - `npm run build` typechecks (`tsc -b`) then bundles. `npm run lint` must stay clean.
 - End-to-end checks in a real browser: use the project's `verify` skill.
+- **Ground truth for anything statistical: `/v1/sql`.**
+  `GET https://api.deadlock-api.com/v1/sql?query=<ClickHouse SQL>` runs read-only SQL over the
+  same database the analytics endpoints aggregate — `/v1/sql/tables` lists them,
+  `/v1/sql/tables/{t}/schema` describes one, and `match_player` is 201 columns of per-player
+  match record. Check an aggregate endpoint against it before trusting a number from it: that's
+  how `hero-stats.matches` was caught reading ~13% high as a pick-rate denominator while
+  item-flow-stats' own count agreed with `count(DISTINCT match_id)` to under 1%. Also the fastest
+  way to settle a spike (does this effect survive a control? is this population big enough?)
+  without harvesting match metadata at 10/min.
+  **2 req/min, 20 req/hour, per IP** — a diagnostic and research tool, never a client path and
+  never in a loop. Budget it: write one aggregate query, not N narrow ones.

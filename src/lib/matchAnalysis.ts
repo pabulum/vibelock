@@ -27,8 +27,11 @@ import type { FundamentalRow } from "./fundamentals";
 
 // --- Team & interpolation helpers ---
 
-/** Proto enum names, not numbers: "Team0" / "Team1". */
-const isTeam = (p: MatchPlayer, team: string) => p.team === team;
+/** `ECitadelLobbyTeam.Team0`, the side the `average_badge_team0` field belongs to. */
+const TEAM0 = 0;
+
+/** Team sides are normalized to the proto enum's numbers at the schema boundary: 0 / 1. */
+const isTeam = (p: MatchPlayer, team: number) => p.team === team;
 
 /** A player's net worth at `t`, linearly interpolated between stat samples (0 souls at t=0). */
 function playerNwAt(p: MatchPlayer, t: number): number {
@@ -48,7 +51,7 @@ function playerNwAt(p: MatchPlayer, t: number): number {
 }
 
 /** The focus team's soul lead at `t` (positive = ahead). */
-function teamLeadAt(match: MatchInfo, team: string, t: number): number {
+function teamLeadAt(match: MatchInfo, team: number, t: number): number {
   let lead = 0;
   for (const p of match.players)
     lead += (isTeam(p, team) ? 1 : -1) * playerNwAt(p, t);
@@ -95,7 +98,7 @@ export interface WpSwing {
  */
 export function wpTimeline(
   match: MatchInfo,
-  team: string,
+  team: number,
   wp: WpStats | null,
 ): { points: WpPoint[]; swings: WpSwing[] } {
   if (!wp) return { points: [], swings: [] };
@@ -134,10 +137,10 @@ function matchMetricValues(
   return {
     net_worth_per_min: p.net_worth / mins,
     deaths: p.deaths,
-    last_hits: p.last_hits ?? last?.last_hits,
-    denies: p.denies ?? last?.denies,
+    last_hits: p.last_hits ?? last?.last_hits ?? undefined,
+    denies: p.denies ?? last?.denies ?? undefined,
     player_damage_per_min:
-      last?.player_damage !== undefined ? last.player_damage / mins : undefined,
+      last?.player_damage != null ? last.player_damage / mins : undefined,
     accuracy: shots > 0 ? (last?.shots_hit ?? 0) / shots : undefined,
   };
 }
@@ -530,7 +533,7 @@ export function deathsSummary(
     byPhase[i === -1 ? PHASES.length - 1 : i].count++;
 
     const heroId =
-      d.killer_player_slot === undefined
+      d.killer_player_slot == null
         ? undefined
         : enemyBySlot.get(d.killer_player_slot);
     if (heroId !== undefined)
@@ -543,7 +546,7 @@ export function deathsSummary(
 
     // -1 is the API's "unknown" sentinel — never let it read as an instant death.
     const ttk = d.time_to_kill_s;
-    if (ttk !== undefined && ttk >= 0) {
+    if (ttk != null && ttk >= 0) {
       ttks.push(ttk);
       if (ttk < BURST_S) burst++;
     }
@@ -561,7 +564,7 @@ export function deathsSummary(
   return {
     total: total || p.deaths,
     byPhase,
-    goldLost: p.stats?.[p.stats.length - 1]?.gold_death_loss,
+    goldLost: p.stats?.[p.stats.length - 1]?.gold_death_loss ?? undefined,
     nemesis,
     soloPicks,
     burst,
@@ -647,9 +650,9 @@ export function analyzeMatch(
     focus,
     won: match.winning_team === focus.team,
     averageBadge:
-      focus.team === "Team0"
+      (focus.team === TEAM0
         ? match.average_badge_team0
-        : match.average_badge_team1,
+        : match.average_badge_team1) ?? undefined,
     wp: wpTimeline(match, focus.team, wpStats),
     fundamentals: ladder
       ? matchFundamentals(focus, match.duration_s, ladder)
@@ -661,7 +664,7 @@ export function analyzeMatch(
       Math.min(
         11,
         Math.floor(
-          ((focus.team === "Team0"
+          ((focus.team === TEAM0
             ? match.average_badge_team0
             : match.average_badge_team1) ?? 0) / 10,
         ) + 1,

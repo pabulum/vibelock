@@ -74,6 +74,19 @@ export function rankBandLabel(lo: number, hi: number): string {
   return lo === hi ? tierName(lo) : `${tierName(lo)}–${tierName(hi)}`;
 }
 
+const SUBRANK = ["", "I", "II", "III", "IV", "V", "VI"];
+
+/** A full badge — tier·10 + subrank, the form Valve reports per ranked match — as its display
+ * name, e.g. 92 → "Phantom II". Subrank 0 is the bare tier, which is also what an account with no
+ * ranked result yet reports (badge 0 = Obscurus). */
+export function badgeLabel(badge: number): string {
+  const tier = Math.floor(badge / 10);
+  const sub = badge % 10;
+  return sub > 0 && sub < SUBRANK.length
+    ? `${tierName(tier)} ${SUBRANK[sub]}`
+    : tierName(tier);
+}
+
 /** A rank selection: a floor tier ("Emissary+") or an inclusive tier band ("around my rank"). */
 export type RankSel = number | { lo: number; hi: number };
 

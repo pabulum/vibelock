@@ -24,7 +24,12 @@ import {
   deathInsights,
   type MatchAnalysis,
 } from "../lib/matchAnalysis";
-import { climbBand, tierToMaxBadge, tierToMinBadge } from "../lib/ranks";
+import {
+  badgeLabel,
+  climbBand,
+  tierToMaxBadge,
+  tierToMinBadge,
+} from "../lib/ranks";
 import { friendlyError } from "../lib/errors";
 import { ModalShell } from "./ModalShell";
 import type { Hero, ItemCounters, MatchHistoryRow, MatchInfo } from "../types";
@@ -38,6 +43,41 @@ const ago = (unix: number) => {
   if (h < 36) return `${Math.round(h)} h ago`;
   return `${Math.round(h / 24)} d ago`;
 };
+
+/**
+ * What a game moved on the ranked ladder — the number the post-game screen animates, reported per
+ * match by Valve rather than computed here.
+ *
+ * Only Ranked-mode games carry one, so most rows render the placeholder: Ranked mode arrived with
+ * the 2026-07-30 matchmaking update, and Standard games move nothing at all. A zero is left
+ * uncoloured on purpose — it's the "nothing happened" case, and demotion protection is what usually
+ * causes it, which the tooltip says rather than the colour implying a result.
+ */
+function LpChip({ row }: { row: MatchHistoryRow }) {
+  const d = row.ranked_delta;
+  if (d == null)
+    return (
+      <span className="mlp none" title="Standard mode — no ranked progress">
+        —
+      </span>
+    );
+  const notes = [`Ranked progress ${d === 0 ? "unchanged" : signedLp(d)}`];
+  if (row.ranked_display_badge != null)
+    notes.push(`${badgeLabel(row.ranked_display_badge)} after this game`);
+  if (row.ranked_used_demotion_protection)
+    notes.push("demotion protection absorbed the loss");
+  if (row.ranked_calibration_match) notes.push("still calibrating");
+  return (
+    <span
+      className={`mlp${d > 0 ? " up" : d < 0 ? " down" : ""}`}
+      title={`${notes.join(" · ")}.`}
+    >
+      {d === 0 ? "0" : signedLp(d)}
+    </span>
+  );
+}
+
+const signedLp = (d: number) => `${d > 0 ? "+" : "−"}${Math.abs(d)}`;
 
 /** The WP trajectory as a small line chart: one series (no legend — the title names it), a dashed
  * 50% midline, death ticks under the baseline, and a tap/hover readout instead of a floating
@@ -144,6 +184,11 @@ export function MatchModal({
 }) {
   const [input, setInput] = useState("");
   const [recent, setRecent] = useState<MatchHistoryRow[] | null>(null);
+  // Ranked rows by match id, over the WHOLE fetched history rather than the eight shown below —
+  // a pasted match id can be any game the account played, and the header wants its progress too.
+  const [rankedByMatch, setRankedByMatch] = useState<
+    Map<number, MatchHistoryRow>
+  >(() => new Map());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notIngested, setNotIngested] = useState<number | null>(null);
@@ -209,9 +254,7 @@ export function MatchModal({
     // average badge — so "this game vs the ladder" reads as "vs where I'm trying to get", matching
     // the build page's fundamentals card.
     const badge =
-      (focus?.team === "Team0"
-        ? m.average_badge_team0
-        : m.average_badge_team1) ?? 80;
+      (focus?.team === 0 ? m.average_badge_team0 : m.average_badge_team1) ?? 80;
     const climb = climbBand(Math.floor(badge / 10));
     const minBadge = tierToMinBadge(climb.lo);
     const maxBadge = tierToMaxBadge(climb.hi);
@@ -287,6 +330,13 @@ export function MatchModal({
           (r) => r.start_time > Date.now() / 1000 - 21 * 86400,
         );
         setRecent(recentRows.slice(0, 8));
+        setRankedByMatch(
+          new Map(
+            rows
+              .filter((r) => r.ranked_delta != null)
+              .map((r) => [r.match_id, r]),
+          ),
+        );
         if (autoLoadLatest && !autoLoaded.current && recentRows.length > 0) {
           autoLoaded.current = true;
           // Prefer the caller's target (the selected hero's last game); fall back to the newest.
@@ -339,7 +389,11 @@ export function MatchModal({
       </div>
 
       {recent && recent.length > 0 && !match && (
-        <div className="matchrecent">
+        // The progress column only appears once one of these games actually is a ranked game, so
+        // an account that only plays Standard doesn't get a row of em dashes.
+        <div
+          className={`matchrecent${recent.some((r) => r.ranked_delta != null) ? " ranked" : ""}`}
+        >
           <h3>Recent games</h3>
           {recent.map((r) => (
             <button
@@ -360,6 +414,7 @@ export function MatchModal({
               <span className="mkda">
                 {r.player_kills}/{r.player_deaths}/{r.player_assists}
               </span>
+              {recent.some((x) => x.ranked_delta != null) && <LpChip row={r} />}
               <span className="mwhen">{ago(r.start_time)}</span>
             </button>
           ))}
@@ -441,6 +496,12 @@ export function MatchModal({
             <span className="mkda">
               {a.focus.kills}/{a.focus.deaths}/{a.focus.assists}
             </span>
+            {/* Only for the seat the linked profile actually played — the ladder move is that
+                account's, and analysing a teammate must not label it with their name. */}
+            {a.focus.account_id === accountId &&
+              rankedByMatch.has(a.matchId) && (
+                <LpChip row={rankedByMatch.get(a.matchId)!} />
+              )}
             <span className="mmuted">
               {Math.round(a.focus.net_worth / 100) / 10}k souls ·{" "}
               {Math.round(a.durationS / 60)} min

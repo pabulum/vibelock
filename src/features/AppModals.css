@@ -704,6 +704,33 @@
     color: var(--ink-3);
     font-variant-numeric: tabular-nums;
   }
+  /* Ranked progress gets its own column only in a list that has some — see MatchModal.LpChip. */
+  .matchrecent.ranked .matchrow {
+    grid-template-columns: 44px 1fr 76px 54px 78px;
+  }
+  .mlp {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: var(--ink-2);
+  }
+  .mlp.up {
+    color: var(--pos);
+  }
+  .mlp.down {
+    color: var(--neg);
+  }
+  /* A Standard game moved nothing; the dash is a spacer, not a value. */
+  .mlp.none {
+    color: var(--ink-3);
+    font-weight: 400;
+  }
+  .matchhead .mlp {
+    font-size: 12px;
+    text-align: left;
+  }
   .matchnote {
     color: var(--ink-3);
     font-size: 11.5px;

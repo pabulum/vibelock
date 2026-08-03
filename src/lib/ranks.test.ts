@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   RANK_TIERS,
+  badgeLabel,
   highestPopulatedFloor,
   rankFloorLabel,
   tierToMinBadge,
@@ -14,6 +15,20 @@ const dist = (byTier: Record<number, number>) =>
       total_matches: matches / 6,
     })),
   );
+
+describe("badgeLabel", () => {
+  it("splits a per-match badge into its tier and subrank", () => {
+    expect(badgeLabel(92)).toBe("Phantom II"); // observed live on a ranked account
+    expect(badgeLabel(85)).toBe("Oracle V");
+    expect(badgeLabel(116)).toBe("Eternus VI"); // the API's documented ceiling
+  });
+
+  it("names the bare tier when there is no subrank", () => {
+    // Badge 0 is what the API reports for an account with no ranked result yet.
+    expect(badgeLabel(0)).toBe("Obscurus");
+    expect(badgeLabel(90)).toBe("Phantom");
+  });
+});
 
 describe("tierToMinBadge", () => {
   it("encodes a tier as average_badge tier*10 (subtier I)", () => {

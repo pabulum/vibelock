@@ -32,7 +32,7 @@ const WP: WpStats = {
 const player = (over: Partial<MatchPlayer>): MatchPlayer => ({
   account_id: 0,
   player_slot: 0,
-  team: "Team0",
+  team: 0,
   hero_id: 1,
   kills: 0,
   deaths: 0,
@@ -46,12 +46,12 @@ const MATCH: MatchInfo = {
   match_id: 42,
   start_time: 0,
   duration_s: 600,
-  winning_team: "Team0",
+  winning_team: 0,
   average_badge_team0: 95,
   players: [
     player({
       account_id: 100,
-      team: "Team0",
+      team: 0,
       net_worth: 3000,
       kills: 3,
       deaths: 2,
@@ -99,7 +99,7 @@ const MATCH: MatchInfo = {
     }),
     player({
       account_id: 200,
-      team: "Team1",
+      team: 1,
       net_worth: 1000,
       stats: [
         {
@@ -143,7 +143,7 @@ describe("winProbability", () => {
 
 describe("wpTimeline", () => {
   it("tracks the focus team's lead at each stat sample, starting even", () => {
-    const { points } = wpTimeline(MATCH, "Team0", WP);
+    const { points } = wpTimeline(MATCH, 0, WP);
     expect(points.map((p) => p.t)).toEqual([0, 300, 600]);
     expect(points[0].wp).toBeCloseTo(0.5, 5);
     expect(points[1].lead).toBe(1000); // 1500 − 500
@@ -152,20 +152,20 @@ describe("wpTimeline", () => {
   });
 
   it("mirrors for the other team", () => {
-    const { points } = wpTimeline(MATCH, "Team1", WP);
+    const { points } = wpTimeline(MATCH, 1, WP);
     expect(points[2].lead).toBe(-2000);
     expect(points[2].wp).toBeLessThan(0.5);
   });
 
   it("ranks the biggest inter-sample swing first", () => {
-    const { swings } = wpTimeline(MATCH, "Team0", WP);
+    const { swings } = wpTimeline(MATCH, 0, WP);
     // 0→300 moves wp by σ(1)−0.5 ≈ 0.231; 300→600 by σ(2)−σ(1) ≈ 0.150.
     expect(swings[0].fromT).toBe(0);
     expect(swings[0].delta).toBeGreaterThan(swings[1].delta);
   });
 
   it("is empty without a WP surface", () => {
-    expect(wpTimeline(MATCH, "Team0", null).points).toEqual([]);
+    expect(wpTimeline(MATCH, 0, null).points).toEqual([]);
   });
 });
 
@@ -347,7 +347,7 @@ describe("deathsSummary", () => {
   // The focus player dies 4 times; enemy slot 9 (hero 77) lands 3 of them.
   const victim = player({
     account_id: 1,
-    team: "Team0",
+    team: 0,
     deaths: 4,
     death_details: [
       { game_time_s: 300, killer_player_slot: 9, time_to_kill_s: 2 }, // burst, solo
@@ -358,7 +358,7 @@ describe("deathsSummary", () => {
   });
   const mate = player({
     account_id: 2,
-    team: "Team0",
+    team: 0,
     player_slot: 1,
     death_details: [{ game_time_s: 905 }], // 5s from the 900s death ⇒ that one was a team fight
   });

@@ -187,15 +187,23 @@ export type PlayerRank = v.InferOutput<typeof PlayerRankSchema>;
 // ---- Single-match metadata (match analysis) ----
 // The slice of /v1/matches/{id}/metadata the analyzer reads. The full payload is ~1MB with dozens
 // more fields per player; validation strips everything not schematized here.
+//
+// Everything optional in THIS section is `nullish`, not `optional`, as a rule rather than
+// field-by-field observation. The endpoint moves between omitting a field and sending it as null
+// with no warning — `gold_sources[].kills` and `.gold_orbs` flipped to null and took the whole
+// Match view down with "Unexpected response shape". Here the two genuinely mean the same thing
+// ("this sample didn't report it") and every consumer already coalesces, so accepting both costs
+// nothing and removes a whole class of breakage. This is NOT the rule for the analytics schemas
+// above, where a null is a distinct answer worth reasoning about (see `avg_sell_time_s`).
 
 /** One entry of a player's per-source soul ledger. Sources are the EGoldSource enum, verified
  * numerically against the flat `gold_*` fields: 1 kills, 2 lane creeps, 3 neutral camps, 4 bosses,
  * 5 treasure (urn), 6 assists, 7 denies, 8 team bonus, 10/11 item-generated, 12 breakables. */
 export const MatchGoldSourceSchema = v.object({
   source: v.number(),
-  gold: v.optional(v.number()),
-  gold_orbs: v.optional(v.number()),
-  kills: v.optional(v.number()),
+  gold: v.nullish(v.number()),
+  gold_orbs: v.nullish(v.number()),
+  kills: v.nullish(v.number()),
 });
 export type MatchGoldSource = v.InferOutput<typeof MatchGoldSourceSchema>;
 
@@ -206,58 +214,82 @@ export const MatchStatSampleSchema = v.object({
   kills: v.number(),
   deaths: v.number(),
   assists: v.number(),
-  last_hits: v.optional(v.number()),
+  last_hits: v.nullish(v.number()),
   denies: v.number(),
-  creep_kills: v.optional(v.number()),
-  neutral_kills: v.optional(v.number()),
-  shots_hit: v.optional(v.number()),
-  shots_missed: v.optional(v.number()),
-  player_damage: v.optional(v.number()),
-  player_healing: v.optional(v.number()),
-  player_damage_taken: v.optional(v.number()),
-  gold_death_loss: v.optional(v.number()),
-  gold_sources: v.optional(v.array(MatchGoldSourceSchema)),
+  creep_kills: v.nullish(v.number()),
+  neutral_kills: v.nullish(v.number()),
+  shots_hit: v.nullish(v.number()),
+  shots_missed: v.nullish(v.number()),
+  player_damage: v.nullish(v.number()),
+  player_healing: v.nullish(v.number()),
+  player_damage_taken: v.nullish(v.number()),
+  gold_death_loss: v.nullish(v.number()),
+  gold_sources: v.nullish(v.array(MatchGoldSourceSchema)),
 });
 export type MatchStatSample = v.InferOutput<typeof MatchStatSampleSchema>;
 
 export const MatchItemEventSchema = v.object({
   game_time_s: v.number(),
   item_id: v.number(),
-  sold_time_s: v.optional(v.number()),
+  sold_time_s: v.nullish(v.number()),
   /** Non-zero when this purchase event upgraded into that item id. */
-  upgrade_id: v.optional(v.number()),
-  imbued_ability_id: v.optional(v.number()),
+  upgrade_id: v.nullish(v.number()),
+  imbued_ability_id: v.nullish(v.number()),
 });
 export type MatchItemEvent = v.InferOutput<typeof MatchItemEventSchema>;
 
 export const MatchDeathSchema = v.object({
   game_time_s: v.number(),
   /** Slot of the killer, resolvable to a player via `player_slot`. */
-  killer_player_slot: v.optional(v.number()),
+  killer_player_slot: v.nullish(v.number()),
   /** How long the engagement that killed you lasted. `-1` is the API's "unknown" sentinel — always
    * guard for it. Measured distribution across a real match: p25 ≈ 7s, median ≈ 13s, p75 ≈ 19s, so a
    * sub-5s death is genuinely a burst, not just the low end of normal. */
-  time_to_kill_s: v.optional(v.number()),
+  time_to_kill_s: v.nullish(v.number()),
 });
 export type MatchDeath = v.InferOutput<typeof MatchDeathSchema>;
+
+/** Proto `ECitadelLobbyTeam` values, by name. Spectator can't own a match seat, but it is a legal
+ * value of the enum and so of `winning_team` on a match that ended without one. */
+const TEAM_BY_NAME: Record<string, number> = {
+  Team0: 0,
+  Team1: 1,
+  Spectator: 16,
+};
+
+/**
+ * A team side, always normalized to the enum's *number* (0 = Team0, 1 = Team1).
+ *
+ * The metadata endpoint used to serialize these as proto enum NAMES ("Team0"/"Team1") and now
+ * sends the raw numbers; the switch turned every match into "Unexpected response shape" until this
+ * accepted both. Both forms stay accepted deliberately — which one arrives is upstream's
+ * serializer setting, not a contract, and the whole Match view is downstream of it.
+ */
+const TeamSchema = v.union([
+  v.number(),
+  v.pipe(
+    v.picklist(Object.keys(TEAM_BY_NAME)),
+    v.transform((name) => TEAM_BY_NAME[name]),
+  ),
+]);
 
 export const MatchPlayerSchema = v.object({
   account_id: v.number(),
   player_slot: v.number(),
-  /** "Team0" | "Team1" (proto enum names, not numbers). */
-  team: v.string(),
+  /** Which side, as 0/1 — see {@link TeamSchema}, which normalizes the API's two encodings. */
+  team: TeamSchema,
   hero_id: v.number(),
   kills: v.number(),
   deaths: v.number(),
   assists: v.number(),
   net_worth: v.number(),
-  last_hits: v.optional(v.number()),
-  denies: v.optional(v.number()),
-  assigned_lane: v.optional(v.number()),
-  abandon_match_time_s: v.optional(v.number()),
-  items: v.optional(v.array(MatchItemEventSchema)),
-  stats: v.optional(v.array(MatchStatSampleSchema)),
-  death_details: v.optional(v.array(MatchDeathSchema)),
+  last_hits: v.nullish(v.number()),
+  denies: v.nullish(v.number()),
+  assigned_lane: v.nullish(v.number()),
+  abandon_match_time_s: v.nullish(v.number()),
+  items: v.nullish(v.array(MatchItemEventSchema)),
+  stats: v.nullish(v.array(MatchStatSampleSchema)),
+  death_details: v.nullish(v.array(MatchDeathSchema)),
 });
 export type MatchPlayer = v.InferOutput<typeof MatchPlayerSchema>;
 
@@ -265,10 +297,10 @@ export const MatchInfoSchema = v.object({
   match_id: v.number(),
   start_time: v.number(),
   duration_s: v.number(),
-  /** "Team0" | "Team1". */
-  winning_team: v.string(),
-  average_badge_team0: v.optional(v.number()),
-  average_badge_team1: v.optional(v.number()),
+  /** The winning side as 0/1 — same normalization as `MatchPlayer.team`, so they compare directly. */
+  winning_team: TeamSchema,
+  average_badge_team0: v.nullish(v.number()),
+  average_badge_team1: v.nullish(v.number()),
   players: v.array(MatchPlayerSchema),
 });
 export type MatchInfo = v.InferOutput<typeof MatchInfoSchema>;
@@ -293,6 +325,17 @@ export const MatchHistoryRowSchema = v.object({
   player_deaths: v.number(),
   player_assists: v.number(),
   net_worth: v.number(),
+  // ---- Ranked progress (only Ranked-mode games carry any of this) ----
+  // Present-but-null on every Standard/unranked row, which is nearly all of them: Ranked mode
+  // shipped with the 2026-07-30 matchmaking update, so even a heavy account has a handful of these.
+  /** The player's badge (tier·10 + subrank) *after* this game — see lib/ranks.badgeLabel. */
+  ranked_display_badge: v.nullish(v.number()),
+  /** Flat ranked progress this game moved, signed. The number the post-game screen animates. */
+  ranked_delta: v.nullish(v.number()),
+  /** Non-zero while the account is still placing, when a result moves the rank unusually far. */
+  ranked_calibration_match: v.nullish(v.number()),
+  /** True when a loss was cushioned — explains a 0 or unusually small negative `ranked_delta`. */
+  ranked_used_demotion_protection: v.nullish(v.boolean()),
 });
 export type MatchHistoryRow = v.InferOutput<typeof MatchHistoryRowSchema>;
 
