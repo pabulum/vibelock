@@ -369,6 +369,28 @@
   .export-steps strong {
     color: var(--ink);
   }
+  /* The remembered-file case: one paragraph where the numbered list used to be, because the
+     procedure collapsed to a single click and three steps describing one click reads as friction
+     that isn't there any more. */
+  .export-known {
+    margin: 14px 0;
+    color: var(--ink-2);
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  .export-known strong {
+    color: var(--ink);
+  }
+  .export-forget {
+    margin: 6px 0 0;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+  }
+  .export-known code,
+  .export-forget code {
+    font-size: 0.95em;
+  }
   /* The one filled button in the app. It's the commit action of a modal — the single place where
      "this is the thing to press" outranks the page's flatness. */
   .export-go {

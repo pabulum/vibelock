@@ -23,6 +23,14 @@ import { rankFilterUsable } from "./lib/badgeOutage";
 import { switchTransition } from "./lib/viewTransition";
 import { foldTrendingBreakouts } from "./lib/patchMovers";
 import { heroFarmProfile } from "./lib/matchAnalysis";
+import {
+  paceDiagnosis,
+  paceProfile,
+  readPaceWindows,
+  seriesNwAt,
+} from "./lib/pace";
+import type { PaceCurve } from "./components/PacePanel";
+import { laneMatchups } from "./lib/laneMatchups";
 import { heroAccent } from "./lib/heroAccent";
 import { prefetchBuild, prefetchEnemy } from "./lib/prefetch";
 import {
@@ -296,6 +304,16 @@ function AppInner() {
         : null,
     [dataHero, wpStats, sel.rankSel],
   );
+  // The ladder's soul-pace curve for this hero and rank (lib/pace) — the population half of the
+  // Soul pace panel. Independent of the player: it renders whenever a cell is baked, and is null
+  // on any build older than the first bake that emits `pace`, which is what hides the panel.
+  const paceProf = useMemo(
+    () =>
+      dataHero && wpStats
+        ? paceProfile(wpStats, dataHero.id, tierOf(sel.rankSel))
+        : null,
+    [dataHero, wpStats, sel.rankSel],
+  );
   // Numeric anchor for rank-scaled heuristics (the new-hero learning tax): the floor tier, or a
   // band's midpoint.
   const tierAnchor =
@@ -372,7 +390,9 @@ function AppInner() {
     soulsPerMinRow,
     combatRows,
     lastGameFarm,
+    lastGameTrace,
     lastHeroMatchId,
+    sessions,
   } = useProfile({
     hero: dataHero,
     heroId: sel.heroId,
@@ -389,6 +409,34 @@ function AppInner() {
     priorKey,
     wpStats,
   });
+  // Your last game placed on that curve: per-phase income percentiles, the weakest-phase verdict,
+  // and the trace the chart draws. Derived rather than fetched — the trace is already in hand from
+  // the Economy overlay's match lookup, so the pace panel costs no extra request.
+  const paceRead = useMemo(() => {
+    if (!paceProf) return null;
+    if (!lastGameTrace)
+      return { reads: [], diagnosis: null, curve: null as PaceCurve | null };
+    const nwAt = seriesNwAt(lastGameTrace.times, lastGameTrace.values);
+    const reads = readPaceWindows(nwAt, lastGameTrace.durationS, paceProf);
+    return {
+      reads,
+      diagnosis: paceDiagnosis(reads),
+      curve: {
+        nw: paceProf.ticks.map((t) =>
+          t.t <= lastGameTrace.durationS ? nwAt(t.t) : null,
+        ),
+        won: lastGameTrace.won,
+      } satisfies PaceCurve,
+    };
+  }, [paceProf, lastGameTrace]);
+
+  // Lane-phase matchups for this hero (lib/laneMatchups) — the read hero-counter-stats can't give,
+  // since that endpoint is whole-game presence. Null until a bake emits the lane block.
+  const laneVsRoster = useMemo(
+    () => (dataHero ? laneMatchups(wpStats, dataHero.id) : null),
+    [wpStats, dataHero],
+  );
+
   // The band the Rank dropdown offers: the active one (a shared link's band survives even without
   // a matching profile), else the profile's own. No profile and no band ⇒ the option is hidden.
   const bandChoice =
@@ -863,6 +911,9 @@ function AppInner() {
         backfillLabel={backfillLabel}
         lowPopulation={lowPopulation}
         metaRef={metaRef}
+        communityPick={communityMatch?.pick ?? null}
+        communityPickUnvetted={communityMatch?.pickUnvetted ?? false}
+        ourCoreCount={ourCoreIds.length}
         onOpenExport={() => setShowExport(true)}
         onOpenShare={() => setShowShare(true)}
       />
@@ -873,6 +924,9 @@ function AppInner() {
         items={items}
         abilities={abilities}
         farmProfile={farmProfile}
+        paceProfile={paceProf}
+        paceRead={paceRead}
+        sessions={sessions}
         soulsPerMinRow={soulsPerMinRow}
         lastGameFarm={lastGameFarm}
         fundamentals={fundamentals}
@@ -900,6 +954,8 @@ function AppInner() {
 
       <CountersSection
         matchups={matchups}
+        lane={laneVsRoster}
+        heroName={hero?.name}
         heroes={heroes}
         enemies={enemies}
         enemyNames={enemyNames}

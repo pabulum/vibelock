@@ -38,6 +38,36 @@ describe("matchCommunityBuilds", () => {
     expect(m.agree).toBe(false);
   });
 
+  it("picks the closest build to load in-game, not the winningest", () => {
+    // The pick's job is to pre-stock the shop with our items, so overlap decides it. Handing over
+    // the higher win rate would defeat the point when half its items aren't ours.
+    const m = matchCommunityBuilds([closest, winner], stats, ourCore, []);
+    expect(m.pick?.build.id).toBe(1);
+    expect(m.pick?.build.id).not.toBe(m.best?.build.id);
+    expect(m.pickUnvetted).toBe(false);
+  });
+
+  it("skips a closest build that is losing most of its games", () => {
+    // Overlap ranks, but a build under the win-rate floor is not something to hand someone.
+    const losing = [stat(1, 12, 60), stat(2, 33, 60)];
+    const m = matchCommunityBuilds([closest, winner], losing, ourCore, []);
+    expect(m.pick?.build.id).toBe(2);
+    expect(m.pickUnvetted).toBe(false);
+  });
+
+  it("falls back to the closest build when nothing clears the floor, and says so", () => {
+    const thin = [stat(1, 8, 10), stat(2, 9, 12)];
+    const m = matchCommunityBuilds([closest, winner], thin, ourCore, []);
+    expect(m.pick?.build.id).toBe(1);
+    expect(m.pickUnvetted).toBe(true);
+  });
+
+  it("has no pick when no build has stats in the window", () => {
+    const m = matchCommunityBuilds([closest, winner], [], ourCore, []);
+    expect(m.pick).toBeNull();
+    expect(m.pickUnvetted).toBe(false);
+  });
+
   it("returns no headline when nothing clears the win-rate sample floor", () => {
     const thin = [stat(1, 8, 10), stat(2, 9, 12)];
     const m = matchCommunityBuilds([closest, winner], thin, ourCore, []);

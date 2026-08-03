@@ -24,6 +24,7 @@ import type {
 import type { WpStats } from "../api/wpStats";
 import { FUNDAMENTALS, percentileOf } from "./fundamentals";
 import type { FundamentalRow } from "./fundamentals";
+import { PHASE_END_S, PHASE_LABELS } from "./phases";
 
 // --- Team & interpolation helpers ---
 
@@ -34,7 +35,7 @@ const TEAM0 = 0;
 const isTeam = (p: MatchPlayer, team: number) => p.team === team;
 
 /** A player's net worth at `t`, linearly interpolated between stat samples (0 souls at t=0). */
-function playerNwAt(p: MatchPlayer, t: number): number {
+export function playerNwAt(p: MatchPlayer, t: number): number {
   const s = p.stats ?? [];
   if (!s.length) return 0;
   let prevT = 0;
@@ -359,8 +360,9 @@ export interface HeroFarmProfile {
 
 /** Tier offsets searched for a baked cell, nearest first (ties break toward the climb, i.e. up).
  * Capped at ±2 because farm norms drift across ranks — borrowing tier 10 data for a tier 4 player
- * would mislead, so beyond two tiers we show nothing rather than a wrong shape. */
-const TIER_FALLBACK_OFFSETS = [0, 1, -1, 2, -2];
+ * would mislead, so beyond two tiers we show nothing rather than a wrong shape. Shared with the
+ * pace norms (lib/pace), which are baked per (hero, tier) on the same grid and want one policy. */
+export const TIER_FALLBACK_OFFSETS = [0, 1, -1, 2, -2];
 
 /**
  * The soul-income *shape* of a hero at a rank, from the baked farm norms (wp-stats.json) — the
@@ -429,7 +431,11 @@ export function heroFarmProfile(
 
 /** Place `value` on a percentile grid (e.g. [10,25,50,75,90] → [v10,v25,v50,v75,v90]) by piecewise-
  * linear interpolation, clamped to [pcts[0], pcts.at(-1)] at the ends. */
-function placeOnGrid(value: number, pcts: number[], vals: number[]): number {
+export function placeOnGrid(
+  value: number,
+  pcts: number[],
+  vals: number[],
+): number {
   if (value <= vals[0]) return pcts[0];
   for (let i = 1; i < vals.length; i++) {
     if (value <= vals[i]) {
@@ -467,13 +473,13 @@ export function benchmarkEconomy(
 
 // --- Deaths by phase ---
 
-/** Phase buckets matching the build columns (Lane 0–9, Early mid 9–20, Mid 20–30, Late 30+). */
-const PHASES: Array<{ label: string; toS: number }> = [
-  { label: "Lane", toS: 9 * 60 },
-  { label: "Early mid", toS: 20 * 60 },
-  { label: "Mid", toS: 30 * 60 },
-  { label: "Late", toS: Infinity },
-];
+/** Phase buckets, derived from the build columns rather than restated. These used to be
+ * hand-written with a 9-minute lane boundary, which is the pre-2026-07-30 fiction lib/phases.ts
+ * exists to prevent — the flow columns are 600s wide, so a death "in lane" has to mean the same
+ * span as the lane column of items. */
+const PHASES: Array<{ label: string; toS: number }> = PHASE_LABELS.map(
+  (label, i) => ({ label, toS: PHASE_END_S[i] }),
+);
 
 /** A teammate dying this close in time means you died in a *fight*, not as an isolated pick. */
 const SOLO_WINDOW_S = 15;

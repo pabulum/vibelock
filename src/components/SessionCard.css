@@ -1,0 +1,70 @@
+@layer components {
+  /* --- Sessions: the streak table, then the contrast that actually interprets it --- */
+
+  .sessioncard .strows {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .strow {
+    display: grid;
+    grid-template-columns: 64px 1fr 44px 38px;
+    align-items: center;
+    gap: 9px;
+    font-size: 12px;
+  }
+  .strow.sthdr {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.11em;
+    color: var(--ink-3);
+  }
+  .strow .stlabel {
+    color: var(--ink-2);
+  }
+  /* The worst streak row gets weight, never a fill: the whole point of the card is that this row
+     is NOT self-explanatory, so it must not look like a conclusion. */
+  .strow.low .stlabel {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .strow .stbar {
+    height: 5px;
+    background: var(--surface-2);
+    border: 1px solid var(--rule);
+  }
+  .strow .stbar > span {
+    display: block;
+    height: 100%;
+    background: var(--ink-3);
+  }
+  .strow .stbar > span.hi {
+    background: var(--pos);
+  }
+  .strow .stbar > span.lo {
+    background: var(--neg);
+  }
+  .strow .stn,
+  .strow .stwr {
+    font-family: var(--font-mono);
+    text-align: right;
+  }
+  .strow .stn {
+    font-size: 10.5px;
+    color: var(--ink-3);
+  }
+  .strow .stwr {
+    font-size: 12px;
+    color: var(--ink);
+  }
+
+  .sessioncard .stverdict {
+    margin: 12px 0 0;
+    padding-left: 9px;
+    border-left: 2px solid var(--rule-strong);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ink-2);
+  }
+}

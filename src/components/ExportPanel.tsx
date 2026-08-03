@@ -4,23 +4,23 @@
 import { useEffect, useState } from "react";
 import { encodeHeroBuild } from "../lib/heroBuildExport";
 import { injectBuildIntoCache } from "../lib/heroBuildCache";
+import {
+  ensureWritable,
+  forgetBuildFile,
+  recallBuildFile,
+  rememberBuildFile,
+  type BuildFileHandle,
+} from "../lib/buildCacheHandle";
 import { parseSteamInput } from "../lib/steamId";
 import { ModalShell } from "./ModalShell";
 import type { GeneratedBuild, ImbueTarget } from "../types";
 
 // File System Access API — not in the default TS DOM lib, so we type only what we call. Present on
 // Chromium (lets us edit the file in place); absent elsewhere (we fall back to upload + download).
-interface FsWritable {
-  write(data: Uint8Array): Promise<void>;
-  close(): Promise<void>;
-}
-interface FsFileHandle {
-  getFile(): Promise<File>;
-  createWritable(): Promise<FsWritable>;
-}
+// The handle shape itself lives in lib/buildCacheHandle, which also persists it.
 type FsPicker = (opts?: {
   types?: { description?: string; accept?: Record<string, string[]> }[];
-}) => Promise<FsFileHandle[]>;
+}) => Promise<BuildFileHandle[]>;
 
 const CACHE_FILENAME = "cached_hero_builds.kv3";
 const CACHE_PATHS: Array<[string, string]> = [
@@ -82,47 +82,86 @@ export function ExportPanel({
     .showOpenFilePicker;
   const canEditInPlace = typeof picker === "function";
 
-  const exportInPlace = async () => {
+  // The file we already know about, from a previous export. Its presence is what turns this panel
+  // from a five-step ritual into one button, so it's looked up on open — but never permission-
+  // checked here (see ensureWritable: that needs a user gesture).
+  const [saved, setSaved] = useState<BuildFileHandle | null>(null);
+  useEffect(() => {
+    if (!canEditInPlace) return;
+    let live = true;
+    recallBuildFile().then((h) => live && setSaved(h));
+    return () => {
+      live = false;
+    };
+  }, [canEditInPlace]);
+
+  /** Write into `handle`, which is either the remembered file or one just picked. */
+  const writeInto = async (handle: BuildFileHandle) => {
+    const blob = encodeHeroBuild(build, {
+      name,
+      description,
+      authorId,
+      skillOrder,
+      imbues,
+    });
+    setStatus("Adding your build…");
+    const file = await handle.getFile();
+    const out = injectBuildIntoCache(
+      new Uint8Array(await file.arrayBuffer()),
+      blob,
+    );
+    const writable = await handle.createWritable();
+    await writable.write(out);
+    await writable.close();
+    setStage("done");
+    setStatus(
+      `Added “${name}” to your build file. Launch Deadlock → ${build.hero.name} → My Builds.`,
+    );
+  };
+
+  const exportInPlace = async (reuse: boolean) => {
     setStage("working");
     setDownloadUrl(null);
     try {
-      const blob = encodeHeroBuild(build, {
-        name,
-        description,
-        authorId,
-        skillOrder,
-        imbues,
-      });
-      setStatus("Pick your cached_hero_builds.kv3…");
-      const [handle] = await picker!({
-        types: [
-          {
-            description: "Deadlock build cache",
-            accept: { "application/octet-stream": [".kv3"] },
-          },
-        ],
-      });
-      const file = await handle.getFile();
-      setStatus("Adding your build…");
-      const out = injectBuildIntoCache(
-        new Uint8Array(await file.arrayBuffer()),
-        blob,
-      );
-      const writable = await handle.createWritable();
-      await writable.write(out);
-      await writable.close();
-      setStage("done");
-      setStatus(
-        `Added “${name}” to your build file. Launch Deadlock → ${build.hero.name} → My Builds.`,
-      );
+      let handle = reuse ? saved : null;
+      if (handle) {
+        // The grant can lapse between sessions; asking here is legal because we're inside the
+        // click. A refusal falls through to the picker rather than dead-ending.
+        if (!(await ensureWritable(handle))) handle = null;
+      }
+      if (!handle) {
+        setStatus("Pick your cached_hero_builds.kv3…");
+        const [picked] = await picker!({
+          types: [
+            {
+              description: "Deadlock build cache",
+              accept: { "application/octet-stream": [".kv3"] },
+            },
+          ],
+        });
+        handle = picked;
+      }
+      await writeInto(handle);
+      // Only remember a file we actually wrote to — storing a handle that turned out to be the
+      // wrong file would make every future export silently wrong.
+      void rememberBuildFile(handle);
+      setSaved(handle);
     } catch (e) {
       if ((e as DOMException)?.name === "AbortError") {
         setStage("idle");
         setStatus("");
         return;
       }
+      // A remembered file that's been moved, deleted or revoked can't be recovered from here, and
+      // leaving it in place would fail identically every time. Drop it so the next click re-picks.
+      if (reuse) {
+        void forgetBuildFile();
+        setSaved(null);
+      }
       setStage("error");
-      setStatus(`Couldn't write the build: ${(e as Error)?.message ?? e}`);
+      setStatus(
+        `Couldn't write the build: ${(e as Error)?.message ?? e}${reuse ? " — pick the file again." : ""}`,
+      );
     }
   };
 
@@ -173,21 +212,32 @@ export function ExportPanel({
         shop walks you through it top-to-bottom. Runs entirely in your browser —
         your save file never leaves your machine.
       </p>
-      <ol className="export-steps">
-        <li>
-          <strong>Fully quit Deadlock</strong> first (the game overwrites this
-          file on exit).
-        </li>
-        <li>
-          {canEditInPlace
-            ? "Pick your cached_hero_builds.kv3 — we add the build and save it back in place."
-            : "Pick your cached_hero_builds.kv3, then download the updated file and drop it back into the same folder (back up the original first)."}
-        </li>
-        <li>
-          Launch Deadlock → <strong>{build.hero.name}</strong> →{" "}
-          <strong>My Builds</strong>.
-        </li>
-      </ol>
+      {/* Once the file is remembered the procedure IS the button, so the numbered list would be
+          three steps describing one click. The quit-first warning survives on its own because it's
+          the only part that can silently undo the export. */}
+      {saved ? (
+        <p className="export-known">
+          <strong>Fully quit Deadlock first</strong> — it overwrites this file
+          on exit. Then one click updates <code>{saved.name}</code>, and the
+          build is under <strong>{build.hero.name} → My Builds</strong>.
+        </p>
+      ) : (
+        <ol className="export-steps">
+          <li>
+            <strong>Fully quit Deadlock</strong> first (the game overwrites this
+            file on exit).
+          </li>
+          <li>
+            {canEditInPlace
+              ? "Pick your cached_hero_builds.kv3 — we add the build and save it back in place, and remember it so next time is one click."
+              : "Pick your cached_hero_builds.kv3, then download the updated file and drop it back into the same folder (back up the original first)."}
+          </li>
+          <li>
+            Launch Deadlock → <strong>{build.hero.name}</strong> →{" "}
+            <strong>My Builds</strong>.
+          </li>
+        </ol>
+      )}
 
       <label className="export-steam">
         <span>
@@ -208,14 +258,37 @@ export function ExportPanel({
       </label>
 
       {canEditInPlace ? (
-        <button
-          type="button"
-          className="export-go"
-          disabled={stage === "working"}
-          onClick={exportInPlace}
-        >
-          {stage === "working" ? "Working…" : "Pick file & add build"}
-        </button>
+        <>
+          <button
+            type="button"
+            className="export-go"
+            disabled={stage === "working"}
+            onClick={() => exportInPlace(!!saved)}
+          >
+            {stage === "working"
+              ? "Working…"
+              : saved
+                ? "Update in-game build"
+                : "Pick file & add build"}
+          </button>
+          {saved && (
+            <p className="export-forget">
+              Using <code>{saved.name}</code> ·{" "}
+              <button
+                type="button"
+                className="guidelink"
+                onClick={() => {
+                  void forgetBuildFile();
+                  setSaved(null);
+                  setStage("idle");
+                  setStatus("");
+                }}
+              >
+                use a different file
+              </button>
+            </p>
+          )}
+        </>
       ) : (
         <label className={`export-go ${stage === "working" ? "busy" : ""}`}>
           {stage === "working" ? "Working…" : "Choose cached_hero_builds.kv3"}

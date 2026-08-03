@@ -15,6 +15,12 @@ import type {
 // doesn't lean on win rate), just not eligible to be the headline performer.
 const MIN_BEST_SAMPLE = 50;
 
+/** Win-rate floor for the in-game `pick`. Deliberately a disaster guard rather than a quality bar:
+ * community-build win rates are raw and confounded, and at MIN_BEST_SAMPLE games the standard error
+ * is ~7pt, so anything stricter would be filtering noise. This only keeps us from handing someone a
+ * build that loses most of its games purely because it happens to match ours. */
+const PICK_MIN_WIN_RATE = 0.45;
+
 /**
  * Overlap of two item sets, 0–1 (intersection / union). Jaccard, not coverage, on
  * purpose: community builds list the author's whole menu (40+ items), so a kitchen-sink
@@ -91,7 +97,14 @@ export function matchCommunityBuilds(
       situShared: situationalOverlap(build, ourSitu),
     });
   }
-  if (ranked.length === 0) return { best: null, aligned: null, agree: false };
+  if (ranked.length === 0)
+    return {
+      best: null,
+      aligned: null,
+      agree: false,
+      pick: null,
+      pickUnvetted: false,
+    };
 
   // Best win rate among adequately-sampled builds (break ties toward the larger sample) —
   // null when no community build has enough games to make a credible claim. Alignment
@@ -109,7 +122,27 @@ export function matchCommunityBuilds(
     b.similarity > a.similarity ? b : a,
   );
 
-  return { best, aligned, agree: best?.build.id === aligned.build.id };
+  // The in-game pick: closest to ours among builds that are actually played and aren't losing.
+  // Ranked by overlap with a larger sample breaking ties — win rate is a gate here, never a sort
+  // key, because a build's value in this role is how much of our build it already contains.
+  const vetted = ranked.filter(
+    (r) => r.matches >= MIN_BEST_SAMPLE && r.winRate >= PICK_MIN_WIN_RATE,
+  );
+  const pool = vetted.length ? vetted : ranked;
+  const pick = pool.reduce((a, b) =>
+    b.similarity > a.similarity ||
+    (b.similarity === a.similarity && b.matches > a.matches)
+      ? b
+      : a,
+  );
+
+  return {
+    best,
+    aligned,
+    agree: best?.build.id === aligned.build.id,
+    pick,
+    pickUnvetted: vetted.length === 0,
+  };
 }
 
 /**

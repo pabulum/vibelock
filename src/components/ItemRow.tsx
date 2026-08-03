@@ -66,6 +66,11 @@ function badgeFor(b: BuildItem): { label: string; title: string; cls: string } {
   return { ...ROLE_BADGES[b.role], cls: b.role };
 }
 
+/** Buy time as a clock, e.g. "14:20". Minutes:seconds rather than "14 min" because the build's own
+ * phase columns are minute-scale and a bare minute reads as a much looser target than the data is. */
+const mmss = (s: number) =>
+  `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+
 /** Win rate as a signed delta vs the hero baseline (e.g. "+7.2", "−0.7"). */
 function fmtDelta(d: number): string {
   const v = d * 100;
@@ -331,6 +336,19 @@ export function ItemRow({
           </span>
           <span className="pick">{(b.pickRate * 100).toFixed(0)}% pick</span>
           <span className="n">n={b.sample.toLocaleString()}</span>
+          {/* The clock. Until now buy time only SORTED the rows, so the build said what to buy and
+              in what order but never when — and being five minutes late on a tier-3 costs more
+              than picking the second-best tier-3. Safe to show where sell time was not: this is
+              avg_buy_time_s, which has none of avg_sell_time_s's upgrade-consumption problem.
+              A median, so it's a pace marker, not a deadline. */}
+          {b.buyTimeS !== undefined && (
+            <span
+              className="buyat"
+              title={`Players of this hero and rank have it by ${mmss(b.buyTimeS)} on average. A pace marker, not a deadline — being well behind it is the signal, not the exact minute.`}
+            >
+              by {mmss(b.buyTimeS)}
+            </span>
+          )}
         </div>
         <ItemTags
           reason={reason}

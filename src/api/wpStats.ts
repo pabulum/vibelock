@@ -86,6 +86,63 @@ const WpStatsSchema = v.object({
       }),
     ),
   ),
+  /**
+   * Soul pace: how net worth accumulates for a (hero, rank), and the per-phase income rates a
+   * single game is placed against. Axes are shared by every cell and each cell's arrays are
+   * index-aligned with them; a null entry is an index that fell under the sample floor.
+   *
+   * `won`/`lost` are MEAN levels by outcome, not percentiles — the pace gap drawn over the band.
+   *
+   * Survivorship, carried from the bake: a tick is only recorded for games that REACHED it, so the
+   * late ticks describe long games, which are a closer-fought subset. The UI says so rather than
+   * pretending the curve is "all games".
+   *
+   * Optional, and it has to be: the client ships before the first bake that emits it, so every
+   * reader must hide on absence rather than assume it.
+   */
+  pace: v.optional(
+    v.object({
+      ticksS: v.array(v.number()),
+      windowsS: v.array(v.array(v.number())),
+      levelPcts: v.array(v.number()),
+      ratePcts: v.array(v.number()),
+      minN: v.number(),
+      cells: v.record(
+        v.string(),
+        v.object({
+          n: v.array(v.number()),
+          lv: v.array(v.nullable(v.array(v.number()))),
+          won: v.array(v.nullable(v.number())),
+          lost: v.array(v.nullable(v.number())),
+          wn: v.array(v.number()),
+          rt: v.array(v.nullable(v.array(v.number()))),
+        }),
+      ),
+    }),
+  ),
+  /**
+   * Lane matchups, from `assigned_lane` — the read the analytics API cannot answer, since
+   * hero-counter-stats is whole-game presence rather than lane.
+   *
+   * `strengths[heroId]` is the fitted additive lane strength in souls at `tickS`, centred on 0.
+   * `matchups[a][b]` is the ordered pair as `[n, rawDiff, residual]`: `rawDiff` is the observed
+   * soul differential and `residual` is what survives removing both heroes' strengths. Read the
+   * residual — the raw number mostly restates "this hero farms well", once per opponent.
+   *
+   * Optional for the same reason as `pace`.
+   */
+  lane: v.optional(
+    v.object({
+      tickS: v.number(),
+      obs: v.number(),
+      minN: v.number(),
+      strengths: v.record(v.string(), v.number()),
+      matchups: v.record(
+        v.string(),
+        v.record(v.string(), v.tuple([v.number(), v.number(), v.number()])),
+      ),
+    }),
+  ),
 });
 export type WpStats = v.InferOutput<typeof WpStatsSchema>;
 

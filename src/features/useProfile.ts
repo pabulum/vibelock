@@ -25,6 +25,7 @@ import {
 } from "../lib/fundamentals";
 import { benchmarkEconomy, economyRows } from "../lib/matchAnalysis";
 import { blendItemStats } from "../lib/patchBlend";
+import { sessionStats } from "../lib/sessions";
 import {
   climbBand,
   rankBandLabel,
@@ -52,6 +53,19 @@ const COMBAT_KEYS = new Set(["deaths", "player_damage_per_min", "accuracy"]);
 /** How long the id field settles before anything is fetched for it. Longer than the selection
  * commit (hooks.useCommitted) because this one is waiting out *typing*, not clicking. */
 const ID_COMMIT_MS = 400;
+
+/** Your last game's soul trajectory — the raw material the pace read is derived from (lib/pace).
+ * Deliberately not pre-placed on the ladder here: the placement needs the pace profile, which is a
+ * pure function of the bake and the selected rank, so it lives with the render rather than the
+ * fetch. */
+export interface LastGameTrace {
+  /** Sample timestamps, seconds. */
+  times: number[];
+  /** Net worth at each sample. */
+  values: number[];
+  durationS: number;
+  won: boolean;
+}
 
 /** The fundamentals benchmark card's data: your recent games placed on the ladder's distribution. */
 export interface FundamentalsData {
@@ -381,6 +395,22 @@ export function useProfile(opts: {
   const combatRows =
     fundamentals?.rows.filter((r) => COMBAT_KEYS.has(r.key)) ?? [];
 
+  // Session shape and the tilt contrast (lib/sessions). Account-scoped, not hero-scoped: tilt is a
+  // property of a sitting, not of a character, and narrowing to one hero would halve an already
+  // underpowered contrast. Shares the match-history fetch with the queries above.
+  const sessionsQ = useQuery({
+    queryKey: ["sessions", accountId],
+    enabled: accountId !== null,
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const history = await getPlayerMatchHistory(accountId!).catch(
+        () => [] as MatchHistoryRow[],
+      );
+      return sessionStats(history);
+    },
+  });
+  const sessions = accountId !== null ? (sessionsQ.data ?? null) : null;
+
   // Last-game overlay for the Soul income card: your most recent game on this hero, its per-source
   // souls placed on the same population grid the card shows. Cached-first (getMatchMetadata never
   // spends Steam budget here) and fully best-effort — a not-yet-ingested game, a missing account, or
@@ -398,6 +428,7 @@ export function useProfile(opts: {
     queryFn: async (): Promise<{
       farm: LastGameFarm | null;
       matchId: number | null;
+      trace: LastGameTrace | null;
     }> => {
       const history = await getPlayerMatchHistory(accountId!).catch(
         () => [] as MatchHistoryRow[],
@@ -405,11 +436,11 @@ export function useProfile(opts: {
       // History is newest-first, so the first match on this hero is the latest one.
       const last = history.find((r) => r.hero_id === hero!.id);
       const matchId = last?.match_id ?? null;
-      if (!last || !wpStats) return { farm: null, matchId };
+      if (!last || !wpStats) return { farm: null, matchId, trace: null };
       // Cached-first: 404 (not ingested yet) throws and we simply show no overlay.
       const match = await getMatchMetadata(last.match_id).catch(() => null);
       const focus = match?.players.find((p) => p.account_id === accountId);
-      if (!match || !focus) return { farm: null, matchId };
+      if (!match || !focus) return { farm: null, matchId, trace: null };
       const rows = benchmarkEconomy(
         economyRows(focus, match.duration_s),
         hero!.id,
@@ -427,6 +458,15 @@ export function useProfile(opts: {
           ),
         },
         matchId,
+        // The bare soul trajectory, for the pace read. Kept as two number arrays rather than the
+        // match payload: it's ~12 samples, and the placement itself is pure and belongs upstream
+        // where the profile lives (lib/pace), not in a fetch.
+        trace: {
+          times: (focus.stats ?? []).map((s) => s.time_stamp_s),
+          values: (focus.stats ?? []).map((s) => s.net_worth),
+          durationS: match.duration_s,
+          won: match.winning_team === focus.team,
+        },
       };
     },
   });
@@ -439,6 +479,9 @@ export function useProfile(opts: {
   // whereas this only needs the game to exist — it's what "analyze your last <hero> game" opens.
   const lastHeroMatchId =
     accountId !== null && hero ? (lastGameQ.data?.matchId ?? null) : null;
+  /** Your last game's soul trajectory, for the pace panel. Same availability as lastGameFarm. */
+  const lastGameTrace =
+    accountId !== null && hero ? (lastGameQ.data?.trace ?? null) : null;
 
   return {
     steamId,
@@ -461,6 +504,9 @@ export function useProfile(opts: {
     soulsPerMinRow,
     combatRows,
     lastGameFarm,
+    lastGameTrace,
     lastHeroMatchId,
+    sessionsQ,
+    sessions,
   };
 }

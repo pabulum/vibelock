@@ -263,14 +263,29 @@ export interface ClimbTip {
  */
 export const WEAK_PERCENTILE = 35;
 
+/** The farm-shaped levers. When the Soul pace panel has a verdict it owns all of these, because it
+ * says the same thing with a span attached (see `climbAdvice`'s `exclude`). */
+export const FARM_LEVER_KEYS: ReadonlySet<string> = new Set([
+  "net_worth_per_min",
+  "last_hits",
+  "neutral_damage_per_min",
+  "denies",
+]);
+
 export function climbAdvice(
   rows: FundamentalRow[],
   heroName: string,
   max = 2,
+  /** Levers to leave out because something else is already saying it, better. The Soul pace panel
+   * supersedes every farm lever when it has a verdict: "prioritize farm" and "your 10–20 min is
+   * p18" are the same finding, and the second one names a span and a set of items while the first
+   * names neither. Stating both reads as two problems. */
+  exclude?: ReadonlySet<string>,
 ): ClimbTip[] {
   const byKey = new Map(rows.map((r) => [r.key, r]));
   const weak: Array<ClimbTip & { priority: number }> = [];
   for (const lever of LEVERS) {
+    if (exclude?.has(lever.key)) continue;
     const row = byKey.get(lever.key);
     if (!row || row.percentile >= WEAK_PERCENTILE) continue;
     weak.push({

@@ -149,9 +149,17 @@ const sampleIds = (fromUnix, toUnix, limit) =>
 // Exactly the fields trimMatch/trimPlayer keep, in their order. `stats.net_worth` is the sampled
 // net-worth trajectory the WPA work needs — ~12 points per player rather than the full stats blob.
 // Nothing is cast: see the header note on why the archive depends on the raw Enum8/DateTime forms.
+//
+// `average_badge` is the PER-PLAYER badge, and it is the only rank signal left. The match-level
+// average_badge_team0/1 pair went to zero upstream on 2026-07-31 — measured 2026-08-03 against
+// /v1/sql, every mode, 100% of rows — which silently collapsed every rank-keyed bake into a single
+// "tier 0" cell. The per-player column survives on Ranked (99.8% of Ranked rows carry it) and is
+// null everywhere else, which costs nothing here: `dayWhere` already selects Ranked alone from
+// 2026-07-30 on. The team columns are kept because shards harvested before the outage still carry
+// them, and the bake falls back to them for those days.
 const ROW_COLUMNS = `match_id, start_time, duration_s, winning_team, match_outcome, match_mode,
   average_badge_team0, average_badge_team1,
-  account_id, hero_id, team, player_slot, assigned_lane,
+  account_id, hero_id, team, player_slot, assigned_lane, average_badge,
   kills, deaths, assists, denies, last_hits, net_worth, ability_points, player_level,
   abandon_match_time_s, hero_build_id,
   items.item_id, items.game_time_s, items.sold_time_s, items.upgrade_id,
@@ -335,6 +343,9 @@ function trimPlayer(p, gsrc) {
     team: p.team,
     player_slot: p.player_slot,
     assigned_lane: p.assigned_lane,
+    // The surviving rank signal — see ROW_COLUMNS. Null on non-Ranked days (pre-2026-07-30
+    // back-harvests), where the bake falls back to the match-level pair.
+    average_badge: p.average_badge,
     kills: p.kills,
     deaths: p.deaths,
     assists: p.assists,

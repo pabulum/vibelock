@@ -9,6 +9,8 @@ How Vibelock turns public match statistics into a build, and what is still wrong
 - [Patch filter and backfill](#patch-filter-and-backfill)
 - [Matchups and counters](#matchups-and-counters)
 - [Player profile](#player-profile)
+- [Soul pace](#soul-pace)
+- [Sessions and loss streaks](#sessions-and-loss-streaks)
 - [The Lab](#the-lab)
 - [What is still confounded](#what-is-still-confounded)
 - [Code map](#code-map)
@@ -127,8 +129,23 @@ it is fetched once per rank and patch and filtered client-side. Each enemy's win
 the hero's overall win rate. Tough and Favored matchups appear as clickable portrait chips that
 toggle into the enemy list, so you can see what to build against them in one click.
 
-Win rate here is whole-game presence, not lane-only (`same_lane_filter` is a no-op on this endpoint);
-the lane CS differential is surfaced as a tooltip hint instead.
+Win rate here is whole-game presence, not lane-only — the client sends `same_lane_filter=false`
+explicitly, since the API's own default is `true`. (An earlier version of this document called the
+parameter a no-op. It never was.) The real lane read is a separate measurement; see below.
+
+**Lane matchups.** Whole-game presence conflates a lane bully with a late-game problem, and those
+want opposite responses. So the lane phase is measured directly from the harvested shards, which
+carry `assigned_lane` per player: lanes are 2v2 (three lanes, twelve players), and each lane instance
+contributes the two sides' soul differential at the 10-minute mark.
+
+A raw "hero A vs hero B" differential is contaminated by both lane _partners_ and mostly restates how
+well each hero farms. So the same fix the counter matrix gets: an additive per-hero lane strength is
+fitted by least squares over every lane instance (+1 per hero on one side, −1 on the other, target =
+the differential), and each pair is reported as its **residual** against what strengths alone predict.
+Measured over a full day, the fit absorbs ~76% of the raw variance — pair differentials go from
+sd ≈ 438 souls raw to sd ≈ 105 residual — which is the quantitative statement that most of "A beats
+B in lane" is just farming ability. Pairs are shrunk toward zero by sample and surface at a 150-soul
+floor (~1.7% of a 10-minute net worth).
 
 The **De-noise** toggle fits Bradley-Terry strengths across the whole matrix and re-reads each
 matchup as its sample-shrunk _residual_ against what strengths alone predict. A meta hero then stops
@@ -186,6 +203,54 @@ Hero-specific _item_ effects are not shown: measured interaction effects are tin
 against the sample needed to see them, so the honest answer is that the data does not currently
 support per-hero item values.
 
+## Soul pace
+
+A single whole-game souls/min percentile is the wrong resolution for the question players actually
+have. A player who wins lane at p60 and then flatlines at p18 once the map opens has the same average
+as one who is mediocre throughout, and a completely different problem — so the ladder is read _per
+phase_, on the same 600s columns the build itself is filled against.
+
+The bake accumulates two things per (hero, rank), as fixed-width histograms rather than retained
+samples (a 30-day window is ~3.2M player-rows):
+
+- **Levels** — net worth at 4-minute ticks, as a p25–p75 band plus the median, and the mean level
+  among games won and lost. This is what a single game is plotted against.
+- **Window rates** — souls/min _within_ each phase. Not derivable from the levels: the percentile of
+  a difference is not the difference of percentiles, and the fall-off is the whole point.
+
+The panel names one phase, and distinguishes two findings that are not the same advice: a **fall-off**
+(strong somewhere, much weaker elsewhere — the gap is the finding and it points at a span) and a
+**flat deficit** (weak throughout, where naming a "worst phase" would invent a specific problem out
+of a general one). When every phase is at or above the ladder it says so rather than manufacturing a
+flaw.
+
+Two caveats travel with it into the UI. Levels are **survivorship-biased**: a tick is only recorded
+for games that reached it, so the late band describes long games, which are the closer ones. And the
+rates are **descriptive, not causal** — farming more in a phase does not cause wins at fixed total net
+worth (the measured gradient is ~0), so a weak phase is a place to look, not a lever with a payout.
+Nothing in the panel attaches a win rate to a phase.
+
+## Sessions and loss streaks
+
+"Stop playing after two losses" is the most repeated climbing advice there is and the evidence for it
+is weaker than its confidence. Three things produce the observed pattern and only one is tilt:
+**tilt** (you play worse; stopping helps), **rating regression** (you were above your true skill and
+the ladder is correcting; stopping does nothing), and **base rates** (at a 50% win rate a three-loss
+streak happens ~12.5% of the time by chance).
+
+A "win rate after N losses" table cannot separate them, so it is shown but explicitly not treated as
+the verdict. The separator is time: regression is persistent — a break does not fix an inflated
+rating — whereas tilt decays. So among games that all began under the same streak condition, the ones
+requeued within 30 minutes are contrasted against the ones played after a 4-hour break. Same streak
+state, different rest.
+
+The streak state is deliberately carried _across_ session boundaries: resetting it at a break would
+make every rested game a streak-0 game by construction and delete the contrast. A per-account history
+is small, so the test reports a 95% interval and names a direction only when that interval excludes
+zero — the usual outcome is "not enough games to tell", and saying so is the point. There is no
+population baseline because one cannot be built: the shards are a ~12k/day _sample_ of matches, so
+consecutive games by the same account are almost never both present.
+
 ## What is still confounded
 
 **Who buys the item.** Win-rate builds, this one included, still partly measure _who_ buys an item
@@ -237,6 +302,9 @@ player pulls.
 | `src/lib/patchBlend.ts`       | Power-prior backfill for young patches                            |
 | `src/lib/counters.ts`         | Enemy-conditioned top movers                                      |
 | `src/lib/matchups.ts`         | Hero matchups, Bradley-Terry de-noising                           |
+| `src/lib/laneMatchups.ts`     | Lane-phase matchups from the fitted lane-strength residuals       |
+| `src/lib/pace.ts`             | Soul pace: ladder curve, per-phase placement, fall-off diagnosis  |
+| `src/lib/sessions.ts`         | Sessions, loss streaks, the requeue-vs-rest contrast              |
 | `src/lib/archetypes.ts`       | Gun/spirit split for flex heroes                                  |
 | `src/lib/skills.ts`           | Ability order                                                     |
 | `src/lib/heroBuildExport.ts`  | Serializes a build into Deadlock's local build cache              |

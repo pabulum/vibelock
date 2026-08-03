@@ -5,10 +5,19 @@ import "./DashGrid.css";
 import type { Ref } from "react";
 import { EconomyPanel } from "../components/EconomyPanel";
 import type { LastGameFarm } from "../components/EconomyPanel";
+import { PacePanel } from "../components/PacePanel";
+import { SessionCard } from "../components/SessionCard";
+import type { SessionStats } from "../lib/sessions";
+import type { PaceCurve } from "../components/PacePanel";
+import type { PaceDiagnosis, PaceProfile, PaceWindowRead } from "../lib/pace";
 import { CommunityRow } from "../components/CommunityRow";
 import { SkillEmpty, SkillOrder } from "../components/panels";
 import { CAN_HOVER } from "../components/usePinnablePopover";
-import { climbAdvice, type FundamentalRow } from "../lib/fundamentals";
+import {
+  climbAdvice,
+  FARM_LEVER_KEYS,
+  type FundamentalRow,
+} from "../lib/fundamentals";
 import { rankFloorLabel } from "../lib/ranks";
 import type { HeroFarmProfile } from "../lib/matchAnalysis";
 import type { FundamentalsData } from "./useProfile";
@@ -20,6 +29,13 @@ export function DashGrid(props: {
   items: Map<number, Item> | null;
   abilities: Map<number, Ability> | null;
   farmProfile: HeroFarmProfile | null;
+  paceProfile: PaceProfile | null;
+  sessions: SessionStats | null;
+  paceRead: {
+    reads: PaceWindowRead[];
+    diagnosis: PaceDiagnosis | null;
+    curve: PaceCurve | null;
+  } | null;
   soulsPerMinRow: FundamentalRow | null;
   lastGameFarm: LastGameFarm | null;
   fundamentals: FundamentalsData | null;
@@ -47,6 +63,9 @@ export function DashGrid(props: {
     items,
     abilities,
     farmProfile,
+    paceProfile,
+    paceRead,
+    sessions,
     soulsPerMinRow,
     lastGameFarm,
     fundamentals,
@@ -71,6 +90,21 @@ export function DashGrid(props: {
 
   return (
     <div className="dash">
+      {/* First card, and deliberately so: a single whole-game souls/min percentile averages a
+          strong lane and a collapsed mid into one uninformative number. This is the card that
+          names a SPAN. Hides entirely until a bake emits pace norms. */}
+      {hero && paceProfile && paceRead && (
+        <PacePanel
+          profile={paceProfile}
+          heroName={hero.name}
+          rankLabel={rankLabel}
+          dataRankLabel={rankFloorLabel(paceProfile.tier)}
+          reads={paceRead.reads}
+          diagnosis={paceRead.diagnosis}
+          curve={paceRead.curve}
+        />
+      )}
+
       {/* The flagship: your souls/min, where this hero's souls come from, and your last game on
           top of it. Shows whenever EITHER layer has data — the farm breakdown is baked per
           (hero, rank) and is still filling in, so souls/min must not vanish with it. */}
@@ -218,6 +252,10 @@ export function DashGrid(props: {
         </section>
       )}
 
+      {/* Account-wide, so it sits after the hero-scoped cards. Last-ish in the flow for the same
+          reason the climb card is: the column packer drops it wherever there's room. */}
+      {sessions && <SessionCard stats={sessions} />}
+
       {/* "To climb" spans farm AND survival, so it's its own card rather than a corner of either
           panel. Last in the flow: the column packer drops it into whichever column has room,
           which keeps it compact instead of a page-wide band. */}
@@ -226,15 +264,20 @@ export function DashGrid(props: {
           <h2>To climb</h2>
           {(() => {
             // Reads the FULL row set — including the farm rows the Economy panel displays — so
-            // farm advice survives those rows having moved out of the combat card.
+            // farm advice survives those rows having moved out of the combat card. Farm levers
+            // drop out entirely once Soul pace has a verdict: that panel makes the same point
+            // with a span and a phase attached, and two cards restating one finding reads as two.
             const tips = climbAdvice(
               fundamentals.rows,
               fundamentals.heroScoped ? hero.name : "these",
+              2,
+              paceRead?.diagnosis ? FARM_LEVER_KEYS : undefined,
             );
             return tips.length === 0 ? (
               <p className="climbnote">
-                Your controllables are at or above the ladder here — play your
-                game.
+                {paceRead?.diagnosis
+                  ? "Soul pace above has the read — your fights and survival are at or above the ladder."
+                  : "Your controllables are at or above the ladder here — play your game."}
               </p>
             ) : (
               tips.map((t) => (

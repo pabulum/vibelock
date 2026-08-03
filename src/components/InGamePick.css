@@ -1,0 +1,38 @@
+@layer components {
+  /* The in-game build id, sitting in the build header's action row. Reads as one mono run so it
+     sits with the dateline's voice rather than competing with the Export/Share buttons. */
+  .ingamepick {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .ingamepick .iglabel {
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.11em;
+    color: var(--ink-3);
+  }
+  .ingamepick .igid {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: var(--accent-ui);
+    cursor: pointer;
+    border-bottom: 1px solid var(--accent-rule);
+  }
+  .ingamepick .igid:hover,
+  .ingamepick .igid:focus-visible {
+    color: var(--ink);
+    border-bottom-color: var(--ink);
+  }
+  .ingamepick .igshare {
+    font-size: 10.5px;
+    color: var(--ink-3);
+  }
+  .ingamepick .igthin {
+    color: var(--warn);
+  }
+}

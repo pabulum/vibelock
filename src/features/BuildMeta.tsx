@@ -4,12 +4,14 @@
 import "./BuildMeta.css";
 import type { Ref } from "react";
 import { SLOT_CAP } from "../lib/buildGenerator";
+import { InGamePick } from "../components/InGamePick";
 import type {
   Archetype,
   ArchetypeKey,
   ArchetypeSet,
   GeneratedBuild,
   Hero,
+  RankedCommunityBuild,
 } from "../types";
 
 export function BuildMeta(props: {
@@ -24,6 +26,10 @@ export function BuildMeta(props: {
   backfillLabel: string;
   lowPopulation: boolean;
   metaRef: Ref<HTMLDivElement>;
+  /** The community build to load in-game (lib/communityBuilds `pick`), or null. */
+  communityPick: RankedCommunityBuild | null;
+  communityPickUnvetted: boolean;
+  ourCoreCount: number;
   onOpenExport: () => void;
   onOpenShare: () => void;
 }) {
@@ -39,6 +45,9 @@ export function BuildMeta(props: {
     backfillLabel,
     lowPopulation,
     metaRef,
+    communityPick,
+    communityPickUnvetted,
+    ourCoreCount,
     onOpenExport,
     onOpenShare,
   } = props;
@@ -109,6 +118,16 @@ export function BuildMeta(props: {
               >
                 Share
               </button>
+              {/* The pragmatic alternative to exporting: an existing in-game build that already
+                  holds most of what we recommend. Sits with the actions because that's what it
+                  is — a way to get this build in front of you, not a second opinion. */}
+              {communityPick && (
+                <InGamePick
+                  pick={communityPick}
+                  unvetted={communityPickUnvetted}
+                  ourCoreCount={ourCoreCount}
+                />
+              )}
             </div>
           </div>
         </div>

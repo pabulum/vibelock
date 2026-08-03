@@ -1,0 +1,196 @@
+@layer components {
+  /* --- Soul pace: the per-phase income read, then the curve it summarises --- */
+
+  /* The verdict leads. It's the one sentence the panel exists to produce, so it sits above the
+     evidence rather than under it — and it carries meaning-colour only when there is a finding. */
+  .pace .paceverdict {
+    margin: 0 0 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ink-2);
+  }
+  .pace .paceverdict.falloff {
+    /* A fall-off is the actionable case: a hairline marker rather than a filled callout, matching
+       how the rest of the page marks significance without a card. */
+    padding-left: 9px;
+    border-left: 2px solid var(--warn);
+  }
+  .pace .paceverdict.ok {
+    color: var(--ink-3);
+  }
+
+  /* --- Phase rows: the finding, and the chart's table-view twin --- */
+
+  .pacerows {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .pacerow {
+    display: grid;
+    grid-template-columns: 62px 1fr 62px 62px;
+    align-items: center;
+    gap: 9px;
+    font-size: 12px;
+  }
+  .pacerow.pacehdr {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.11em;
+    color: var(--ink-3);
+    padding-bottom: 1px;
+  }
+  .pacerow .plabel {
+    color: var(--ink-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* The weak phase is named in the verdict; the row echoes it so the eye lands in the same place
+     the sentence points. Weight and ink, not a fill — a filled row would out-shout the verdict. */
+  .pacerow.weak .plabel {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .pacerow .pbar {
+    position: relative;
+    height: 5px;
+    background: var(--surface-2);
+    border: 1px solid var(--rule);
+  }
+  .pacerow .pbar > span {
+    display: block;
+    height: 100%;
+    background: var(--accent-ui);
+  }
+  .pacerow .pbar > span.hi {
+    background: var(--pos);
+  }
+  .pacerow .pbar > span.lo {
+    background: var(--neg);
+  }
+  .pacerow .ppop,
+  .pacerow .ppct {
+    font-family: var(--font-mono);
+    text-align: right;
+  }
+  .pacerow .ppop {
+    font-size: 10.5px;
+    color: var(--ink-3);
+  }
+  .pacerow .ppct {
+    display: flex;
+    justify-content: flex-end;
+    gap: 5px;
+    align-items: baseline;
+  }
+  .pacerow .pyou {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .pacerow .pp {
+    font-size: 10.5px;
+    color: var(--ink-3);
+  }
+
+  /* --- The curve --- */
+
+  .pacechart {
+    margin: 14px 0 0;
+  }
+  .pacechart svg {
+    display: block;
+    width: 100%;
+    height: 109px;
+    overflow: visible;
+  }
+  /* Recessive: one shade off the surface, solid, hairline. Never dashed — dashing reads as
+     "projection" when it is only an axis. */
+  .pacechart .paxis {
+    stroke: var(--rule);
+    stroke-width: 1;
+  }
+  .pacechart .pband {
+    fill: var(--surface-2);
+    stroke: none;
+  }
+  .pacechart .pmedian {
+    fill: none;
+    stroke: var(--ink-3);
+    stroke-width: 1;
+  }
+  .pacechart .pwon {
+    fill: none;
+    stroke: var(--pos);
+    stroke-width: 2;
+  }
+  .pacechart .pyouline {
+    fill: none;
+    stroke: var(--accent-ui);
+    stroke-width: 2;
+  }
+  /* A 2px surface ring rather than a border, so the endpoint marker stays legible wherever it
+     lands among the other lines. */
+  .pacechart .pdot {
+    fill: var(--accent-ui);
+    stroke: var(--surface);
+    stroke-width: 2;
+  }
+  .pacechart .ptick {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    fill: var(--ink-3);
+  }
+
+  /* Legend is always present: identity is never carried by colour alone. */
+  .pacelegend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin-top: 7px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--ink-3);
+  }
+  .pacelegend .lg {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .pacelegend .lg::before {
+    content: "";
+    width: 11px;
+    height: 2px;
+    background: currentcolor;
+  }
+  .pacelegend .lg.band::before {
+    height: 7px;
+    background: var(--surface-2);
+    border: 1px solid var(--rule);
+  }
+  .pacelegend .lg.median::before {
+    background: var(--ink-3);
+  }
+  .pacelegend .lg.won::before {
+    background: var(--pos);
+  }
+  .pacelegend .lg.you::before {
+    background: var(--accent-ui);
+  }
+
+  .pace .pacegap {
+    margin: 8px 0 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--ink-2);
+  }
+  .pace .pacegap strong {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--ink);
+  }
+}

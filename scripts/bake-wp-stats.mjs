@@ -85,6 +85,136 @@ const SRC_KEEP = [1, 2, 3, 4, 5, 6, 7, 12];
 const FARM_MIN_N = Number(process.env.FARM_MIN_N || 100); // below this a per-cell percentile is too thin to show
 const farmCells = new Map();
 
+/**
+ * A player's rank tier, or null when this shard row carries no usable rank.
+ *
+ * Reads the PER-PLAYER `average_badge` first and only falls back to the match-level team pair.
+ * That order is not a preference, it's a repair: the team-level columns went to zero upstream on
+ * 2026-07-31 (measured against /v1/sql on 2026-08-03 — every match mode, 100% of rows), and
+ * `Math.floor(0 / 10)` is a perfectly valid tier 0, so every rank-keyed cell baked after that date
+ * silently filed into "Obscurus" instead of failing. Shards older than the outage have the team
+ * columns and no per-player badge, hence the fallback.
+ *
+ * Null (rather than 0) when neither is present, so callers must decide what to do with an unranked
+ * row instead of inheriting a bucket that looks real. Badge 0 is itself "no ranked result yet" and
+ * is treated the same way.
+ */
+function tierOfPlayer(p, m) {
+  const badge =
+    p.average_badge ||
+    (p.team === "Team0" ? m.average_badge_team0 : m.average_badge_team1) ||
+    0;
+  return badge > 0 ? Math.floor(badge / 10) : null;
+}
+
+// --- Soul pace: how a hero's net worth accumulates at a rank, and where a player falls off it ---
+//
+// Two different questions, so two different accumulators:
+//   levels — net worth AT a tick, for the curve a single game is plotted against.
+//   rates  — souls/min WITHIN a phase window, for the diagnosis. These are not derivable from the
+//            levels: the percentile of a difference is not the difference of percentiles, and the
+//            whole point is to find the one phase where a player's income falls off a cliff that a
+//            whole-game average hides.
+//
+// Both are kept as fixed-width histograms rather than sample arrays. A 30-day window is ~3.2M
+// player-rows; retaining values to percentile at the end would be hundreds of MB, while a
+// histogram is ~14KB per (hero, tier) cell and streams exactly. Bucket widths are far below the
+// noise floor of what the client displays.
+//
+// SURVIVORSHIP, stated once and carried into the UI: a tick is only recorded for games that
+// actually REACHED it, so the 32-minute band describes games that lasted 32 minutes — a biased,
+// closer-fought subset. That's unavoidable (there is no net worth at t for a game that ended at
+// t-1) and it is why the client labels the curve "games that got this far" rather than "games".
+const PACE_TICKS = [240, 480, 720, 960, 1200, 1440, 1680, 1920, 2160];
+// Windows match the build's own phase columns so a weak phase here names the same span as the
+// column of items that phase is supposed to buy. The geometry is src/lib/phases.ts
+// (FLOW_PHASE_INTERVAL_S = 600, four columns) — mirrored as a literal because scripts/ deliberately
+// shares no code with src/, the same way harvest-matches.mjs mirrors RANKED_MODE_FROM_S. If the
+// flow interval is ever retuned, this moves with it or the labels go back to being a fiction.
+const PACE_WINDOWS = [
+  [0, 600],
+  [600, 1200],
+  [1200, 1800],
+  [1800, 2400],
+];
+// Ceilings sit well clear of the observed tails on purpose: a histogram that saturates reports its
+// top bucket as the answer for every percentile above the clip, which reads as a real number and
+// is not one. Measured against a full day: p90 net worth peaks ~44k at 36 min and p90 rate ~1.6k
+// souls/min in the 30-40 window, so both ceilings are roughly double the live tail.
+const LEVEL_BUCKET = 100; // souls
+const LEVEL_BUCKETS = 900; // → 0…90,000 souls
+const RATE_BUCKET = 5; // souls/min
+const RATE_BUCKETS = 600; // → 0…3,000 souls/min
+const PACE_MIN_N = Number(process.env.PACE_MIN_N || 200);
+// Levels carry a narrower grid than rates on purpose. The level curve is DRAWN — it needs a band
+// (p25–p75) and a median, and the winner/loser means alongside say more about pace than a p10 tail
+// would. The window rates are INTERPOLATED against, to place a player's phase on the ladder, and
+// that wants the wider grid so the tails don't clamp. Every cell is paid for on every page load.
+const LEVEL_PCTS = [25, 50, 75];
+const RATE_PCTS = [10, 25, 50, 75, 90];
+
+// key `heroId * 100 + tier` → { hist, levelN, rateN, winSum, winN }
+const paceCells = new Map();
+const paceCell = (key) => {
+  let c = paceCells.get(key);
+  if (!c)
+    paceCells.set(
+      key,
+      (c = {
+        // One flat array: the tick levels first, then the window rates.
+        hist: new Uint32Array(
+          PACE_TICKS.length * LEVEL_BUCKETS +
+            PACE_WINDOWS.length * RATE_BUCKETS,
+        ),
+        levelN: new Uint32Array(PACE_TICKS.length),
+        rateN: new Uint32Array(PACE_WINDOWS.length),
+        // Mean level at each tick split by outcome — the "winning pace" line drawn over the
+        // percentile band. Means, not percentiles: two numbers per tick instead of a histogram,
+        // and the line only has to show the gap, not support a placement.
+        winSum: new Float64Array(PACE_TICKS.length),
+        winN: new Uint32Array(PACE_TICKS.length),
+        lossSum: new Float64Array(PACE_TICKS.length),
+        lossN: new Uint32Array(PACE_TICKS.length),
+      }),
+    );
+  return c;
+};
+const RATE_OFFSET = PACE_TICKS.length * LEVEL_BUCKETS;
+
+// --- Lane matchups: the hero-vs-hero read the analytics API genuinely cannot answer ---
+//
+// `assigned_lane` is harvested per player and until now was read by nothing. Lanes are 2v2 (three
+// lanes, twelve players — verified against /v1/sql), so a raw "hero A vs hero B" net-worth
+// differential is contaminated by both lane PARTNERS. Reporting that raw number would rediscover
+// "Seven farms well" once per opponent, which is the same mistake the counter matrix makes before
+// Bradley-Terry de-noising (lib/matchups).
+//
+// So the same shape of fix: fit an additive per-hero lane strength by least squares over every lane
+// instance (+1 for each hero on side A, −1 for each on side B, target = the soul differential at
+// 10 minutes), then report each PAIR as its residual against what strengths alone predict. What
+// survives is genuine lane rock-paper-scissors rather than farm ability.
+//
+// Normal equations are accumulated on the fly — X'X is only heroes², so the fit costs one small
+// solve at the end and no per-instance storage at all.
+const LANE_TICK = 600; // the 10-minute mark: laning is over, the differential is the lane's result
+const LANE_MIN_DURATION = 700; // a game must have actually reached the tick
+const LANE_MIN_N = Number(process.env.LANE_MIN_N || 200);
+const LANE_SHRINK_K = Number(process.env.LANE_SHRINK_K || 300); // pair evidence worth K observations
+const LANE_RIDGE = 1e-3;
+const heroIds = [...heroName.keys()].sort((a, b) => a - b);
+const heroIdx = new Map(heroIds.map((id, i) => [id, i]));
+const NH = heroIds.length;
+const laneXtX = new Float64Array(NH * NH);
+const laneXty = new Float64Array(NH);
+// ordered pair key `aIdx * NH + bIdx` → { n, sum }
+const lanePairs = new Map();
+let laneObs = 0;
+
+// Rank coverage, tracked so the badge outage that motivated `tierOfPlayer` can never recur
+// silently: a bake where every row lands in one tier is a broken bake, not a converged ladder.
+const tierCounts = new Map();
+let ranklessRows = 0;
+
 const shardFiles = readdirSync(SHARDS_DIR)
   .filter((f) => f.endsWith(".ndjson.gz"))
   .sort();
@@ -134,18 +264,113 @@ for (const f of shardFiles) {
         pWon.push(won);
       }
       // Economy sample (subsampled matches only): file each source's gold/min under (hero, tier).
-      if (p.gold_src) {
-        const badge =
-          (p.team === "Team0"
-            ? m.average_badge_team0
-            : m.average_badge_team1) ?? 0;
-        const tier = Math.floor(badge / 10);
+      // A rankless row is skipped rather than pooled — a norm the client labels "at Oracle" has to
+      // actually be Oracle's.
+      const tier = tierOfPlayer(p, m);
+      if (tier === null) ranklessRows++;
+      else tierCounts.set(tier, (tierCounts.get(tier) ?? 0) + 1);
+      if (p.gold_src && tier !== null) {
         const key = p.hero_id * 100 + tier;
         let cell = farmCells.get(key);
         if (!cell) farmCells.set(key, (cell = {}));
         for (const src of SRC_KEEP) {
           (cell[src] ??= []).push((p.gold_src[src] ?? 0) / mins);
         }
+      }
+
+      // Soul pace: this player's own net-worth curve, bucketed under (hero, tier).
+      if (tier !== null) {
+        const ts = [0, ...(p.nw_times_s ?? [])];
+        const nw = [0, ...(p.nw_series ?? [])];
+        if (nw.length > 1) {
+          const cell = paceCell(p.hero_id * 100 + tier);
+          for (let i = 0; i < PACE_TICKS.length; i++) {
+            const t = PACE_TICKS[i];
+            if (t > dur) break; // never extrapolate past the game's own end
+            const v = interp(t, ts, nw);
+            const b = Math.min(
+              LEVEL_BUCKETS - 1,
+              Math.max(0, (v / LEVEL_BUCKET) | 0),
+            );
+            cell.hist[i * LEVEL_BUCKETS + b]++;
+            cell.levelN[i]++;
+            if (won) {
+              cell.winSum[i] += v;
+              cell.winN[i]++;
+            } else {
+              cell.lossSum[i] += v;
+              cell.lossN[i]++;
+            }
+          }
+          for (let w = 0; w < PACE_WINDOWS.length; w++) {
+            const [a, b] = PACE_WINDOWS[w];
+            if (b > dur) break; // a partially-played window is a lower rate, not a slower player
+            const rate =
+              ((interp(b, ts, nw) - interp(a, ts, nw)) / (b - a)) * 60;
+            const rb = Math.min(
+              RATE_BUCKETS - 1,
+              Math.max(0, (rate / RATE_BUCKET) | 0),
+            );
+            cell.hist[RATE_OFFSET + w * RATE_BUCKETS + rb]++;
+            cell.rateN[w]++;
+          }
+        }
+      }
+    }
+
+    // Lane matchups: one observation per (lane, cross-team hero pair) at the 10-minute mark.
+    if (dur >= LANE_MIN_DURATION) {
+      const byLane = new Map();
+      for (const p of m.players) {
+        if (p.assigned_lane == null || !heroIdx.has(p.hero_id)) continue;
+        let l = byLane.get(p.assigned_lane);
+        if (!l) byLane.set(p.assigned_lane, (l = { Team0: [], Team1: [] }));
+        (p.team === "Team0" ? l.Team0 : l.Team1).push(p);
+      }
+      for (const l of byLane.values()) {
+        // Only a clean, symmetric lane. An uneven lane is a roam or a disconnect, and its
+        // differential says nothing about the matchup that was drafted.
+        if (l.Team0.length !== 2 || l.Team1.length !== 2) continue;
+        const nwAt = (p) =>
+          interp(
+            LANE_TICK,
+            [0, ...(p.nw_times_s ?? [])],
+            [0, ...(p.nw_series ?? [])],
+          );
+        const a0 = l.Team0.map(nwAt);
+        const b0 = l.Team1.map(nwAt);
+        const diff = a0[0] + a0[1] - (b0[0] + b0[1]);
+        // Normal-equation row: +1 per side-A hero, −1 per side-B hero. Mirrored (the row and its
+        // negation are both valid observations) so the fit can't learn a side bias.
+        const ia = l.Team0.map((p) => heroIdx.get(p.hero_id));
+        const ib = l.Team1.map((p) => heroIdx.get(p.hero_id));
+        for (const i of ia) {
+          laneXty[i] += diff;
+          for (const j of ia) laneXtX[i * NH + j] += 1;
+          for (const j of ib) laneXtX[i * NH + j] -= 1;
+        }
+        for (const i of ib) {
+          laneXty[i] -= diff;
+          for (const j of ib) laneXtX[i * NH + j] += 1;
+          for (const j of ia) laneXtX[i * NH + j] -= 1;
+        }
+        laneObs++;
+        // Per-pair means. Each cross pair gets the LANE's differential, not a two-player slice of
+        // it: souls in a 2v2 lane are a joint outcome, so attributing the whole differential to
+        // each pairing and letting the additive fit remove the partner is the honest split.
+        for (let x = 0; x < 2; x++)
+          for (let y = 0; y < 2; y++) {
+            const key = ia[x] * NH + ib[y];
+            let pr = lanePairs.get(key);
+            if (!pr) lanePairs.set(key, (pr = { n: 0, sum: 0 }));
+            pr.n++;
+            pr.sum += diff;
+            const rev = ib[y] * NH + ia[x];
+            let rp = lanePairs.get(rev);
+            if (!rp) lanePairs.set(rev, (rp = { n: 0, sum: 0 }));
+            rp.n++;
+            rp.sum -= diff;
+          }
       }
     }
   }
@@ -313,6 +538,177 @@ for (const [key, cell] of farmCells) {
   }
 }
 
+// --- Soul pace: histograms → percentile grids ---
+
+/** The value at percentile `q` of a histogram slice, by cumulative count. Returns the bucket's
+ * MIDPOINT, so a reading is never biased to the low edge of its bucket. */
+function histPercentile(hist, offset, buckets, width, total, q) {
+  const want = (q / 100) * total;
+  let seen = 0;
+  for (let b = 0; b < buckets; b++) {
+    seen += hist[offset + b];
+    if (seen >= want) return Math.round((b + 0.5) * width);
+  }
+  return Math.round((buckets - 0.5) * width);
+}
+
+const paceNorms = {};
+let paceCellsEmitted = 0;
+// Saturation watch: mass sitting in a histogram's LAST bucket is mass that was clipped, and a
+// clipped percentile is indistinguishable from a real one downstream. Tallied so a shifting meta
+// (longer games, richer late economy) reports the ceiling it outgrew instead of quietly flattening
+// every high percentile onto it.
+let clipped = 0;
+let clippedOf = 0;
+// Positional arrays against shared axes, not self-describing objects: the tick bounds, window
+// bounds and field names are identical for every cell, so repeating them a few hundred times is
+// pure transfer cost on a file every session fetches. A tick under PACE_MIN_N emits null in place
+// rather than being dropped, so the arrays stay index-aligned with the shared `ticksS` axis.
+for (const [key, cell] of paceCells) {
+  const hero = Math.floor(key / 100);
+  const tier = key % 100;
+  const n = [];
+  const lv = [];
+  const won = [];
+  const lost = [];
+  let anyTick = false;
+  for (let i = 0; i < PACE_TICKS.length; i++) {
+    const cnt = cell.levelN[i];
+    if (cnt < PACE_MIN_N) {
+      n.push(0);
+      lv.push(null);
+      won.push(null);
+      lost.push(null);
+      continue;
+    }
+    anyTick = true;
+    clipped += cell.hist[i * LEVEL_BUCKETS + (LEVEL_BUCKETS - 1)];
+    clippedOf += cnt;
+    n.push(cnt);
+    lv.push(
+      LEVEL_PCTS.map((q) =>
+        histPercentile(
+          cell.hist,
+          i * LEVEL_BUCKETS,
+          LEVEL_BUCKETS,
+          LEVEL_BUCKET,
+          cnt,
+          q,
+        ),
+      ),
+    );
+    // Mean level among winners / losers at this tick — the pace gap, drawn over the band.
+    won.push(cell.winN[i] ? Math.round(cell.winSum[i] / cell.winN[i]) : null);
+    lost.push(
+      cell.lossN[i] ? Math.round(cell.lossSum[i] / cell.lossN[i]) : null,
+    );
+  }
+  const wn = [];
+  const rt = [];
+  let anyWindow = false;
+  for (let w = 0; w < PACE_WINDOWS.length; w++) {
+    const cnt = cell.rateN[w];
+    if (cnt < PACE_MIN_N) {
+      wn.push(0);
+      rt.push(null);
+      continue;
+    }
+    anyWindow = true;
+    clipped += cell.hist[RATE_OFFSET + w * RATE_BUCKETS + (RATE_BUCKETS - 1)];
+    clippedOf += cnt;
+    wn.push(cnt);
+    rt.push(
+      RATE_PCTS.map((q) =>
+        histPercentile(
+          cell.hist,
+          RATE_OFFSET + w * RATE_BUCKETS,
+          RATE_BUCKETS,
+          RATE_BUCKET,
+          cnt,
+          q,
+        ),
+      ),
+    );
+  }
+  if (anyTick && anyWindow) {
+    paceNorms[`${hero}:${tier}`] = { n, lv, won, lost, wn, rt };
+    paceCellsEmitted++;
+  }
+}
+
+// --- Lane matchups: solve the additive fit, then report pair residuals ---
+//
+// (X'X + λI)s = X'y by Gaussian elimination with partial pivoting. X'X is only heroes², and the
+// ridge term also fixes the rank deficiency the design has by construction: adding a constant to
+// every hero's strength leaves every differential unchanged, so the unpenalized system is singular.
+function solveRidge(A, b, n, lambda) {
+  const M = new Float64Array(n * (n + 1));
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) M[i * (n + 1) + j] = A[i * n + j];
+    M[i * (n + 1) + i] += lambda * (A[i * n + i] || 1);
+    M[i * (n + 1) + n] = b[i];
+  }
+  for (let col = 0; col < n; col++) {
+    let piv = col;
+    for (let r = col + 1; r < n; r++)
+      if (Math.abs(M[r * (n + 1) + col]) > Math.abs(M[piv * (n + 1) + col]))
+        piv = r;
+    if (Math.abs(M[piv * (n + 1) + col]) < 1e-9) continue;
+    if (piv !== col)
+      for (let j = col; j <= n; j++) {
+        const t = M[col * (n + 1) + j];
+        M[col * (n + 1) + j] = M[piv * (n + 1) + j];
+        M[piv * (n + 1) + j] = t;
+      }
+    const d = M[col * (n + 1) + col];
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const f = M[r * (n + 1) + col] / d;
+      if (!f) continue;
+      for (let j = col; j <= n; j++)
+        M[r * (n + 1) + j] -= f * M[col * (n + 1) + j];
+    }
+  }
+  const s = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const d = M[i * (n + 1) + i];
+    s[i] = Math.abs(d) < 1e-9 ? 0 : M[i * (n + 1) + n] / d;
+  }
+  return s;
+}
+
+const laneStrength = laneObs
+  ? solveRidge(laneXtX, laneXty, NH, LANE_RIDGE)
+  : new Float64Array(NH);
+// Centre the strengths: only differences are identified, so an arbitrary offset would otherwise
+// ride along and make the per-hero number unreadable.
+const laneMean = laneStrength.reduce((s, v) => s + v, 0) / (NH || 1);
+for (let i = 0; i < NH; i++) laneStrength[i] -= laneMean;
+
+const laneMatchups = {};
+let lanePairsEmitted = 0;
+for (const [key, pr] of lanePairs) {
+  if (pr.n < LANE_MIN_N) continue;
+  const ai = Math.floor(key / NH);
+  const bi = key % NH;
+  const observed = pr.sum / pr.n;
+  const predicted = laneStrength[ai] - laneStrength[bi];
+  // Shrunk toward "the strengths already explain it" — a thin pair reports no rock-paper-scissors
+  // rather than a loud one.
+  const resid = (observed - predicted) * (pr.n / (pr.n + LANE_SHRINK_K));
+  // [n, rawDiff, residual] — a tuple rather than a keyed object, for the same transfer reason the
+  // pace cells are positional: this is ~1,200 pairs on a file fetched every session.
+  (laneMatchups[heroIds[ai]] ??= {})[heroIds[bi]] = [
+    pr.n,
+    Math.round(observed),
+    Math.round(resid),
+  ];
+  lanePairsEmitted++;
+}
+const laneStrengths = {};
+for (let i = 0; i < NH; i++)
+  laneStrengths[heroIds[i]] = Math.round(laneStrength[i]);
+
 const out = {
   generatedAt: new Date().toISOString(),
   window: {
@@ -334,6 +730,27 @@ const out = {
   // Percentile grid the farmNorms arrays correspond to (so the client interpolates correctly).
   farmPcts: FARM_PCTS,
   farmNorms,
+  // Soul pace. Axes are shared by every cell; `cells` is keyed "heroId:tier" like farmNorms, and
+  // each cell's arrays are index-aligned with those axes (null = under the sample floor at that
+  // index). See the accumulator block for the survivorship caveat the client has to carry.
+  pace: {
+    ticksS: PACE_TICKS,
+    windowsS: PACE_WINDOWS,
+    levelPcts: LEVEL_PCTS,
+    ratePcts: RATE_PCTS,
+    minN: PACE_MIN_N,
+    cells: paceNorms,
+  },
+  // Lane matchups. `strengths` is the fitted additive per-hero lane strength (souls at the tick,
+  // centred on 0); `matchups[a][b]` is the ordered pair a-vs-b as [n, rawDiff, residual], where the
+  // residual is what survives removing both heroes' strengths — the actual matchup signal.
+  lane: {
+    tickS: LANE_TICK,
+    obs: laneObs,
+    minN: LANE_MIN_N,
+    strengths: laneStrengths,
+    matchups: laneMatchups,
+  },
 };
 writeFileSync(OUT, JSON.stringify(out) + "\n");
 console.log(
@@ -345,3 +762,42 @@ console.log(
 console.log(
   `farm norms: ${farmCellsEmitted} (hero,tier) cells emitted from ${farmSamplesTotal} economy samples`,
 );
+console.log(
+  `pace norms: ${paceCellsEmitted} (hero,tier) cells emitted` +
+    (clippedOf
+      ? `, ${((clipped / clippedOf) * 100).toFixed(3)}% of observations in a top bucket`
+      : ""),
+);
+if (clippedOf && clipped / clippedOf > 0.005)
+  console.warn(
+    `WARN: ${((clipped / clippedOf) * 100).toFixed(2)}% of pace observations clipped to a ceiling —\n` +
+      `raise LEVEL_BUCKETS / RATE_BUCKETS, or every percentile above the clip is reporting the ceiling.`,
+  );
+console.log(
+  `lane: ${laneObs} lane instances, ${lanePairsEmitted} hero pairs past n=${LANE_MIN_N}`,
+);
+
+// --- Rank-coverage guard ---
+//
+// The bake that motivated `tierOfPlayer` failed silently for days: upstream zeroed the badge, every
+// row filed into a valid-looking tier 0, and the output stayed the right SHAPE the whole time. A
+// fixture cannot catch that and neither can the schema, so the invariant is asserted here, where
+// the numbers actually are. Loud and non-zero-exit: a bad bake must not overwrite a good one.
+const rankedRows = [...tierCounts.values()].reduce((s, n) => s + n, 0);
+const topTierShare = rankedRows
+  ? Math.max(...tierCounts.values()) / rankedRows
+  : 0;
+console.log(
+  `rank coverage: ${tierCounts.size} tiers populated, ${ranklessRows} rankless rows, ` +
+    `largest tier holds ${(topTierShare * 100).toFixed(1)}%`,
+);
+if (rankedRows === 0 || tierCounts.size < 3 || topTierShare > 0.9) {
+  console.error(
+    `\nFATAL: rank signal looks broken — ${tierCounts.size} tier(s) populated, ` +
+      `largest holds ${(topTierShare * 100).toFixed(1)}% of ${rankedRows} ranked rows.\n` +
+      `This is what the 2026-07-31 average_badge outage looked like. Check that shards carry a\n` +
+      `per-player average_badge (harvest-matches.mjs ROW_COLUMNS) before trusting any rank-keyed\n` +
+      `cell in this file.`,
+  );
+  process.exit(1);
+}

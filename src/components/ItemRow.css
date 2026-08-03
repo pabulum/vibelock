@@ -110,6 +110,12 @@
   .line2 .n {
     color: var(--ink-3);
   }
+  /* The buy-time clock. Quietest thing on the line — it's a pace marker you glance at, not a
+     number you compare rows on, so it sits below even the sample count's weight. */
+  .line2 .buyat {
+    color: var(--ink-3);
+    opacity: 0.85;
+  }
   .why {
     margin-top: 4px;
     font-size: 11.5px;

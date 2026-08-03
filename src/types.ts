@@ -398,6 +398,18 @@ export interface CommunityMatch {
   aligned: RankedCommunityBuild | null;
   /** True when the best-performing build is also the closest to ours (strong signal). */
   agree: boolean;
+  /**
+   * The build to actually load in-game: the closest item set to ours that isn't a loser. This is a
+   * PRACTICAL pick, not a recommendation — its job is to pre-stock the in-game shop with items we
+   * recommend (and carry a skill order) so a game can be played off it without digging through the
+   * full item list. Ranked by overlap, never by win rate: the winningest build is no use if half
+   * its items aren't ours.
+   */
+  pick: RankedCommunityBuild | null;
+  /** True when no build cleared the sample/win-rate floor and `pick` is the closest match
+   * regardless — so the UI can say "closest, but lightly played" instead of implying a vetting
+   * that didn't happen. */
+  pickUnvetted: boolean;
 }
 
 /** One row of /v1/analytics/badge-distribution — how many matches sat at a given average badge. */

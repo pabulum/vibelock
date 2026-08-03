@@ -108,3 +108,46 @@
     color: var(--ink-2);
   }
 }
+
+@layer components {
+  /* --- Lane matchup chips --- */
+
+  /* Its own label colour: this row answers a different question from Tough/Favored above (lane
+     souls, not whole-game win rate), and sharing their colour would imply it's the same measure
+     at a different threshold. */
+  .matchups .lbl.lane {
+    color: var(--warn);
+  }
+  .lanechip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 6px 2px 2px;
+    border: 1px solid var(--rule);
+    background: none;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  .lanechip:hover,
+  .lanechip:focus-visible {
+    border-color: var(--rule-strong);
+    color: var(--ink);
+  }
+  .lanechip.active {
+    border-color: var(--accent-rule);
+    color: var(--ink);
+  }
+  .lanechip img {
+    width: 18px;
+    height: 18px;
+    border-radius: var(--r-pill);
+    object-fit: cover;
+  }
+  /* The soul differential. Negative by construction in this row (it's the "loses lane" list), so
+     the sign carries the meaning and the colour only reinforces it. */
+  .lanechip .ldiff {
+    color: var(--neg);
+  }
+}
