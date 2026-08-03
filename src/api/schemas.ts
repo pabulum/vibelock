@@ -80,7 +80,7 @@ export const HeroBuildStatRowSchema = v.object({
 });
 export type HeroBuildStatRow = v.InferOutput<typeof HeroBuildStatRowSchema>;
 
-/** One row from /v1/players/{account_id}/hero-stats — the player's own record on one hero. */
+/** One row from /v1/players/hero-stats — the player's own all-time record on one hero. */
 export const PlayerHeroStatSchema = v.object({
   hero_id: v.number(),
   matches_played: v.number(),

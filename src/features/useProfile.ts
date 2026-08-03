@@ -325,11 +325,17 @@ export function useProfile(opts: {
       };
 
       const [me, ladder] = await Promise.all([
-        getPlayerMetrics({
-          accountIds: [accountId!],
-          heroId: hero!.id,
-          ...(heroWin ? { minUnixTimestamp: heroWin.minUnixTimestamp } : {}),
-        }).catch(() => ({})),
+        // No window means no games on this hero, and the rows are dropped below in that case — so
+        // skip the request rather than spend one on the endpoint's default window. This is the
+        // common path while browsing: every hero you've never played used to cost a round trip
+        // whose answer was thrown away.
+        heroWin
+          ? getPlayerMetrics({
+              accountIds: [accountId!],
+              heroId: hero!.id,
+              minUnixTimestamp: heroWin.minUnixTimestamp,
+            }).catch(() => ({}))
+          : Promise.resolve({}),
         getPlayerMetrics({
           heroId: hero!.id,
           ...climbBadges,
@@ -341,11 +347,15 @@ export function useProfile(opts: {
       let usedWindow = heroWin;
       if (rows.length === 0) {
         // Too few recent games on this hero — benchmark the account's recent all-hero play instead.
+        // No window here means the account has no match history at all, so there's nothing to ask
+        // about; `fundamentalsRows` turns the empty metrics into no rows and the card stays hidden.
         const allWin = recentWindow(history, null, recentGames);
-        const meAll = await getPlayerMetrics({
-          accountIds: [accountId!],
-          ...(allWin ? { minUnixTimestamp: allWin.minUnixTimestamp } : {}),
-        }).catch(() => ({}));
+        const meAll = allWin
+          ? await getPlayerMetrics({
+              accountIds: [accountId!],
+              minUnixTimestamp: allWin.minUnixTimestamp,
+            }).catch(() => ({}))
+          : {};
         rows = fundamentalsRows(meAll, ladder);
         heroScoped = false;
         usedWindow = allWin;

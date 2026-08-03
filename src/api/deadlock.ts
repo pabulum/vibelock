@@ -867,6 +867,20 @@ export function getHeroCounters(
 }
 
 // ---- Player profile (public data; the id is the Steam userdata/<id> account number) ----
+//
+// These deliberately use plain `getJson`, NOT `getAnalytics`, even though they're small GETs like
+// everything else. Two reasons, and they both come down to what the analytics fetcher is for:
+//
+//  - It caches by URL with staleTime Infinity *and* persists to IndexedDB for six hours. That's
+//    right for a ladder slice (account-independent, identical for every visitor, expensive to
+//    recompute) and wrong for a person: you'd finish a game, reload, and find your record and rank
+//    frozen where they were this morning. Here the feature query owns the policy instead — it
+//    re-reads on a fresh load, which is the honest answer for "how am I doing".
+//  - Its concurrency cap exists to keep a click-burst under the analytics family's shared
+//    200req/min. The player endpoints are on a separate, far looser budget (100req/s), so making
+//    them queue behind five build requests only delays the profile for no benefit.
+//
+// `getPlayerMatchHistory` below already worked this way; these now match it.
 
 const PlayerHeroStatsSchema = v.array(PlayerHeroStatSchema);
 
@@ -879,7 +893,7 @@ const PlayerHeroStatsSchema = v.array(PlayerHeroStatSchema);
 export function getPlayerHeroStats(
   accountId: number,
 ): Promise<PlayerHeroStat[]> {
-  return getAnalytics(
+  return getJson(
     `${BASE}/v1/players/hero-stats?account_ids=${accountId}`,
     PlayerHeroStatsSchema,
   );
@@ -888,10 +902,18 @@ export function getPlayerHeroStats(
 const SteamPlayerMatchesSchema = v.array(SteamPlayerMatchSchema);
 
 /** Search Steam profiles (with Deadlock presence) by display name — server-side, no Steam login.
- * Names collide freely; treat results as candidates to disambiguate, not an answer. */
+ * Names collide freely; treat results as candidates to disambiguate, not an answer.
+ *
+ * `min_matches_played_last_30d=0` overrides the API's default of 5, which silently drops anyone who
+ * hasn't played this month — i.e. exactly the returning player most likely to be looking themselves
+ * up here. Ordering already leans on activity (`matches_played_weight`), so the quiet accounts sort
+ * below the busy ones rather than crowding them out. */
 export function searchSteamPlayers(query: string): Promise<SteamPlayerMatch[]> {
-  const params = new URLSearchParams({ search_query: query });
-  return getAnalytics(
+  const params = new URLSearchParams({
+    search_query: query,
+    min_matches_played_last_30d: "0",
+  });
+  return getJson(
     `${BASE}/v1/players/steam-search?${params}`,
     SteamPlayerMatchesSchema,
   );
@@ -907,7 +929,7 @@ export function searchSteamPlayers(query: string): Promise<SteamPlayerMatch[]> {
 export async function getPlayerRankTier(
   accountId: number,
 ): Promise<number | null> {
-  const { rank } = await getAnalytics(
+  const { rank } = await getJson(
     `${BASE}/v1/players/${accountId}/rank`,
     PlayerRankSchema,
   );
