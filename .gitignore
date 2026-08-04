@@ -25,3 +25,7 @@ dist-ssr
 *.sw?
 # Lighthouse CI reports (npx @lhci/cli autorun — see lighthouserc.cjs); uploaded as a CI artifact.
 .lighthouseci
+
+# Local death-map bake for dev preview (see src/api/deathMap.ts). The real one is published to
+# the data branch by the nightly harvest.
+public/death-map.json

@@ -23,6 +23,7 @@ import badgeDistribution from "./fixtures/badgeDistribution.json";
 import matchMetadata from "./fixtures/matchMetadata.json";
 import playerMetrics from "./fixtures/playerMetrics.json";
 import wpStats from "./fixtures/wpStats.json";
+import deathMap from "./fixtures/deathMap.json";
 import { setAnalyticsCacheEnabled } from "../lib/idbCache";
 
 const routes: Array<[RegExp, unknown]> = [
@@ -44,6 +45,7 @@ const routes: Array<[RegExp, unknown]> = [
   // Match view is the only place that reads this, and it reads the same shape whatever the id.
   [/^\/v1\/matches\/\d+\/metadata$/, matchMetadata],
   [/\/wp-stats\.json$/, wpStats],
+  [/\/death-map\.json$/, deathMap],
 ];
 
 /**

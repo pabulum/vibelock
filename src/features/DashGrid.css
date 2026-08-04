@@ -14,12 +14,13 @@
      no farm data yet). `break-inside: avoid` keeps a card whole rather than splitting it. */
   .dash {
     padding: 18px var(--gutter) 4px;
-  }
-  @media (min-width: 900px) {
-    .dash {
-      column-count: 2;
-      column-gap: 34px;
-    }
+    /* A COLUMN WIDTH, not a column count: every card here is prose, labelled rows and one chart,
+       all of which have a natural measure. `column-count: 2` honours that at 1400px and betrays it
+       at 3600, where each card becomes a half-screen band with a 1,500px-long percentile bar — no
+       more informative than a 400px one, just harder to read across. A width lets the columns
+       MULTIPLY on a wide screen instead of stretching, so the page still fills the glass. */
+    columns: 34em;
+    column-gap: 34px;
   }
   .dash > * {
     break-inside: avoid;
@@ -30,6 +31,8 @@
   .dash > .skills,
   .dash > .fundamentals,
   .dash > .economy,
+  .dash > .pace,
+  .dash > .sessioncard,
   .dash > .climbcard,
   .dash > .community {
     margin: 0 0 22px;

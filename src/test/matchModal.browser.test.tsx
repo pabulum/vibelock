@@ -147,3 +147,93 @@ test("a losing seat is reported as a loss", async () => {
     LOSER.kda,
   );
 });
+
+// The death-map fixture is a real bake: 4.17M ranked deaths over 3 days, gridded by
+// scripts/bake-death-map.mjs, so the shading these tests render is the shipped quantity rather than
+// a stand-in. Its row 0 is the TOP of the map — see lib/deathMap.DeathDensity for why that
+// convention is pinned in both the bake and the client instead of inferred.
+test("the death map plots real positions and names no places", async () => {
+  // Pocket died 9 times in this game, 6 of them close together — the case the cluster read exists
+  // for. Pinned to that seat rather than a generic one so the assertion is about real geometry.
+  await openMatch();
+  await expect
+    .element(page.getByRole("heading", { name: "Whose game is it?" }), BAKE)
+    .toBeVisible();
+  await userEvent.click(seat(LOSER));
+
+  await expect
+    .element(page.getByRole("heading", { name: "Deaths" }), BAKE)
+    .toBeVisible();
+
+  const map = document.querySelector(".deathmap");
+  expect(map).toBeTruthy();
+
+  // Every death with a position is drawn. These come from `death_pos`, which the schema silently
+  // dropped until the map needed it — if that regresses, the dots vanish and this fails.
+  const dots = map!.querySelectorAll(".dmdot");
+  expect(dots).toHaveLength(9);
+
+  // The population underlay decoded from the baked grid (base64 → bytes → cells).
+  expect(map!.querySelectorAll(".dmdensity rect").length).toBeGreaterThan(50);
+
+  // Killer positions render as direction leaders.
+  expect(map!.querySelectorAll(".dmfrom").length).toBeGreaterThan(0);
+
+  // This seat's deaths concentrate, so the repeat-spot ring and its read must both appear.
+  expect(map!.querySelector(".dmcluster")).toBeTruthy();
+  const insight = map!.querySelector(".dminsight")?.textContent ?? "";
+  expect(insight).toMatch(/deaths happened within/);
+
+  // The map reference: both teams' structures (2 cores + 2×3 tier-1 + 2×3 tier-2), the midline, and
+  // the two half labels that carry the orientation in text rather than by shape alone.
+  expect(map!.querySelectorAll(".dmlm")).toHaveLength(14);
+  expect(map!.querySelector(".dmmid")).toBeTruthy();
+  // The map's silhouette: three zipline routes, drawn in our own ink from baked world coordinates
+  // rather than as game art.
+  expect(map!.querySelectorAll(".dmzip path")).toHaveLength(3);
+  expect(map!.textContent ?? "").toMatch(/YOUR HALF/);
+  expect(map!.textContent ?? "").toMatch(/THEIR HALF/);
+
+  // With a frame loaded the repeat spot is NAMED, and the name is one of the derived vocabulary.
+  expect(insight).toMatch(/(your|their) (tier-1|tier-2|base)|half|midline/);
+
+  // THE constraint, unchanged in substance: a place may be named only when the name is derived —
+  // a measured structure, or a property of the oriented display. Community geography stays out,
+  // because nothing in the data locates it and a confident wrong name is worse than none.
+  expect(map!.textContent ?? "").not.toMatch(
+    /\b(jungle|river|mid lane|top lane|bot lane|fountain|high ground|flank)\b/i,
+  );
+
+  // Time spent dead is surfaced — a count becomes a cost.
+  expect(document.querySelector(".matchdeaths")?.textContent).toMatch(
+    /spent dead/,
+  );
+
+  expect(document.querySelector(".crash")).toBeNull();
+  expect(api.unmatched).toEqual([]);
+});
+
+test("the phase filter re-slices the map", async () => {
+  await openMatch();
+  await expect
+    .element(page.getByRole("heading", { name: "Whose game is it?" }), BAKE)
+    .toBeVisible();
+  await userEvent.click(seat(LOSER));
+  await expect
+    .element(page.getByRole("heading", { name: "Deaths" }), BAKE)
+    .toBeVisible();
+
+  const map = document.querySelector(".deathmap")!;
+  const all = map.querySelectorAll(".dmdot").length;
+
+  // Filtering to one phase must draw strictly fewer dots — this seat did not die entirely inside
+  // any single phase, so a filter that silently did nothing would fail here.
+  const lane = [
+    ...map.querySelectorAll<HTMLButtonElement>(".dmfilter button"),
+  ].find((b) => b.textContent?.startsWith("Lane"))!;
+  await userEvent.click(lane);
+  const laneDots = document
+    .querySelector(".deathmap")!
+    .querySelectorAll(".dmdot").length;
+  expect(laneDots).toBeLessThan(all);
+});

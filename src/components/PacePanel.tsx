@@ -19,6 +19,7 @@
 import "./PacePanel.css";
 import type { PaceDiagnosis, PaceProfile, PaceWindowRead } from "../lib/pace";
 import { paceInsight } from "../lib/pace";
+import { useMeasuredWidth } from "./useMeasuredWidth";
 
 /** Your net worth at the profile's own tick grid — index-aligned with `profile.ticks`. */
 export interface PaceCurve {
@@ -33,7 +34,12 @@ const souls = (n: number) =>
 
 // Plot geometry. The viewBox includes the x-label band so the card can never grow a nested
 // scrollbar around a plot that fits while its axis doesn't.
-const W = 300;
+//
+// Width is MEASURED rather than fixed (useMeasuredWidth): the column this card sits in is as wide
+// as the screen allows, and a fixed viewBox stretched to fill it distorts every glyph, flattens the
+// curve, and turns the endpoint marker into an ellipse. At 1:1 the user units below are CSS pixels.
+const W_FALLBACK = 420;
+const W_MIN = 240;
 const PLOT_H = 96;
 const AXIS_H = 13;
 const PAD_T = 7;
@@ -55,6 +61,9 @@ export function PacePanel({
   diagnosis: PaceDiagnosis | null;
   curve?: PaceCurve | null;
 }) {
+  const [chartRef, measured] = useMeasuredWidth<HTMLElement>(W_FALLBACK);
+  const W = Math.max(W_MIN, measured);
+
   const ticks = profile.ticks.filter((t) => t.lv);
   const mid = profile.levelPcts.indexOf(50);
   const lo = 0;
@@ -177,10 +186,9 @@ export function PacePanel({
 
       {ticks.length > 1 && (
         <>
-          <figure className="pacechart">
+          <figure className="pacechart" ref={chartRef}>
             <svg
               viewBox={`0 0 ${W} ${PLOT_H + AXIS_H}`}
-              preserveAspectRatio="none"
               role="img"
               aria-label={chartLabel}
             >

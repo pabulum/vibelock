@@ -8,6 +8,7 @@
 // Only on a miss does the UI offer the explicit Steam fallback, behind a 20-minute cooldown.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   getItems,
   getItemStats,
@@ -18,6 +19,14 @@ import {
   steamFetchAvailableAt,
 } from "../api/deadlock";
 import { computeItemCounters } from "../lib/counters";
+import { deathMapQueryOptions } from "../api/deathMap";
+import {
+  deathMarks,
+  teamSign,
+  timeDead,
+  WORLD_HALF_EXTENT,
+} from "../lib/deathMap";
+import { DeathMap } from "./DeathMap";
 import { getWpStats, type WpStats } from "../api/wpStats";
 import {
   analyzeMatch,
@@ -355,6 +364,31 @@ export function MatchModal({
     () => (a ? Math.max(...a.economy.map((r) => r.share), 0.01) : 1),
     [a],
   );
+  // The population death field. Lazy and fail-soft: `enabled` keeps it off the wire until a match
+  // is actually analyzed, and its error is deliberately unhandled — without it the map simply loses
+  // its shading (see api/deathMap).
+  const deathMap =
+    useQuery({ ...deathMapQueryOptions, enabled: !!a }).data ?? null;
+  // The focus player's deaths, placed. Needs the baked half-extent to agree with the bake, so it
+  // falls back to the measured world box when the asset hasn't loaded — the two are the same number,
+  // and hard-coding it here is what lets the map draw at all without the population layer.
+  // Rotated into the player's own frame — their base at the bottom for either team, which is what
+  // makes "further up the map" mean "further into the enemy half" in both the picture and the prose.
+  const marks = useMemo(
+    () =>
+      a
+        ? deathMarks(
+            a.focus.death_details ?? [],
+            deathMap?.halfExtent ?? WORLD_HALF_EXTENT,
+            teamSign(a.focus.team),
+          )
+        : [],
+    [a, deathMap],
+  );
+  const deadS = useMemo(
+    () => (a ? timeDead(a.focus.death_details ?? []) : null),
+    [a],
+  );
 
   return (
     <ModalShell
@@ -632,7 +666,22 @@ export function MatchModal({
               {a.deaths.goldLost
                 ? ` · ${(a.deaths.goldLost / 1000).toFixed(1)}k souls lost to deaths`
                 : ""}
+              {deadS !== null
+                ? ` · ${mmss(deadS)} spent dead (${Math.round((deadS / a.durationS) * 100)}% of the game)`
+                : ""}
             </p>
+
+            {/* The map goes above the prose reads: a cluster is visible in a glance and takes a
+                paragraph to say. Renders on the player's own deaths alone — the population layer
+                is a lazily-fetched extra and its absence only removes the shading. */}
+            {marks.length > 0 && (
+              <DeathMap
+                marks={marks}
+                data={deathMap}
+                heroName={heroName(a.focus.hero_id)}
+                won={a.won}
+              />
+            )}
 
             {(() => {
               const lines = deathInsights(

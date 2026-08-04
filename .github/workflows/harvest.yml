@@ -89,6 +89,17 @@ jobs:
           OUT: _data/wp-stats.json
         run: node scripts/bake-wp-stats.mjs
 
+      # Where players die, as a coarse density grid. Its own step and its own asset because it is
+      # NOT computed from the shards — death positions aren't harvested (they'd grow every shard for
+      # one feature), so it comes from a single /v1/sql aggregate instead. Continues on failure: the
+      # SQL endpoint is 2 req/min and 20 req/hour per IP, and a rate-limited or flaky run must not
+      # cost the night its shard or its wp-stats bake. A stale death map is a fine death map.
+      - name: Bake death-map.json
+        continue-on-error: true
+        env:
+          OUT: _data/death-map.json
+        run: node scripts/bake-death-map.mjs
+
       # Sync the release to the local window: upload shards it doesn't have (normally just
       # today's), delete assets that aged out. Mirrors the harvester's local purge.
       - name: Publish shards to release
@@ -114,6 +125,22 @@ jobs:
         run: |
           mkdir -p _pub
           cp _data/wp-stats.json _data/manifest.json _pub/
+          # Carried forward when the bake above was skipped or failed. The data branch is
+          # republished as a fresh parentless commit of whatever is in _pub, so an absent file here
+          # DELETES the asset — one rate-limited night would otherwise take the death map down.
+          # Fetched over https rather than from origin/data: the checkout doesn't have that ref on
+          # the normal path (only the one-time shard migration fetches it). Written via a temp file
+          # so a failed download can't leave a truncated, schema-rejecting map behind.
+          if [ -f _data/death-map.json ]; then
+            cp _data/death-map.json _pub/
+          elif curl -fsS -o /tmp/dm.json \
+              "https://raw.githubusercontent.com/${{ github.repository }}/data/death-map.json" \
+              && [ -s /tmp/dm.json ]; then
+            cp /tmp/dm.json _pub/death-map.json
+            echo "death-map bake unavailable — carried yesterday's forward."
+          else
+            echo "No death map this run and none to carry forward; the client hides the layer."
+          fi
           cd _pub
           git init -q -b data
           git add -A

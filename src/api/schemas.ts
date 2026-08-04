@@ -238,6 +238,15 @@ export const MatchItemEventSchema = v.object({
 });
 export type MatchItemEvent = v.InferOutput<typeof MatchItemEventSchema>;
 
+/** A world-space point from the match metadata. Deadlock's playable area measured (2026-08-03, over
+ * 3h of ranked deaths) at roughly x ∈ [−9445, 9284], y ∈ [−10725, 10890]; `z` is height and is not
+ * read — the map is shown from above. */
+export const MatchPosSchema = v.object({
+  x: v.number(),
+  y: v.number(),
+  z: v.number(),
+});
+
 export const MatchDeathSchema = v.object({
   game_time_s: v.number(),
   /** Slot of the killer, resolvable to a player via `player_slot`. */
@@ -246,6 +255,14 @@ export const MatchDeathSchema = v.object({
    * guard for it. Measured distribution across a real match: p25 ≈ 7s, median ≈ 13s, p75 ≈ 19s, so a
    * sub-5s death is genuinely a burst, not just the low end of normal. */
   time_to_kill_s: v.nullish(v.number()),
+  /** Where you died, and where the killer was standing when it happened. Both are in the payload
+   * and were simply never parsed — the old note that positions weren't available was wrong; what
+   * was actually missing is a verified map reference, which is why nothing here is ever given a
+   * ZONE NAME. A heatmap needs coordinates, not names. */
+  death_pos: v.nullish(MatchPosSchema),
+  killer_pos: v.nullish(MatchPosSchema),
+  /** Seconds spent dead — the respawn timer this death cost, which grows through the game. */
+  death_duration_s: v.nullish(v.number()),
 });
 export type MatchDeath = v.InferOutput<typeof MatchDeathSchema>;
 

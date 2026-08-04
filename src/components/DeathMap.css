@@ -1,0 +1,181 @@
+@layer components {
+  /* --- Death map: population density under your own deaths --- */
+
+  .deathmap {
+    margin-top: 10px;
+  }
+
+  /* Filter row, above the chart it scopes — it re-slices both layers together, so it must not read
+     as belonging to either one. */
+  .dmfilter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 9px;
+  }
+  .dmfilter button {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    padding: 2px 7px;
+    border: 1px solid var(--rule);
+    background: none;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+    cursor: pointer;
+  }
+  .dmfilter button:hover:not(:disabled),
+  .dmfilter button:focus-visible {
+    border-color: var(--rule-strong);
+    color: var(--ink);
+  }
+  .dmfilter button.active {
+    border-color: var(--accent-rule);
+    color: var(--ink);
+  }
+  .dmfilter button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .dmfilter .dmn {
+    font-size: 9.5px;
+    color: var(--ink-3);
+  }
+
+  .dmfig {
+    margin: 0;
+  }
+  .dmfig svg {
+    display: block;
+    width: 100%;
+    max-width: 340px;
+    height: auto;
+    margin: 0 auto;
+  }
+
+  /* Sequential magnitude, one hue, light→dark — carried entirely by opacity on a single ink so it
+     stays a field rather than a picture, and so it re-tints with the theme for free. */
+  .dmdensity rect {
+    fill: var(--ink-3);
+  }
+  .dmframe {
+    fill: none;
+    stroke: var(--rule);
+    stroke-width: 1;
+  }
+
+  /* The map's silhouette, from the assets API's zipline routes. The faintest thing on the chart on
+     purpose: it exists so the shape is recognizable at a glance, and every pixel it spends past
+     that competes with the deaths drawn over it. */
+  .dmzip path {
+    fill: none;
+    stroke: var(--rule-strong);
+    stroke-width: 1;
+    opacity: 0.6;
+  }
+
+  /* --- The map reference: midline and structures ---
+     Recessive by construction. This layer exists to be read past, not looked at: it tells you which
+     end is yours and roughly where you are, then gets out of the way of the dots. Hollow marks and
+     rule-weight ink keep it a scaffold rather than a third series competing for attention. */
+  .dmmid {
+    stroke: var(--rule-strong);
+    stroke-width: 1;
+  }
+  .dmlm {
+    fill: none;
+    stroke: var(--ink-3);
+    stroke-width: 1;
+    opacity: 0.75;
+  }
+  /* The base is the one structure that ends the game, so it gets a filled centre. */
+  .dmlm.core {
+    fill: var(--ink-3);
+    fill-opacity: 0.35;
+  }
+  .dmhalf {
+    font-family: var(--font-mono);
+    font-size: 7.5px;
+    letter-spacing: 0.12em;
+    fill: var(--ink-3);
+    opacity: 0.7;
+  }
+
+  /* Your deaths. --neg because they ARE the bad outcome — this is one of the rare places where the
+     status meaning and the series identity are genuinely the same thing. The surface ring keeps a
+     dot legible on the darkest cells of the field. */
+  .dmdot {
+    fill: var(--neg);
+    stroke: var(--surface);
+    stroke-width: 2;
+  }
+  .dmfrom {
+    stroke: var(--neg);
+    stroke-width: 1;
+    opacity: 0.5;
+  }
+  /* The repeat spot: a ring, not a fill, so it frames the dots instead of competing with them. */
+  .dmcluster {
+    fill: none;
+    stroke: var(--warn);
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+  }
+
+  .dmlegend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin-top: 8px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--ink-3);
+  }
+  .dmlegend .lg {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .dmlegend .lg::before {
+    content: "";
+    width: 9px;
+    height: 9px;
+  }
+  .dmlegend .lg.dens::before {
+    background: var(--ink-3);
+    opacity: 0.5;
+  }
+  .dmlegend .lg.you::before {
+    background: var(--neg);
+    border-radius: var(--r-pill);
+  }
+  .dmlegend .lg.from::before {
+    height: 1px;
+    background: var(--neg);
+    opacity: 0.6;
+  }
+  .dmlegend .lg.cl::before {
+    border: 1px dashed var(--warn);
+  }
+  .dmlegend .lg.lm::before {
+    border: 1px solid var(--ink-3);
+    opacity: 0.75;
+  }
+  .dmlegend .lg.zip::before {
+    height: 1px;
+    background: var(--rule-strong);
+    opacity: 0.6;
+  }
+
+  .dminsight {
+    margin: 10px 0 0;
+    padding-left: 9px;
+    border-left: 2px solid var(--warn);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ink-2);
+  }
+}

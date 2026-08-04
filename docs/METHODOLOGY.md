@@ -10,6 +10,7 @@ How Vibelock turns public match statistics into a build, and what is still wrong
 - [Matchups and counters](#matchups-and-counters)
 - [Player profile](#player-profile)
 - [Soul pace](#soul-pace)
+- [The death map](#the-death-map)
 - [Sessions and loss streaks](#sessions-and-loss-streaks)
 - [The Lab](#the-lab)
 - [What is still confounded](#what-is-still-confounded)
@@ -230,6 +231,98 @@ rates are **descriptive, not causal** — farming more in a phase does not cause
 worth (the measured gradient is ~0), so a weak phase is a place to look, not a lever with a payout.
 Nothing in the panel attaches a win rate to a phase.
 
+## The death map
+
+Deaths were counted by phase long before they were placed, and a count and a map answer different
+questions: "6 deaths in the mid phase" is a tally, while nine deaths in the same corner is a habit
+with an obvious fix. The coordinates were in the match payload the whole time — `death_pos` and
+`killer_pos` on every death event — and were simply never parsed.
+
+### The reference frame is derived, not drawn
+
+The first version of this map had no reference at all, so it could show a cloud of dots and say only
+that they were or weren't clustered. The frame is now **measured from the same data**, which is what
+lets it name places without shipping any game art (`scripts/bake-death-map.mjs`, one extra
+`/v1/sql` aggregate):
+
+- **Which end is whose.** Team0 plays from negative y, Team1 from positive. Confirmed three
+  independent ways: laning deaths fall on the dier's own side of the midline; the last fight of a
+  game happens in the _loser's_ base; and `match_paths` puts each team's spawn at y ≈ ∓10,100 at
+  t = 0.
+- **Where the structures are.** A death is attributed to an objective when it lands within ±10s of
+  that objective being destroyed, counting only deaths of the objective's owner — defenders die at
+  the thing they are defending. The anchor is a 2-D **mode**, not a mean: a ±10s window still
+  catches deaths happening elsewhere on the map, and those are spread thin while the fight for a
+  structure piles into a few cells. A median instead drags every landmark ~1,500 units toward the
+  origin, enough to put a guardian in the wrong place.
+- **The map is 180°-rotation symmetric**, not mirrored. Every Team1 structure lands within ~50 world
+  units of the negation of its Team0 counterpart, so the bake stores one set of landmarks and the
+  client negates it for the enemy's. That symmetry doubles as the method's own error bar: the bake
+  refuses to publish if the two teams' independent measurements disagree by more than three grid
+  cells. It has already earned its keep — it caught a pairing bug where the two teams' structures
+  were matched by lane _name_, which is wrong, because the enum numbers lanes absolutely in x and so
+  Team0's Lane1 pairs with Team1's Lane4.
+
+- **The map's silhouette** comes from `/v1/assets/map`, which ships the three zipline routes as
+  world-coordinate polylines. They are drawn as hairlines in the app's own ink rather than as game
+  art: a density field shows where the game is _played_ but not what the place looks like, and the
+  zipline loop is the outline a player recognizes. The asset's coordinate system was verified rather
+  than assumed — all 128 zipline points land within 4px of their own colour in Valve's minimap
+  render under the plain top-down transform `left = (x + 10752) / 21504`.
+
+Note the same asset's `objective_positions` are **not** usable for this: they are rounded
+icon-placement hints (`left_relative` 0.21, 0.45, 0.69 …) and disagree with the measured positions
+by up to ~1,400 world units — `team0_core` and `team0_tier1_3` are both at world x ≈ 0 but are given
+different `left_relative` values. That is why the structure anchors are measured from death data
+instead of read off the asset.
+
+Everything is then drawn in the **viewer's own frame** — their base at the bottom for either team —
+so "up" means "forward" and one set of landmarks serves both sides. Rotating rather than mirroring
+is what keeps a player's left on their left. The zipline set is exempt: it maps onto itself under
+the same rotation, so one drawing serves both.
+
+No game art ships, and no CSP change was needed for any of this.
+
+### What may be named
+
+The rule was never "no names", it was **no invented names**, and the frame is what turns the second
+into the first. A place may be called by a structure the bake located (the API's own vocabulary —
+tier-1, tier-2, base) or by a property of the oriented display (left/mid/right, which half). What
+stays out is community geography — "the jungle", "high ground", "the flank" — because nothing in the
+data locates it and a confident wrong name is worse than none.
+
+### Depth, and the confound that nearly ate it
+
+The one death statistic a player can act on directly is **how far forward they died**, and it comes
+with an obvious trap: a winning team dies deep because it is pushing. In the late phase, 64% of the
+winners' deaths are in the enemy half against 23% of the losers' — a 41-point gap. Uncontrolled,
+"you died deeper than most" would have been very nearly a restatement of "you won".
+
+So the baked population is split by **outcome** as well as phase, and a player is compared only
+against deaths from games that ended the way theirs did. It is also standardized on the phases their
+own deaths fell in, so a player whose deaths happen to be late doesn't look reckless for a fact
+about the clock. Finally, nothing is claimed under two standard errors: a ten-death sample has a
+binomial standard error near 15 percentage points, so an eyeballed "you died deep this game" is
+wrong about a third of the time.
+
+**The population layer** is a coarse density grid baked nightly over a few days of ranked deaths. It
+is its own asset, fetched lazily by the Match view rather than at boot, and it is _not_ built from
+the harvested shards: death positions aren't in them, and adding them would grow every shard for one
+feature, whereas a grid is an aggregate the database can compute directly. The grids are baked in
+the same team-relative frame, so a cell means "deaths this far into the enemy half" rather than
+"deaths at this absolute spot" — the pooled absolute version smears the two halves together and
+throws away the only axis a player can act on.
+
+The grid box is square even though the playable area is taller than it is wide (measured
+x ∈ [−9445, 9284], y ∈ [−10725, 10890]) — one scale on both axes keeps the true aspect ratio, at the
+cost of some empty margin, where fitting each axis independently would stretch the map and lie about
+distances.
+
+The underlay is **context, not a grade**: deaths concentrate where the game is played, so dying in a
+hot cell is the most ordinary thing there is. The finding, when there is one, is a knot of _your_
+points. A repeat spot has to clear both a count and a share before it is called one, and most games
+have neither — in which case the map says so rather than inventing a pattern.
+
 ## Sessions and loss streaks
 
 "Stop playing after two losses" is the most repeated climbing advice there is and the evidence for it
@@ -305,6 +398,8 @@ player pulls.
 | `src/lib/laneMatchups.ts`     | Lane-phase matchups from the fitted lane-strength residuals       |
 | `src/lib/pace.ts`             | Soul pace: ladder curve, per-phase placement, fall-off diagnosis  |
 | `src/lib/sessions.ts`         | Sessions, loss streaks, the requeue-vs-rest contrast              |
+| `src/lib/deathMap.ts`         | Death placement, repeat-spot clustering (never names a place)     |
+| `scripts/bake-death-map.mjs`  | Population death-density grid, from one /v1/sql aggregate         |
 | `src/lib/archetypes.ts`       | Gun/spirit split for flex heroes                                  |
 | `src/lib/skills.ts`           | Ability order                                                     |
 | `src/lib/heroBuildExport.ts`  | Serializes a build into Deadlock's local build cache              |

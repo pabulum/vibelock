@@ -200,6 +200,12 @@ const projMatchPlayer = (p) =>
           game_time_s: true,
           killer_player_slot: true,
           time_to_kill_s: true,
+          // Positions were in the payload long before anything read them, and this projection is
+          // what kept them out of the fixture. The death map needs them, so a re-capture must not
+          // drop them again.
+          death_pos: true,
+          killer_pos: true,
+          death_duration_s: true,
         }),
       ),
   });
