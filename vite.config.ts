@@ -73,6 +73,31 @@ export default defineConfig({
       // composed page actually boots and renders a build.
       {
         extends: true,
+        // The dep set has to be pinned, not discovered. Vitest seeds the optimizer with the
+        // Svelte and Vue renderers but not vitest-browser-react, so react-dom/client — reachable
+        // only *through* that already-prebundled renderer, never from a scanned source file —
+        // surfaces the first time a test renders. That re-optimize reloads the page mid-run, and
+        // the reload is what took the deploy down: whichever file was importing at that moment
+        // died with "Failed to fetch dynamically imported module", and a test already past its
+        // first render kept components bound to the pre-reload React while hooks dispatched
+        // against the new one ("Cannot read properties of null (reading 'useState')"). Fast
+        // machines usually finish optimizing before the first test, which is why it only ever
+        // went red on CI. Anything reachable solely via a prebundled dep belongs on this list.
+        optimizeDeps: {
+          include: [
+            "react",
+            "react-dom",
+            "react-dom/client",
+            "react/jsx-runtime",
+            "react/jsx-dev-runtime",
+            "react/compiler-runtime",
+            "vitest-browser-react",
+            "@tanstack/react-query",
+            "@tanstack/react-query-persist-client",
+            "@tanstack/query-async-storage-persister",
+            "valibot",
+          ],
+        },
         test: {
           name: "browser",
           include: ["src/**/*.browser.test.tsx"],
