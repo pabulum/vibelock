@@ -25,7 +25,9 @@ const SharePanel = lazy(() =>
   import("../components/SharePanel").then((m) => ({ default: m.SharePanel })),
 );
 import { shareCardModel, shareLinks } from "../lib/shareCard";
+import { vibelockBuildName } from "../lib/heroBuildExport";
 import type { ItemVerdict } from "../lib/buildGenerator";
+import type { BatchEntry } from "../lib/exportBatch";
 import type {
   PaletteAction,
   PaletteCommand,
@@ -80,6 +82,12 @@ export function AppModals(props: {
   setSteamId: (v: string) => void;
   showExport: boolean;
   onCloseExport: () => void;
+  /** Your other most-played heroes, offered as extra builds to write in the same pass. */
+  exportExtraHeroes: Hero[];
+  onBuildBatch: (
+    heroes: Hero[],
+    onProgress: (done: number, total: number, hero: Hero) => void,
+  ) => Promise<BatchEntry[]>;
   showShare: boolean;
   liveUrlState: UrlState | null;
   enemies: number[];
@@ -118,6 +126,8 @@ export function AppModals(props: {
     setSteamId,
     showExport,
     onCloseExport,
+    exportExtraHeroes,
+    onBuildBatch,
     showShare,
     liveUrlState,
     enemies,
@@ -165,14 +175,18 @@ export function AppModals(props: {
             build={displayBuild ?? build}
             skillOrder={skillBuild?.order}
             imbues={imbueByItem}
-            name={`Vibelock — ${build.hero.name}${
+            name={vibelockBuildName(
+              build.hero.name,
+              build.rankLabel,
               archetypeSet?.flex && activeArchetype
-                ? ` · ${activeArchetype.label}`
-                : ""
-            } (${build.rankLabel})`}
+                ? activeArchetype.label
+                : undefined,
+            )}
             description={`Top-to-bottom build from Vibelock · ${build.rankLabel} · ${patchLabel} · ${build.population.matches.toLocaleString()} matches. Core phases + a Situational (optional) row; each item's note says why it's picked. Made with vibelock.`}
             steamId={steamId}
             onSteamIdChange={setSteamId}
+            extraHeroes={exportExtraHeroes}
+            buildBatch={onBuildBatch}
             onClose={onCloseExport}
           />
         )}

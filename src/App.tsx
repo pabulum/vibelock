@@ -22,6 +22,8 @@ import {
 import { rankFilterUsable } from "./lib/badgeOutage";
 import { switchTransition } from "./lib/viewTransition";
 import { foldTrendingBreakouts } from "./lib/patchMovers";
+import { draftRanking } from "./lib/draft";
+import { buildBatch } from "./lib/exportBatch";
 import { heroFarmProfile } from "./lib/matchAnalysis";
 import {
   paceDiagnosis,
@@ -578,6 +580,8 @@ function AppInner() {
     compEdges,
     matrixQ,
     matchups,
+    matchupTable,
+    ladder,
     counterByItem,
     countersByPhase,
   } = useCounters({
@@ -598,6 +602,26 @@ function AppInner() {
     setEnemies((e) =>
       e.includes(id) ? e.filter((x) => x !== id) : [...e, id],
     );
+
+  // Which hero to pick against the comp on the board (lib/draft). Keyed off the LIVE enemy list,
+  // not the committed one: the ranking is pure computation over the counter matrix, which is
+  // hero-independent and already fetched, so nothing has to settle before it can answer. Adding an
+  // enemy re-orders it under the cursor while the build below is still fetching its re-rank.
+  const draft = useMemo(
+    () =>
+      matchupTable && ladder && enemies.length > 0 && heroes.length > 0
+        ? draftRanking({
+            table: matchupTable,
+            enemies,
+            heroes,
+            pool: heroPool,
+            ladder,
+            laneMatchups: wpStats?.lane?.matchups ?? null,
+            newHeroTax: NEW_HERO_TAX,
+          })
+        : null,
+    [matchupTable, ladder, enemies, heroes, heroPool, wpStats, NEW_HERO_TAX],
+  );
 
   // Intent → speculative fetch. The click hasn't happened, but the data it would need starts moving
   // now, behind everything the player has actually asked for (lib/prefetch). Same handler for every
@@ -764,6 +788,45 @@ function AppInner() {
       }
     }
   };
+
+  // Batch export: the heroes offered alongside the one on screen, and the generator that produces a
+  // build for each. Your pool minus the hero you're already exporting — you queue with three or
+  // four and the game assigns one, so the useful unit of export is the queue.
+  const exportExtraHeroes = useMemo(
+    () =>
+      (heroPool ?? [])
+        .map((p) => p.hero)
+        .filter((h) => h.id !== dataHero?.id)
+        .slice(0, 5),
+    [heroPool, dataHero],
+  );
+  // Bound here rather than in the panel because the rank/patch slice those builds must be generated
+  // against lives in App. Requests ride the shared URL cache, so a hero already viewed is free.
+  const runBuildBatch = (
+    batchHeroes: Hero[],
+    onProgress: (done: number, total: number, hero: Hero) => void,
+  ) =>
+    buildBatch(
+      batchHeroes,
+      {
+        items: items!,
+        abilities,
+        rankLabel,
+        patchLabel,
+        authorId: accountId ?? undefined,
+        slice: {
+          minBadge,
+          maxBadge,
+          dataWindow,
+          priorWin,
+          moversWin,
+          canBackfill,
+          lineAware,
+          patchNotes: patches[sel.patchIdx]?.content,
+        },
+      },
+      onProgress,
+    );
 
   // activeFlow (the flow the shown build was generated from) comes from useBuildData; the why-not
   // verdict re-runs the generator's gates for any item against that same flow.
@@ -954,6 +1017,11 @@ function AppInner() {
 
       <CountersSection
         matchups={matchups}
+        draft={draft}
+        heroId={heroId}
+        hasProfile={!!heroPool?.length}
+        pickHero={pickHero}
+        onIntentHero={(id) => prefetchBuild(id, dataSlice)}
         lane={laneVsRoster}
         heroName={hero?.name}
         heroes={heroes}
@@ -1035,6 +1103,8 @@ function AppInner() {
         setSteamId={setSteamId}
         showExport={showExport}
         onCloseExport={() => setShowExport(false)}
+        exportExtraHeroes={exportExtraHeroes}
+        onBuildBatch={runBuildBatch}
         showShare={showShare}
         liveUrlState={liveUrlState}
         enemies={enemies}

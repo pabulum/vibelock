@@ -126,9 +126,45 @@ borrowed share ("N% backfilled"), so a day-one build is complete and says how mu
 ## Matchups and counters
 
 **Matchups.** `hero-counter-stats` returns the full hero-vs-hero matrix (it ignores hero filters), so
-it is fetched once per rank and patch and filtered client-side. Each enemy's win rate is compared to
-the hero's overall win rate. Tough and Favored matchups appear as clickable portrait chips that
-toggle into the enemy list, so you can see what to build against them in one click.
+it is fetched once per rank and patch and filtered client-side. Tough and Favored matchups appear as
+clickable portrait chips that toggle into the enemy list, so you can see what to build against them
+in one click.
+
+The chips report a **Bradley-Terry residual**, not a raw win rate, and the difference is the whole
+panel. Comparing each enemy's win rate against you to your own overall rate — what this used to do —
+measures who is strong right now, not who counters you: a meta hero drags every cell against it below
+every hero's baseline. Measured on the live matrix (38 heroes, 89M cell-games), that raw read put
+Graves in **37 of 38** heroes' Tough lists, Victor in 36 and Seven in 35. Five chips that were the
+same five chips whichever hero you had selected.
+
+So one strength number per hero is fitted from the whole matrix at once — P(i beats j) = πᵢ/(πᵢ+πⱼ),
+Hunter's MM updates, normalized to geometric mean 1 — and each cell is reported as its sample-shrunk
+residual against what strengths alone predict. Strength cancels; rock-paper-scissors is what's left.
+On the same matrix the most frequent residual counter appears in 9 lists of 38.
+
+The residuals are small and real. Strengths explain the matrix to 0.49pt RMSE and the residual sd is
+0.50pt, so a counter in Deadlock is worth about a point of win rate — not the five points the raw
+delta advertised. Two checks:
+
+- **Split-half.** Across two disjoint 21-day windows, residuals replicate at _r_ = 0.76. The raw
+  delta replicates at _r_ = 0.945 — but that is the confound reproducing itself, since "Graves is
+  strong" is perfectly stable and says nothing about your matchup. High replication of a confounded
+  quantity is not evidence for it.
+- **Ground truth**, over 15.6M `match_player` rows via `/v1/sql`. For each of 12 heroes, win rate
+  against its three residual-identified counters was compared with win rate against three
+  **strength-matched placebo** enemies (mean π 1.036 vs 1.026; mean residual −1.15pt vs −0.01pt).
+  All 12 lost more win rate to the counters than to the strength-matched placebos, and the loss did
+  not saturate as more of them appeared: −2.04pt for the first, −2.60pt for the second.
+
+The surfacing floor is 0.5pt, calibrated rather than picked: of the cells clearing it in one window,
+93.6% carry the same sign in the other, and every hero on the roster gets a populated list (4.6
+entries on average). 0.75pt buys 96.3% agreement but empties the panel for 6 heroes; 1.0pt reaches
+100% and leaves 17 heroes with nothing to show.
+
+One property of the global fit is worth stating because it looks like under-reporting and isn't: a
+counter effect partially leaks into the two heroes' _strengths_, and the more opponents counter a
+hero the more of it is absorbed. That is the correct reading — a hero that loses to nearly everyone
+is weak, not countered — and it means the shipped numbers are conservative.
 
 Win rate here is whole-game presence, not lane-only — the client sends `same_lane_filter=false`
 explicitly, since the API's own default is `true`. (An earlier version of this document called the
@@ -148,11 +184,18 @@ sd ≈ 438 souls raw to sd ≈ 105 residual — which is the quantitative statem
 B in lane" is just farming ability. Pairs are shrunk toward zero by sample and surface at a 150-soul
 floor (~1.7% of a 10-minute net worth).
 
-The **De-noise** toggle fits Bradley-Terry strengths across the whole matrix and re-reads each
-matchup as its sample-shrunk _residual_ against what strengths alone predict. A meta hero then stops
-showing up as everybody's counter, and "Tough" comes to mean genuine rock-paper-scissors. Strengths
-explain the live matrix to about 1 point RMSE, so residuals surface at a 1-point floor rather than a
-2-point raw one.
+**Draft.** With an enemy comp on the board, the same residuals answer the question the rest of the
+app skips: which hero to _pick_. A candidate's expected win rate is its comp-blind base — your own
+record on it, shrunk toward its current ladder rate at this rank and patch — plus the sum of its
+residuals against each enemy. Summing is the additive model, and it is what the no-saturation result
+above licenses. Lane residuals are reported beside the number, never inside it: souls at 10 minutes
+are not win-rate points.
+
+The honest headline is usually "play your best hero". Comp edge spreads about 2.5pt across a
+realistic five-hero pool (p90 4.0pt), while the same player's own record spreads wider than that
+between their main and their fifth-best. The panel says which case it is rather than always finding
+a counter-pick, because talking someone into a hero they cannot play loses more than any matchup on
+the board is worth.
 
 **Counters.** Enter an enemy lineup and `item-stats` is queried with `enemy_hero_ids`, then compared
 against the same hero and rank's baseline. Items are sorted by raw win-rate delta, with a hard sample
@@ -387,21 +430,25 @@ player pulls.
 
 ## Code map
 
-| Path                          | What it does                                                      |
-| ----------------------------- | ----------------------------------------------------------------- |
-| `src/api/deadlock.ts`         | Typed API client, retry/backoff, asset caching                    |
-| `src/lib/buildGenerator.ts`   | Assembles the budgeted, phased build; tuning constants at the top |
-| `src/lib/patchBlend.ts`       | Power-prior backfill for young patches                            |
-| `src/lib/counters.ts`         | Enemy-conditioned top movers                                      |
-| `src/lib/matchups.ts`         | Hero matchups, Bradley-Terry de-noising                           |
-| `src/lib/laneMatchups.ts`     | Lane-phase matchups from the fitted lane-strength residuals       |
-| `src/lib/pace.ts`             | Soul pace: ladder curve, per-phase placement, fall-off diagnosis  |
-| `src/lib/sessions.ts`         | Sessions, loss streaks, the requeue-vs-rest contrast              |
-| `src/lib/deathMap.ts`         | Death placement, repeat-spot clustering (never names a place)     |
-| `scripts/bake-death-map.mjs`  | Population death-density grid, from one /v1/sql aggregate         |
-| `src/lib/archetypes.ts`       | Gun/spirit split for flex heroes                                  |
-| `src/lib/skills.ts`           | Ability order                                                     |
-| `src/lib/heroBuildExport.ts`  | Serializes a build into Deadlock's local build cache              |
-| `scripts/harvest-matches.mjs` | Nightly match sampler (rolling 30-day window)                     |
-| `scripts/bake-wp-stats.mjs`   | Fits the win-probability surface and the Lab's statistics         |
-| `src/App.tsx`                 | The UI                                                            |
+| Path                          | What it does                                                           |
+| ----------------------------- | ---------------------------------------------------------------------- |
+| `src/api/deadlock.ts`         | Typed API client, retry/backoff, asset caching                         |
+| `src/lib/buildGenerator.ts`   | Assembles the budgeted, phased build; tuning constants at the top      |
+| `src/lib/patchBlend.ts`       | Power-prior backfill for young patches                                 |
+| `src/lib/counters.ts`         | Enemy-conditioned top movers                                           |
+| `src/lib/matchups.ts`         | Hero matchups, Bradley-Terry de-noising                                |
+| `src/lib/draft.ts`            | Which hero to pick against a comp: base + summed matchup residual      |
+| `src/lib/laneMatchups.ts`     | Lane-phase matchups from the fitted lane-strength residuals            |
+| `src/lib/pace.ts`             | Soul pace: ladder curve, per-phase placement, fall-off diagnosis       |
+| `src/lib/sessions.ts`         | Sessions, loss streaks, the requeue-vs-rest contrast                   |
+| `src/lib/deathMap.ts`         | Death placement, repeat-spot clustering (never names a place)          |
+| `scripts/bake-death-map.mjs`  | Population death-density grid, from one /v1/sql aggregate              |
+| `src/lib/archetypes.ts`       | Gun/spirit split for flex heroes                                       |
+| `src/lib/skills.ts`           | Ability order                                                          |
+| `src/lib/buildFetch.ts`       | The build fan-out as a plain function (hook and batch export share it) |
+| `src/lib/heroBuildExport.ts`  | Serializes a build into Deadlock's local build cache; reads ours back  |
+| `src/lib/heroBuildCache.ts`   | Injects builds into `cached_hero_builds.kv3`, replacing our own        |
+| `src/lib/exportBatch.ts`      | One encoded build per hero you queue with, written in a single pass    |
+| `scripts/harvest-matches.mjs` | Nightly match sampler (rolling 30-day window)                          |
+| `scripts/bake-wp-stats.mjs`   | Fits the win-probability surface and the Lab's statistics              |
+| `src/App.tsx`                 | The UI                                                                 |

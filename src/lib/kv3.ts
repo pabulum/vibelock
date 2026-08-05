@@ -645,3 +645,177 @@ function serialize(v: Kv3Value, level: number, inDict: boolean): string {
 export function encodeTextKv3(value: Kv3Value): string {
   return `${TEXT_HEADER}\n${serialize(value, 0, false)}\n`;
 }
+
+// ---- Text KV3 reading ----
+//
+// We write text and the game writes binary, which is fine right up until you export twice without
+// launching the game in between: the second read is of OUR file, and a binary-only reader rejects it
+// with "Not a binary KV3 file". That is the exact repeat-export path the in-place write exists for,
+// so the reader has to close the loop.
+//
+// The grammar is only what `serialize` above emits (plus the whitespace latitude a hand-edit would
+// introduce), and kv3.test.ts pins the two against each other by round-tripping the real cache file.
+// This is deliberately NOT a general KV3 text parser: no escapes (the writer emits none, and the
+// game's own text output doesn't either), no multi-line strings, no comments beyond the header.
+
+class TextReader {
+  private p = 0;
+  private readonly s: string;
+  constructor(text: string) {
+    this.s = text;
+  }
+
+  /** Whitespace, commas (the writer's trailing separators) and the header comment are all skippable
+   * between values. */
+  private skip(): void {
+    for (;;) {
+      while (this.p < this.s.length && /[\s,]/.test(this.s[this.p])) this.p++;
+      if (this.s.startsWith("<!--", this.p)) {
+        const end = this.s.indexOf("-->", this.p);
+        if (end < 0) throw new Error("unterminated KV3 header comment");
+        this.p = end + 3;
+        continue;
+      }
+      return;
+    }
+  }
+
+  private expect(ch: string): void {
+    if (this.s[this.p] !== ch)
+      throw new Error(`expected ${ch} at ${this.p} in text KV3`);
+    this.p++;
+  }
+
+  parse(): Kv3Value {
+    this.skip();
+    const v = this.value();
+    this.skip();
+    if (this.p !== this.s.length) throw new Error("trailing text KV3 content");
+    return v;
+  }
+
+  private value(): Kv3Value {
+    this.skip();
+    const c = this.s[this.p];
+    if (c === undefined) throw new Error("unexpected end of text KV3");
+    if (c === "{") return this.map();
+    if (c === "[") return this.array();
+    if (c === '"') return this.string();
+    if (c === "#") return this.blob();
+
+    // A bare token: null / true / false / a number / a `flag:value` specifier.
+    const m = /^[A-Za-z_][A-Za-z0-9_]*(?=\s*:)/.exec(this.s.slice(this.p));
+    if (m) {
+      this.p += m[0].length;
+      this.expect(":");
+      return new Kv3Flagged(m[0], this.value());
+    }
+    const tok = /^[^\s,\]}]+/.exec(this.s.slice(this.p));
+    if (!tok) throw new Error(`unparseable text KV3 token at ${this.p}`);
+    this.p += tok[0].length;
+    return scalar(tok[0]);
+  }
+
+  private map(): Map<string, Kv3Value> {
+    this.expect("{");
+    const out = new Map<string, Kv3Value>();
+    for (;;) {
+      this.skip();
+      if (this.s[this.p] === "}") {
+        this.p++;
+        return out;
+      }
+      const key =
+        this.s[this.p] === '"'
+          ? this.string()
+          : (() => {
+              const m = /^[^\s=]+/.exec(this.s.slice(this.p));
+              if (!m) throw new Error(`bad member name at ${this.p}`);
+              this.p += m[0].length;
+              return m[0];
+            })();
+      this.skip();
+      this.expect("=");
+      out.set(key, this.value());
+    }
+  }
+
+  private array(): Kv3Value[] {
+    this.expect("[");
+    const out: Kv3Value[] = [];
+    for (;;) {
+      this.skip();
+      if (this.s[this.p] === "]") {
+        this.p++;
+        return out;
+      }
+      out.push(this.value());
+    }
+  }
+
+  /** KV3 text does not escape quotes, so a string runs to the next `"` — same assumption the writer
+   * makes in the other direction. */
+  private string(): string {
+    this.expect('"');
+    const end = this.s.indexOf('"', this.p);
+    if (end < 0) throw new Error("unterminated string in text KV3");
+    const out = this.s.slice(this.p, end);
+    this.p = end + 1;
+    return out;
+  }
+
+  private blob(): Uint8Array {
+    this.expect("#");
+    this.expect("[");
+    const end = this.s.indexOf("]", this.p);
+    if (end < 0) throw new Error("unterminated binary blob in text KV3");
+    const body = this.s.slice(this.p, end).trim();
+    this.p = end + 1;
+    if (body === "") return new Uint8Array(0);
+    return Uint8Array.from(
+      body.split(/\s+/).map((h) => {
+        const b = parseInt(h, 16);
+        if (!Number.isInteger(b) || b < 0 || b > 255)
+          throw new Error(`bad hex byte "${h}" in text KV3 blob`);
+        return b;
+      }),
+    );
+  }
+}
+
+/** A bare token → its value. The number split mirrors `serialize`: doubles always carry a `.` (an
+ * integral one is written `1.0`), integers never do — so the distinction survives a round trip.
+ * Integers past 2^53 come back as bigint, which is how they went in. */
+function scalar(tok: string): Kv3Value {
+  if (tok === "null") return null;
+  if (tok === "true") return true;
+  if (tok === "false") return false;
+  if (/^[+-]?\d+$/.test(tok)) {
+    const n = Number(tok);
+    return Number.isSafeInteger(n) ? n : BigInt(tok);
+  }
+  if (/^[+-]?(\d+\.\d*|\.\d+|\d+)(e[+-]?\d+)?$/i.test(tok))
+    return new Kv3Double(Number(tok));
+  throw new Error(`unrecognized text KV3 token "${tok}"`);
+}
+
+/** Parse generic text KV3 — in practice, a cache file this app wrote and the game hasn't re-saved
+ * yet. Counterpart to {@link encodeTextKv3}. */
+export function parseTextKv3(text: string): Kv3Value {
+  return new TextReader(text).parse();
+}
+
+/** Whether these bytes look like text KV3 rather than the binary form. */
+export function isTextKv3(bytes: Uint8Array): boolean {
+  return new TextDecoder().decode(bytes.subarray(0, 16)).startsWith("<!-- kv3");
+}
+
+/**
+ * Parse a build cache in whichever form it's in. The game writes binary; we write text; a player who
+ * exports twice in a row hands us our own text back. Everything downstream wants one value tree.
+ */
+export function parseKv3(bytes: Uint8Array): Kv3Value {
+  return isTextKv3(bytes)
+    ? parseTextKv3(new TextDecoder().decode(bytes))
+    : parseBinaryKv3(bytes);
+}

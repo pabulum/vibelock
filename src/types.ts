@@ -463,15 +463,20 @@ export interface NewsItem {
 /** A notable matchup for the selected hero. */
 export interface Matchup {
   enemyHeroId: number;
+  /** Observed whole-game win rate against this enemy. Mostly a statement about the two heroes'
+   * strengths, which is what `resid` exists to remove — context, never the headline. */
   winRate: number;
-  /** Win rate − the hero's overall win rate (negative = this enemy counters you). */
-  delta: number;
+  /** What Bradley-Terry strengths alone predict for this cell. */
+  expected: number;
+  /** The matchup itself: sample-shrunk observed − expected (negative = this enemy counters you). */
+  resid: number;
   sample: number;
   /** Avg last-hit lead vs this hero (negative = you get out-farmed in lane). */
   laneCsDelta: number;
 }
 
 export interface HeroMatchups {
+  /** The hero's own overall win rate across the matrix — context for the observed cell rates. */
   baseline: number;
   tough: Matchup[];
   favorable: Matchup[];

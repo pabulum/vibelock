@@ -142,7 +142,11 @@
   .guide-body p:last-child {
     margin-bottom: 0;
   }
-  .guide-body a {
+  /* Prose links only. A link that IS a button (.export-go — the download fallback is an <a> so it
+     can carry `download`) already paints itself accent-on-paper, and this rule out-specifies its
+     colour without touching its background: accent text on an accent fill, i.e. a solid blank
+     slab where the label should be. */
+  .guide-body a:not(.export-go) {
     color: var(--accent-ui);
   }
   .guide-body ul {
@@ -415,6 +419,89 @@
     opacity: 0.55;
     cursor: default;
   }
+  /* Why a non-Chromium browser gets the download route rather than an in-place write. A margin
+     note, not a warning: nothing is wrong, the capability simply isn't there. */
+  .export-note {
+    margin: 12px 0 0;
+    padding-left: 10px;
+    border-left: 2px solid var(--rule-strong);
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--ink-3);
+  }
+
+  /* "Builds to write" — your queue as a row of togglable portrait chips. A fieldset because
+     that is what it is: one control made of several checkboxes, and the legend names it for a
+     screen reader without a second label. */
+  .export-also {
+    margin: 16px 0 0;
+    padding: 0;
+    border: 0;
+    border-top: 1px solid var(--rule);
+    padding-top: 10px;
+  }
+  .export-also legend {
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .export-alsorow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin: 8px 0 0;
+  }
+  .export-hero {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 10px 4px 5px;
+    border: 1px solid var(--rule);
+    font-size: 12.5px;
+    color: var(--ink-3);
+    cursor: pointer;
+  }
+  .export-hero.on {
+    border-color: var(--accent-rule);
+    color: var(--ink);
+  }
+  /* The hero on screen is always written, so its chip is a statement rather than a control. */
+  .export-hero:has(input:disabled) {
+    cursor: default;
+  }
+  .export-hero input {
+    /* The chip's own border and ink carry the state; a checkbox as well would say it twice. */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .export-hero:has(input:focus-visible) {
+    outline: 2px solid var(--accent-ui);
+    outline-offset: 1px;
+  }
+  .export-hero img {
+    width: 20px;
+    height: 20px;
+    border-radius: var(--r-pill);
+    object-fit: cover;
+    background: var(--surface-2);
+    /* Un-ticked heroes read as absent from the write, not merely unhighlighted. */
+    filter: grayscale(1);
+    opacity: 0.55;
+  }
+  .export-hero.on img {
+    filter: none;
+    opacity: 1;
+  }
+  .export-also .hint {
+    margin: 8px 0 0;
+  }
+
   .export-steam {
     display: flex;
     flex-direction: column;
@@ -443,18 +530,88 @@
   .export-status.error {
     color: var(--neg);
   }
+  /* Where the file lives. Promoted out of a disclosure because finding it is the step that actually
+     stalls people — the export itself is one click either side of it. */
+  .export-paths {
+    margin-top: 20px;
+    padding-top: 12px;
+    border-top: 1px solid var(--rule);
+  }
+  .export-pathlbl {
+    display: block;
+    margin-bottom: 6px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  /* The path IS the button: it exists to be pasted somewhere, so the whole string is the target
+     rather than a copy icon hung off the end of it. */
+  .export-path {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    margin: 0 0 4px;
+    padding: 8px 10px;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    text-align: left;
+    cursor: pointer;
+  }
+  .export-path:hover,
+  .export-path:focus-visible {
+    border-color: var(--accent-ui);
+  }
+  .export-path.copied {
+    border-color: var(--pos);
+  }
+  .export-path code {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink);
+    word-break: break-all;
+  }
+  /* The affordance, quiet until you're looking for it — the path is the content. */
+  .export-copy {
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .export-path:hover .export-copy,
+  .export-path:focus-visible .export-copy {
+    color: var(--accent-ui);
+  }
+  .export-path.copied .export-copy {
+    color: var(--pos);
+  }
+
   .export-where {
-    margin-top: 18px;
+    margin-top: 10px;
     font-size: 12.5px;
     color: var(--ink-3);
   }
   .export-where summary {
     cursor: pointer;
   }
-  .export-where code {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    word-break: break-all;
+  .export-where ul {
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .export-where li {
+    margin: 0 0 8px;
+  }
+  .export-where li strong {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 12px;
+    color: var(--ink-2);
   }
 
   /* --- Share panel (reuses the guide sheet + .export-go buttons) --- */

@@ -6,7 +6,8 @@ import { getHeroCounters, getItemStats } from "../api/deadlock";
 import type { TimeWindow } from "../api/deadlock";
 import { computeItemCounters } from "../lib/counters";
 import { counterSliceQueries } from "../lib/prefetch";
-import { heroMatchups } from "../lib/matchups";
+import { heroMatchups, matchupTable } from "../lib/matchups";
+import { ladderRates } from "../lib/draft";
 import { blendItemStats } from "../lib/patchBlend";
 import type { Hero, Item, ItemCounters, ItemStat } from "../types";
 
@@ -106,9 +107,27 @@ export function useCounters(opts: {
   });
   const counterMatrix = matrixQ.data ?? null;
 
+  // One Bradley-Terry fit per matrix, shared by the matchup chips and the draft panel — the two
+  // must not disagree about what a cell was expected to be. The fit is a few hundred MM sweeps over
+  // ~1,400 cells, so this is cheap; what matters is that it happens once.
+  const table = useMemo(
+    () => (counterMatrix ? matchupTable(counterMatrix) : null),
+    [counterMatrix],
+  );
+  // Each hero's overall win rate at the selected rank and patch, summed straight out of the matrix.
+  // Free, and — unlike heroMeta — available without a linked profile, which is what lets the draft
+  // panel work for a visitor who has not entered a Steam id.
+  const ladder = useMemo(
+    () => (counterMatrix ? ladderRates(counterMatrix) : null),
+    [counterMatrix],
+  );
+
   const matchups = useMemo(
-    () => (counterMatrix && hero ? heroMatchups(counterMatrix, hero.id) : null),
-    [counterMatrix, hero],
+    () =>
+      counterMatrix && table && hero
+        ? heroMatchups(counterMatrix, hero.id, table)
+        : null,
+    [counterMatrix, table, hero],
   );
 
   // Counters folded into the build: a per-item lookup to tag build rows that answer this
@@ -135,6 +154,8 @@ export function useCounters(opts: {
     compEdges,
     matrixQ,
     matchups,
+    matchupTable: table,
+    ladder,
     counterByItem,
     countersByPhase,
   };

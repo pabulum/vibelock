@@ -3,12 +3,20 @@
 import "./CountersSection.css";
 import type { Ref } from "react";
 import { CounterPicker, MatchupChip } from "../components/panels";
+import { DraftPanel } from "./DraftPanel";
 import { laneInsight, laneStrengthNote } from "../lib/laneMatchups";
 import type { LaneMatchups } from "../lib/laneMatchups";
+import type { DraftRanking } from "../lib/draft";
 import type { Hero, HeroMatchups } from "../types";
 
 export function CountersSection(props: {
   matchups: HeroMatchups | null;
+  /** Comp-aware hero ranking (lib/draft); null until the matrix lands or with no enemies picked. */
+  draft: DraftRanking | null;
+  heroId: number | null;
+  hasProfile: boolean;
+  pickHero: (id: number) => void;
+  onIntentHero: (id: number) => void;
   /** Lane-phase matchups from the harvested shards (lib/laneMatchups); null until a bake emits them. */
   lane: LaneMatchups | null;
   heroName: string | undefined;
@@ -25,6 +33,11 @@ export function CountersSection(props: {
 }) {
   const {
     matchups,
+    draft,
+    heroId,
+    hasProfile,
+    pickHero,
+    onIntentHero,
     lane,
     heroName,
     heroes,
@@ -47,7 +60,12 @@ export function CountersSection(props: {
           <div className="matchups" ref={matrixRef}>
             {matchups && matchups.tough.length > 0 && (
               <div className="mrow">
-                <span className="lbl tough">Tough vs</span>
+                <span
+                  className="lbl tough"
+                  title={`Win-rate points lost to the matchup itself, over the whole game. Both heroes' overall strength is fitted out first (Bradley-Terry), so this row is who genuinely counters ${heroName ?? "this hero"} rather than who is simply strong right now — the raw read put the same five meta heroes in nearly every hero's list. A real counter in Deadlock is worth about a point.`}
+                >
+                  Tough vs
+                </span>
                 {matchups.tough.map((m) => (
                   <MatchupChip
                     key={m.enemyHeroId}
@@ -63,7 +81,12 @@ export function CountersSection(props: {
             )}
             {matchups && matchups.favorable.length > 0 && (
               <div className="mrow">
-                <span className="lbl fav">Favored vs</span>
+                <span
+                  className="lbl fav"
+                  title={`Win-rate points ${heroName ?? "this hero"} gains from the matchup itself, once both heroes' overall strength is fitted out. Beating a weak hero is not a favourable matchup, and this row no longer counts it as one.`}
+                >
+                  Favored vs
+                </span>
                 {matchups.favorable.map((m) => (
                   <MatchupChip
                     key={m.enemyHeroId}
@@ -108,7 +131,9 @@ export function CountersSection(props: {
               </div>
             )}
             <p className="hint">
-              Click a hero to add it below and see what to build against it.{" "}
+              Numbers are the matchup with hero strength fitted out, so they
+              read small — about a point is a real counter. Click a hero to add
+              it below and see what to build against it.{" "}
               <button type="button" className="guidelink" onClick={onOpenGuide}>
                 How matchup rates work →
               </button>
@@ -122,6 +147,21 @@ export function CountersSection(props: {
           onRemove={onRemoveEnemy}
           onOpen={onOpenPicker}
         />
+
+        {/* Directly under the picker, because that is the order the decision happens in: the enemy
+            picks land, then you choose. Reads the LIVE enemy list — it's pure computation over the
+            already-fetched matrix — so it re-ranks as you add each hero, with no request. */}
+        {draft && (
+          <DraftPanel
+            ranking={draft}
+            heroes={heroes}
+            enemyNames={enemyNames}
+            heroId={heroId}
+            hasProfile={hasProfile}
+            pickHero={pickHero}
+            onIntent={onIntentHero}
+          />
+        )}
       </div>
 
       {enemies.length > 0 && (

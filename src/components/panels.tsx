@@ -16,6 +16,7 @@ import type {
 } from "../types";
 import { ABILITY_COLORS, SLOT_COLORS } from "./colors";
 import { IS_MAC } from "../lib/palette";
+import { signedPt } from "../lib/matchups";
 import { ItemRow } from "./ItemRow";
 
 // The brand mark: a diamond gem that shows a real item icon (masked to the diamond
@@ -405,11 +406,18 @@ export function MatchupChip({
       className={`mchip ${tough ? "tough" : "fav"} ${active ? "active" : ""}`}
       onClick={onClick}
       onPointerEnter={onIntent}
-      title={`${hero?.name ?? "?"}: ${(m.winRate * 100).toFixed(0)}% win rate (${m.delta >= 0 ? "+" : ""}${(m.delta * 100).toFixed(1)} vs avg), n=${m.sample.toLocaleString()}${m.laneCsDelta < -10 ? ` · they out-farm you by ~${Math.abs(Math.round(m.laneCsDelta))} CS in lane` : ""}`}
+      title={
+        `${hero?.name ?? "?"}: ${signedPt(m.resid)} beyond what the two heroes' strengths predict — ` +
+        `the matchup itself. You win ${(m.winRate * 100).toFixed(1)}% of games against them and ` +
+        `strength alone predicts ${(m.expected * 100).toFixed(1)}%, over ${m.sample.toLocaleString()} games.` +
+        (m.laneCsDelta < -10
+          ? ` · they out-farm you by ~${Math.abs(Math.round(m.laneCsDelta))} CS in lane`
+          : "")
+      }
     >
       {hero?.image && <img src={hero.image} alt="" loading="lazy" />}
       <span className="mname">{hero?.name ?? m.enemyHeroId}</span>
-      <span className="mwr">{(m.winRate * 100).toFixed(0)}%</span>
+      <span className="mwr">{signedPt(m.resid)}</span>
       {active && <span className="madd">✓</span>}
     </button>
   );

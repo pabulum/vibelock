@@ -149,6 +149,33 @@ export function GuideModal({ onClose }: { onClose: () => void }) {
       </section>
 
       <section>
+        <h3>Tough vs, Favored vs — and who to pick</h3>
+        <p>
+          These chips show the <em>matchup</em>, in win-rate points, with both
+          heroes&rsquo; overall strength fitted out of it first. That correction
+          is the whole panel: comparing an enemy&rsquo;s win rate against you to
+          your own average measures who is strong right now, not who counters
+          you. Read straight, the current patch&rsquo;s best hero lands in{" "}
+          <em>almost every</em> hero&rsquo;s tough list — which is a fact about
+          the patch, not about your game.
+        </p>
+        <p>
+          So the numbers are small on purpose. A real counter in Deadlock is
+          worth about a point of win rate; anything advertising five points is
+          mostly telling you the enemy is strong. Chips appear from half a
+          point, which is the level that keeps its sign on independent data.
+        </p>
+        <p>
+          With a comp entered, <strong>Best pick</strong> adds those same
+          numbers up across the enemy team and puts them next to your own record
+          on each hero. Usually the comp doesn&rsquo;t change the order and the
+          panel says so — matchups move a couple of points, and which hero
+          you&rsquo;re actually good at moves more. Picking a hero there loads
+          its build, already re-ranked for the comp.
+        </p>
+      </section>
+
+      <section>
         <h3>Adjusting for the enemy comp</h3>
         <p>
           Add enemy heroes and the build re-ranks. Picks that answer the comp

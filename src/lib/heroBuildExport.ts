@@ -91,6 +91,122 @@ function floatField(field: number, value: number): number[] {
   return out;
 }
 
+// ---- Identifying our own builds in a cache file ----
+
+/** Marker every exported build's display name starts with. It is how a re-export recognises the
+ * entry it should REPLACE rather than pile a duplicate on top of (see injectBuildsIntoCache), so it
+ * must stay stable across releases — and every name must be built by {@link vibelockBuildName}, not
+ * assembled at a call site, or the two halves of that contract drift apart. */
+export const VIBELOCK_BUILD_PREFIX = "Vibelock — ";
+
+/** The in-game display name for an exported build. One definition, because it is simultaneously
+ * what the player sees and the key a later export matches on. */
+export function vibelockBuildName(
+  heroName: string,
+  rankLabel: string,
+  archLabel?: string,
+): string {
+  return `${VIBELOCK_BUILD_PREFIX}${heroName}${archLabel ? ` · ${archLabel}` : ""} (${rankLabel})`;
+}
+
+/** Read one unsigned varint. Accumulates by multiplication rather than shifting: JS bitwise ops are
+ * 32-bit signed and these fields include item ids and unix timestamps past 2^31. */
+function readVarint(
+  buf: Uint8Array,
+  pos: number,
+): [value: number, next: number] {
+  let value = 0;
+  let scale = 1;
+  let p = pos;
+  for (;;) {
+    if (p >= buf.length) throw new Error("truncated varint");
+    const b = buf[p++];
+    value += (b & 0x7f) * scale;
+    if ((b & 0x80) === 0) return [value, p];
+    scale *= 128;
+  }
+}
+
+/** Walk a protobuf message's top-level fields. Wire types 0/1/2/5 only — the messages here use
+ * nothing else, and groups (3/4) have been deprecated since proto2. */
+function* readFields(
+  buf: Uint8Array,
+): Generator<{ field: number; varint?: number; bytes?: Uint8Array }> {
+  let p = 0;
+  while (p < buf.length) {
+    const [tag, afterTag] = readVarint(buf, p);
+    p = afterTag;
+    const field = Math.floor(tag / 8);
+    switch (tag % 8) {
+      case 0: {
+        const [varint, next] = readVarint(buf, p);
+        p = next;
+        yield { field, varint };
+        break;
+      }
+      case 1:
+        p += 8;
+        yield { field };
+        break;
+      case 2: {
+        const [len, afterLen] = readVarint(buf, p);
+        if (afterLen + len > buf.length) throw new Error("truncated field");
+        yield { field, bytes: buf.subarray(afterLen, afterLen + len) };
+        p = afterLen + len;
+        break;
+      }
+      case 5:
+        p += 4;
+        yield { field };
+        break;
+      default:
+        throw new Error(`unsupported wire type in field ${field}`);
+    }
+  }
+}
+
+/** What a cache entry is, as far as replacement is concerned. */
+export interface HeroBuildInfo {
+  heroId: number;
+  name: string;
+}
+
+/**
+ * Read the hero and display name out of one `Favorites` envelope — enough to tell our builds from
+ * the player's own, and which hero each is for. Returns null for anything that doesn't parse as the
+ * expected envelope, because a cache file we don't fully understand must be left alone rather than
+ * partially rewritten.
+ */
+export function readHeroBuildInfo(envelope: Uint8Array): HeroBuildInfo | null {
+  try {
+    let body: Uint8Array | undefined;
+    for (const f of readFields(envelope))
+      if (f.field === 1 && f.bytes) body = f.bytes; // envelope { 1: hero_build }
+    if (!body) return null;
+    let heroId: number | undefined;
+    let name: string | undefined;
+    for (const f of readFields(body)) {
+      if (f.field === 2 && f.varint !== undefined) heroId = f.varint;
+      else if (f.field === 5 && f.bytes)
+        name = new TextDecoder().decode(f.bytes);
+    }
+    return heroId === undefined || name === undefined ? null : { heroId, name };
+  } catch {
+    return null;
+  }
+}
+
+/** Whether a cache entry is one of ours, for `heroId` — the replacement key. Deliberately keyed on
+ * hero and not on the full name: re-exporting Paradox at a different rank or archetype should
+ * replace your Paradox build, not sit beside it. */
+export function isOurBuildFor(info: HeroBuildInfo | null, heroId: number) {
+  return (
+    !!info &&
+    info.heroId === heroId &&
+    info.name.startsWith(VIBELOCK_BUILD_PREFIX)
+  );
+}
+
 // ---- Build → CMsgHeroBuild ----
 
 /** One item in an exported category, with its in-game extras: the annotation (the note icon on the

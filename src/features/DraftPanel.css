@@ -1,0 +1,182 @@
+@layer components {
+  /* The draft panel — a ranked list of heroes you could pick against the comp on the board. Same
+     grammar as the dashboard cards (head rule, display heading, mono qualifier), but it lives in
+     the counters section rather than the .dash column packer, so it carries its own frame. */
+  .draft {
+    margin: 12px var(--gutter) 0;
+    padding: 10px 0 0;
+    border-top: 1px solid var(--rule-strong);
+  }
+  @media (max-width: 760px) {
+    .draft {
+      margin-left: var(--gutter-narrow);
+      margin-right: var(--gutter-narrow);
+    }
+  }
+  .draft h2 {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 3px 8px;
+    margin: 0 0 8px;
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .draft h2 .sub {
+    font-family: var(--font-mono);
+    font-weight: 400;
+    font-size: 10.5px;
+    letter-spacing: 0.03em;
+    color: var(--ink-3);
+  }
+
+  .draft .drows {
+    display: flex;
+    flex-direction: column;
+    max-width: 640px;
+  }
+
+  /* A row, not a chip: this is a ranked table and the eye needs a column to run down. Hairline
+     separators only — the list is short and a box per row would out-shout the numbers. */
+  /* Fixed track widths, not 1fr/auto: each row is its own grid container, so an intrinsic track
+     resizes per row and the number columns stop lining up down the list — which is the one thing a
+     ranked table has to get right. Only the marks column flexes, and it's last. */
+  .drow {
+    display: grid;
+    grid-template-columns: 22px 108px 52px 44px minmax(0, 1fr);
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 4px 4px 4px 0;
+    border: 0;
+    border-bottom: 1px solid var(--rule);
+    background: none;
+    font-family: var(--font-text);
+    font-size: 12.5px;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+  }
+  .drow:last-child {
+    border-bottom: 0;
+  }
+  .drow:hover,
+  .drow:focus-visible {
+    background: var(--surface-2);
+  }
+  .drow.active {
+    color: var(--accent-ui);
+    box-shadow: inset 2px 0 0 var(--accent-ui);
+  }
+  /* Off-pool suggestions read as provisional — the same dashed vocabulary the "Worth picking up"
+     chips use for a hero you don't play yet. */
+  .drow.try .dname {
+    border-bottom: 1px dashed var(--rule-strong);
+  }
+  .drow > img {
+    width: 22px;
+    height: 22px;
+    border-radius: var(--r-pill);
+    object-fit: cover;
+    background: var(--surface-2);
+  }
+  .drow .dname {
+    justify-self: start;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* Every number is mono and tabular so the columns line up down the list. */
+  .drow .dexp,
+  .drow .dedge,
+  .drow .dmark span,
+  .drow .dlane {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .drow .dexp {
+    font-size: 12px;
+    text-align: right;
+    color: var(--ink);
+  }
+  .drow .dedge {
+    font-size: 11px;
+    text-align: right;
+    color: var(--ink-3);
+  }
+
+  /* Per-enemy breakdown: the enemy's face and what it costs you, so the row shows its working. */
+  .drow .dmarks {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .drow .dmark {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .drow .dmark img {
+    width: 15px;
+    height: 15px;
+    border-radius: var(--r-pill);
+    object-fit: cover;
+    background: var(--surface-2);
+  }
+  .drow .dmark span {
+    font-size: 10.5px;
+    color: var(--ink-3);
+  }
+  /* Colour is meaning-only, and the threshold is this column's own: matchup residuals have hero
+     strength removed and sd 0.50pt, so 0.5pt is where a sign is trustworthy (lib/matchups). The
+     ±2pt no-colour band on the build rows is a win-rate-delta rule and doesn't transfer. */
+  .drow .pos {
+    color: var(--pos);
+  }
+  .drow .neg {
+    color: var(--neg);
+  }
+  /* Souls, not win-rate points — its own colour so it can't be read as another matchup number. */
+  .drow .dlane {
+    font-size: 10.5px;
+    color: var(--warn);
+    white-space: nowrap;
+  }
+
+  .draft .dsub {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 12px 0 4px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 400;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .draft .dnote {
+    letter-spacing: 0.03em;
+    text-transform: none;
+  }
+
+  .draft .dverdict {
+    max-width: 640px;
+    margin: 10px 0 0;
+    padding-left: 10px;
+    border-left: 2px solid var(--accent-rule);
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--ink-2);
+  }
+  .draft .dverdict strong {
+    font-weight: 600;
+    color: var(--ink);
+  }
+}
