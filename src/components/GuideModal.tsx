@@ -50,19 +50,18 @@ export function GuideModal({ onClose }: { onClose: () => void }) {
         </p>
         <p>
           <strong>Raw win rate</strong> is the plain win rate with no
-          correction. We fall back to it wherever no adjusted figure exists —
-          counter deltas, hero matchups, and whole community builds — so in
-          those spots, <strong>lean on the larger samples</strong>.
+          correction. We fall back to it wherever no adjusted figure exists:
+          counter deltas, hero matchups, and whole community builds. In those
+          spots, <strong>lean on the larger samples</strong>.
         </p>
         <p className="fine">
-          One honest limit: the correction knows your net worth at purchase, not
-          your <em>lead</em> — and players buy expensive items
-          disproportionately when already winning. We measured it against a
-          win-probability model built from real match timelines: at the moment
-          of purchase, a tier-4 buy sits at roughly 56% win probability versus
-          ~50% for tier 1. So late, expensive picks stay a touch flattered even
-          after adjustment — the{" "}
-          <span className="statetag winmore">win more</span> /{" "}
+          The correction knows your net worth at purchase, not your{" "}
+          <em>lead</em> — and players buy expensive items disproportionately
+          when already winning. We measured it against a win-probability model
+          built from real match timelines: at the moment of purchase, a tier-4
+          buy sits at roughly 56% win probability versus ~50% for tier 1. So
+          late, expensive picks stay a touch flattered even after adjustment —
+          the <span className="statetag winmore">win more</span> /{" "}
           <span className="statetag comeback">comeback</span> tags are the
           per-pick read on it, and no aggregate correction can fully remove it.
         </p>
@@ -94,9 +93,9 @@ export function GuideModal({ onClose }: { onClose: () => void }) {
       <section>
         <h3>How the build is chosen</h3>
         <p>
-          The build isn’t just the top win rates sorted top to bottom — a
-          rarely-built item can show a flashy rate by luck. A few corrections
-          keep it honest:
+          Sorting by win rate alone would put a rarely-built item at the top on
+          a lucky streak. These corrections stand between the raw numbers and
+          the build:
         </p>
         <ul>
           <li>
@@ -108,10 +107,10 @@ export function GuideModal({ onClose }: { onClose: () => void }) {
             win-rate check — at that popularity its own win rate is
             mathematically squeezed toward the average and can’t say much either
             way. It only loses the seat when buyers are demonstrably{" "}
-            <em>and</em> meaningfully behind everyone who skipped it — so a
-            small red number on a{" "}
-            <span className="role role-universal">CORE</span> pick isn’t proof
-            it’s bad, just proof the gap isn’t big enough to call.
+            <em>and</em> meaningfully behind everyone who skipped it. A small
+            red number on a <span className="role role-universal">CORE</span>{" "}
+            pick isn’t proof it’s bad, just proof the gap isn’t big enough to
+            call.
           </li>
           <li>
             <strong>Small samples are pulled toward the hero’s average.</strong>{" "}
@@ -127,24 +126,25 @@ export function GuideModal({ onClose }: { onClose: () => void }) {
             something that merely <em>might</em> be great.
           </li>
           <li>
-            <strong>“Value” means real, not just high.</strong> A pick is only
-            labelled a value pick when its edge is big enough to be unlikely
-            from chance at that sample size, not just past a fixed cutoff.
-            Counters work the same way: an item is tagged as answering an enemy
-            by the edge over that matchup we’re <em>confident</em> it has —
-            shrunk toward no-effect by sample — so a thin fluke can’t earn a
-            portrait, but a real, moderate counter isn’t hidden either.
+            <strong>A “value” pick has to clear its own noise.</strong> The
+            label goes on when the edge is big enough to be unlikely from chance
+            at that sample size, rather than at a fixed cutoff. Counters work
+            the same way: an item is tagged as answering an enemy by the edge
+            over that matchup we’re <em>confident</em> it has — shrunk toward
+            no-effect by sample. A thin fluke can’t earn a portrait, but a real,
+            moderate counter isn’t hidden either.
           </li>
           <li>
             <strong>Items that win together.</strong> Beyond each pick on its
             own, the build leans toward items that win <em>together</em> more
-            than their solo rates predict, and away from redundant pairs — so it
-            reads as a coherent kit, not a list of individually-good parts.
+            than their solo rates predict, and away from redundant pairs, so the
+            picks work as one kit.
           </li>
         </ul>
         <p className="fine">
-          For the curious: empirical-Bayes shrinkage, lower-confidence-bound
-          ranking, significance gates, and a centered pairwise-synergy term.
+          By their proper names: empirical-Bayes shrinkage,
+          lower-confidence-bound ranking, significance gates, and a centered
+          pairwise-synergy term.
         </p>
       </section>
 
@@ -199,7 +199,7 @@ export function GuideModal({ onClose }: { onClose: () => void }) {
           <dd>
             Discretionary picks are ordered by the win rate we’re fairly sure
             they <em>at least</em>
-            reach — a cautious estimate that builds in sample size — so a proven
+            reach: a cautious estimate that builds in sample size, so a proven
             pick beats a shakier high-roller.
           </dd>
 

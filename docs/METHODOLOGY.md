@@ -121,7 +121,7 @@ The pre-patch window enters as a **power prior** worth at most ~K decided games 
 learned from measured patch-to-patch drift when the data can support the fit; the default is 1,000).
 It is discounted per item when the fresh data contradicts it — that is, for the items the patch
 actually changed. The borrow self-anneals as the patch accumulates games, and the header shows the
-borrowed share ("N% backfilled"), so a day-one build is both complete and honest about its evidence.
+borrowed share ("N% backfilled"), so a day-one build is complete and says how much of it is borrowed.
 
 ## Matchups and counters
 
@@ -160,7 +160,7 @@ floor and a warning flag on thin samples. Nothing is silently reordered. The top
 are folded into that phase as extra situational picks, each labelled with the core item it should
 swap out for.
 
-Two things to know. `item-stats` has no adjusted rate, so counter deltas are raw; the with/without
+`item-stats` has no adjusted rate, so counter deltas are raw; the with/without
 delta cancels much of the shared confound, but lean on the bigger samples. And a naive "what wins vs
 hero X" is dominated by generic strong items, so single-hero, large-sample movers are the trustworthy
 signal.
@@ -201,8 +201,7 @@ residual against their plain win rate so it measures style rather than strength.
 even games; negative wins by snowballing a lead.
 
 Hero-specific _item_ effects are not shown: measured interaction effects are tiny (sd ≈ 0.9 points)
-against the sample needed to see them, so the honest answer is that the data does not currently
-support per-hero item values.
+against the sample needed to see them, so the data does not currently support per-hero item values.
 
 ## Soul pace
 
@@ -363,7 +362,7 @@ purchase climbs from about 50% for tier-1 buys to about 56% for tier-4.
 The Lab's `excess` is the metric that actually removes this (its correlation with purchase-state win
 probability is r ≈ 0.10), but it is currently a global, roster-wide number rather than a per-hero one,
 so the generator still ranks on `adjusted_win_rate`. The per-item **comeback / win more** tags are the
-honest per-pick read on the bias in the meantime.
+per-pick read on the bias in the meantime.
 
 **A corrupt net worth in the lane phase.** There is an upstream data bug: in the per-match data, an
 item's `net_worth_at_buy` reports the player's _final_ net worth for their first ~4–5 purchases. Those
@@ -378,8 +377,8 @@ their raw win rate instead. The test is self-calibrating rather than a hardcoded
 flagged when its net worth at buy exceeds twice its _column's_ median. Measured across heroes, columns
 1–3 contain no such node, while the lane column has 9–15 per hero. Lane is also the phase where the
 confound the adjustment exists to fix is weakest — everyone is poor, so there is little net-worth
-variance to confound — which is why falling back to the raw rate is the honest move there. A wrong
-adjustment is worse than none.
+variance to confound — which is why that column falls back to the raw rate. A wrong adjustment is
+worse than none.
 
 **Selection and survivorship.** Pick-rate-selected core items win at roughly the baseline by
 construction, so discretionary slots are ranked by shrunk adjusted win rate instead. Upgrade paths

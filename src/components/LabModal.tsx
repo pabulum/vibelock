@@ -86,10 +86,10 @@ export function LabModal({
               their team <strong>actually won</strong>, and how often the{" "}
               <strong>souls scoreboard said they should win</strong> at each
               point in the game. The gap is closing power, in percentage points.
-              One honest caveat: this tracks the hero&rsquo;s plain win rate
-              closely (r≈0.93) — good heroes close. The genuinely new
-              information is the part win rate does <em>not</em> explain, shown
-              as the <span className="labstyle up">converter</span> /{" "}
+              It tracks the hero&rsquo;s plain win rate closely (r≈0.93),
+              because good heroes close. The new information is the part win
+              rate does <em>not</em> explain, shown as the{" "}
+              <span className="labstyle up">converter</span> /{" "}
               <span className="labstyle down">snowballer</span> chips: a
               converter wins even games beyond what its win rate predicts (a
               rough lane isn&rsquo;t fatal); a snowballer&rsquo;s wins ride on

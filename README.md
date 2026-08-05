@@ -57,7 +57,7 @@ _when_ it gets bought: expensive items get bought by players who are already win
 good regardless of what they do. Measured on live data, an item's raw win rate correlates at r ≈ 0.91
 with the win probability that already held at the moment of purchase.
 
-Vibelock takes two shots at that problem.
+Vibelock attacks that from two directions.
 
 **It builds instead of ranking.** A build is a correlated set of items under a budget, so the top-N
 items scored independently do not compose into one. Each phase is filled against a real soul budget,
@@ -71,15 +71,15 @@ probability their purchase situation already implied — fitted nightly over a r
 match timelines.
 
 The full write-up — slot economy, the flex-hero archetype split, patch blending, Bradley-Terry
-matchup de-noising, and a frank account of what remains confounded — lives in
+matchup de-noising, and what remains confounded — lives in
 **[docs/METHODOLOGY.md](docs/METHODOLOGY.md)**.
 
 ## Caveats
 
 Win-rate builds, this one included, still partly measure _who_ buys an item rather than what the item
-does: good players buy good items. `adjusted_win_rate` shrinks that effect without erasing it. Treat
-the numbers as a strong prior, not as gospel. The Lab's state-adjusted scores and the per-item
-comeback / win-more tags are there to show you where the bias bites hardest.
+does: good players buy good items. `adjusted_win_rate` shrinks that effect without erasing it, so the
+numbers are a strong prior and nothing more. The Lab's state-adjusted scores and the per-item
+comeback / win-more tags show you where the bias bites hardest.
 
 ## Contributing
 
