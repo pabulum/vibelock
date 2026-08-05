@@ -149,6 +149,73 @@
     white-space: nowrap;
   }
 
+  /* --- Ban row: the decision before the picks, so it leads the section --- */
+  .bans {
+    margin-bottom: 4px;
+  }
+  .banrow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  /* Not a button: nothing here is clickable, because we can't ban for you. It's a readout. */
+  .banchip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 10px 4px 5px;
+    border: 1px solid var(--rule);
+    font-size: 12.5px;
+    color: var(--ink);
+  }
+  .banchip img {
+    width: 20px;
+    height: 20px;
+    border-radius: var(--r-pill);
+    object-fit: cover;
+    background: var(--surface-2);
+  }
+  .banchip .bcost,
+  .banchip .bfreq {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+  }
+  /* What it costs when you meet it… */
+  .banchip .bcost {
+    color: var(--neg);
+  }
+  /* …and how often that is. A frequency, not a win rate, so it doesn't borrow the cost's colour. */
+  .banchip .bfreq {
+    color: var(--ink-3);
+  }
+  /* A hero you play. Banning it costs you the pick, so the chip says so rather than letting the
+     cost column argue one-sidedly for a ban that takes one of your own options away. */
+  .banchip.own {
+    border-style: dashed;
+  }
+  .banchip .bown {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--warn);
+  }
+  .bannote {
+    max-width: 640px;
+    margin: 8px 0 14px;
+    padding-left: 10px;
+    border-left: 2px solid var(--rule-strong);
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--ink-2);
+  }
+  .bannote strong {
+    font-weight: 600;
+    color: var(--ink);
+  }
+
   .draft .dsub {
     display: flex;
     align-items: baseline;

@@ -184,12 +184,61 @@ sd ≈ 438 souls raw to sd ≈ 105 residual — which is the quantitative statem
 B in lane" is just farming ability. Pairs are shrunk toward zero by sample and surface at a 150-soul
 floor (~1.7% of a 10-minute net worth).
 
+**Bans.** The decision before the pick, and the one the residuals answer most directly. A ban
+candidate is scored by `presence × meanCost`: the mean residual of that hero against the heroes _you_
+play, times how often it actually turns up on an enemy team. Presence comes free out of the same
+matrix — a hero's share of all row-sums is its share of all hero slots, and six enemy slots turn that
+into a probability (the shares sum to 6 across the roster, which is the check that it means what it
+says). Ranking by cost alone would recommend banning a rare menace over a problem you meet every
+other game.
+
+Three things it deliberately refuses to do. It does not claim a ban removes the hero — a ban lowers
+how often you meet it, and the fraction is a matchmaking property we cannot measure, so no number is
+invented for it; the panel reports the size of the _problem_, not the size of the win. It does not
+hide that banning a hero you play costs you a pick, which is flagged rather than netted off. And it
+does not treat community ban counts as evidence: `hero-ban-stats` carries no win rate, so it measures
+what players fear rather than what beats them, and rides along as context only.
+
+Live values top out near 0.16pt per queued game, which is small, and the surfacing floor of 0.1pt is
+about three standard errors on that quantity — `meanCost` averages ~6 residuals of sd 0.5pt, so its
+own sd is ≈ 0.2pt, and at a typical 16% presence the noise is ≈ 0.03pt. That is why the list is two
+or three heroes rather than a ranked roster.
+
 **Draft.** With an enemy comp on the board, the same residuals answer the question the rest of the
 app skips: which hero to _pick_. A candidate's expected win rate is its comp-blind base — your own
 record on it, shrunk toward its current ladder rate at this rank and patch — plus the sum of its
-residuals against each enemy. Summing is the additive model, and it is what the no-saturation result
-above licenses. Lane residuals are reported beside the number, never inside it: souls at 10 minutes
-are not win-rate points.
+residuals against each enemy. Lane residuals are reported beside the number, never inside it: souls
+at 10 minutes are not win-rate points.
+
+Summing is an additive model, and the honest position on it is this. A full comp-vs-comp cell cannot
+be checked at all: C(38,6) = 2.76M team compositions means ~7.6 × 10¹² pairings against ~2M games a
+month, so every match is a unique matchup and the sample is not thin but absent. Additivity is
+therefore the only estimable model at that resolution, and the question is whether it degrades where
+sample _does_ exist. Measured, on the two orders below the full comp:
+
+- **Second order, the enemy pair.** For each of Haze, Drifter and Bebop, win rate against every
+  enemy _pair_ (665 cells each, median n ≈ 13k), against what the two single-enemy residuals
+  predict. The interaction is real: observed sd 0.59pt against 0.41pt of sampling noise, so signal
+  sd ≈ 0.42–0.48pt — comparable to the 0.50pt first-order residual itself — and 16.4% of cells clear
+  2 s.e. where chance gives 5%. Over the fifteen pairs in a six-hero comp that is up to ~1.6pt of
+  effect the sum does not model.
+- **But it is not a matchup.** The same interaction correlates at _r_ = 0.68–0.76 across those three
+  very different heroes (noise-corrected, ≈ 1). It is a property of the enemy comp's own internal
+  coherence — Vindicta + Grey Talon reads +2.6pt against everyone, Dynamo + Paige −3.5pt against
+  everyone — not of who you bring into it. A term that shifts every candidate by the same amount
+  cancels exactly in a ranking, and the ranking is what this panel is for.
+- **Third order, the ally side.** All 8,436 hero trios exist with usable sample (median 4,649
+  games), and the three-way interaction beyond pairs has observed sd 0.62pt against 0.65pt of
+  sampling noise — signal sd 0.00pt. Team effects are pairwise and nothing above that is estimable
+  or, on this evidence, present.
+
+So the ordering the panel reports survives the second-order effect; the absolute expected win rate
+carries it. That number is a hero-quality estimate — your record plus the matchup — and is not a
+prediction of the game, which is why the verdict line argues about order and never about the
+percentage. Two caveats on the measurement itself: within a hero, one game feeds fifteen pair cells,
+so the binomial noise term is understated and 0.42pt is an upper bound; and the leading candidate
+explanation for a hero-independent pair effect is party composition (`match_player.party` is
+present, so it is directly testable) rather than anything about the heroes.
 
 The honest headline is usually "play your best hero". Comp edge spreads about 2.5pt across a
 realistic five-hero pool (p90 4.0pt), while the same player's own record spreads wider than that

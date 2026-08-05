@@ -90,6 +90,9 @@ export function useProfile(opts: {
   canBackfill: boolean;
   priorKey: TimeWindow | null;
   wpStats: WpStats | null;
+  /** Fetch the ladder's hero win rates even without a profile — the draft and ban panels read them
+   * (see heroMetaQ). Costs one or two requests, and only when those panels are actually up. */
+  wantLadder: boolean;
 }) {
   const {
     hero,
@@ -106,6 +109,7 @@ export function useProfile(opts: {
     canBackfill,
     priorKey,
     wpStats,
+    wantLadder,
   } = opts;
 
   // Steam identity — the single source shared by the header profile control and the export panel
@@ -209,10 +213,17 @@ export function useProfile(opts: {
 
   // Ladder-wide hero win rates for the selected rank/patch, backfilled on a young patch exactly
   // like items are — hero rows quack enough like ItemStat that the same power-prior blend applies.
+  //
+  // This is the most defensible hero win rate the app has, and the draft/ban panels want it too:
+  // it is backfilled like everything else, and it has no per-cell sample floor deciding WHICH of a
+  // hero's matchups count toward its average (the counter matrix's `min_matches` does, and those
+  // cells don't drop out at random). The counter matrix can stand in — same rank, same window,
+  // agreeing with hero-stats to 0.01pt — but only as a fallback, and lib/draft says so.
   const heroMetaQ = useQuery({
     queryKey: ["heroMeta", { minBadge, maxBadge }, dataWindow, priorKey],
-    // Only wanted once a profile is set — but keyed rank/patch-only, so it's shared across accounts.
-    enabled: accountId !== null && !!items && patchesReady,
+    // Wanted for a profile, and for the draft panel whether or not one is linked. Keyed
+    // rank/patch-only, so it's shared across accounts and costs nothing the second time.
+    enabled: (accountId !== null || wantLadder) && !!items && patchesReady,
     placeholderData: keepPreviousData,
     queryFn: async () => {
       const [f, q] = await Promise.all([
@@ -245,7 +256,10 @@ export function useProfile(opts: {
       );
     },
   });
-  const heroMeta = accountId !== null ? (heroMetaQ.data ?? null) : null;
+  // Profile-scoped consumers (your-heroes ordering, "worth picking up") stay gated on a profile;
+  // `ladderMeta` is the same data for anyone who needs a hero's current rate.
+  const ladderMeta = heroMetaQ.data ?? null;
+  const heroMeta = accountId !== null ? ladderMeta : null;
 
   // The your-heroes row, what-to-queue ordered. Pool = your most-played heroes, gated to the last
   // 90 days when possible (meta and rust make all-time mains a worse default). Each gets an
@@ -496,6 +510,7 @@ export function useProfile(opts: {
     heroPool,
     profileTier,
     heroMetaQ,
+    ladderMeta,
     topHeroes,
     tryHeroes,
     NEW_HERO_TAX,

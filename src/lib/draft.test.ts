@@ -56,7 +56,10 @@ describe("ladderRates", () => {
     const r = ladderRates(m);
     // Hero 1 wins 60% of one of its three cells and 50% of the rest.
     expect(r.get(1)!.winRate).toBeCloseTo((0.6 + 0.5 + 0.5) / 3, 6);
-    expect(r.get(1)!.games).toBe(300000);
+    // Three cells of 100,000 is 300,000 cell-appearances but 50,000 real matches: the matrix is
+    // keyed (hero, enemy), so a game shows up once per opponent faced. The rate needs no such
+    // correction — every game is over-counted equally above and below the line.
+    expect(r.get(1)!.games).toBe(50000);
   });
 });
 

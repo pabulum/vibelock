@@ -2,7 +2,11 @@
 // and the per-item / per-phase lookups the build render tags rows from.
 import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { getHeroCounters, getItemStats } from "../api/deadlock";
+import {
+  getHeroBanStats,
+  getHeroCounters,
+  getItemStats,
+} from "../api/deadlock";
 import type { TimeWindow } from "../api/deadlock";
 import { computeItemCounters } from "../lib/counters";
 import { counterSliceQueries } from "../lib/prefetch";
@@ -23,6 +27,8 @@ export function useCounters(opts: {
   canBackfill: boolean;
   priorKey: TimeWindow | null;
   patchesReady: boolean;
+  /** Fetch community ban counts — only wanted when the ban panel has a pool to advise. */
+  wantBans: boolean;
 }) {
   const {
     hero,
@@ -36,6 +42,7 @@ export function useCounters(opts: {
     canBackfill,
     priorKey,
     patchesReady,
+    wantBans,
   } = opts;
 
   // Compute counters vs the chosen enemies.
@@ -122,6 +129,23 @@ export function useCounters(opts: {
     [counterMatrix],
   );
 
+  // Community ban counts — context beside the ban panel's measured cost, never a reason of its own
+  // (the endpoint carries no win rate). Only fetched once there's something to contextualise, and
+  // failure is silent: the panel simply drops the "N% of bans" note.
+  const banStatsQ = useQuery({
+    queryKey: ["heroBans", dataWindow],
+    enabled: wantBans && patchesReady,
+    placeholderData: keepPreviousData,
+    queryFn: () => getHeroBanStats(dataWindow),
+  });
+  const banStats = useMemo(
+    () =>
+      banStatsQ.data
+        ? new Map(banStatsQ.data.map((r) => [r.hero_id, r.bans]))
+        : null,
+    [banStatsQ.data],
+  );
+
   const matchups = useMemo(
     () =>
       counterMatrix && table && hero
@@ -155,7 +179,9 @@ export function useCounters(opts: {
     matrixQ,
     matchups,
     matchupTable: table,
+    counterMatrix,
     ladder,
+    banStats,
     counterByItem,
     countersByPhase,
   };

@@ -19,6 +19,7 @@ export type {
   ItemStat,
   ItemPermutationStats,
   HeroCounterRow,
+  HeroBanStat,
   MatchGoldSource,
   MatchStatSample,
   MatchItemEvent,
@@ -476,8 +477,6 @@ export interface Matchup {
 }
 
 export interface HeroMatchups {
-  /** The hero's own overall win rate across the matrix — context for the observed cell rates. */
-  baseline: number;
   tough: Matchup[];
   favorable: Matchup[];
 }

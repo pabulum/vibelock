@@ -19,6 +19,7 @@ import {
   AbilityOrderRowSchema,
   BadgeDistributionRowSchema,
   HeroBuildStatRowSchema,
+  HeroBanStatSchema,
   HeroCounterRowSchema,
   HeroLadderStatSchema,
   ItemFlowStatsSchema,
@@ -52,6 +53,7 @@ import type {
   CommunityBuild,
   Hero,
   HeroBuildStatRow,
+  HeroBanStat,
   HeroCounterRow,
   HeroLadderStat,
   Item,
@@ -977,6 +979,24 @@ export function getHeroLadderStats(
   return getAnalytics(
     `${BASE}/v1/analytics/hero-stats?${params}`,
     HeroLadderStatsSchema,
+    q.signal,
+  );
+}
+
+const HeroBanStatsSchema = v.array(HeroBanStatSchema);
+
+/** How often each hero is banned in the window. Small payload, and deliberately NOT rank-filtered:
+ * the endpoint's `bucket` splits counts rather than aggregating them, and a ban count is a soft
+ * context number beside lib/bans' measured cost — not something worth slicing thin. */
+export function getHeroBanStats(
+  q: TimeWindow & { signal?: AbortSignal },
+): Promise<HeroBanStat[]> {
+  const params = new URLSearchParams();
+  applyMode(params, q);
+  applyWindow(params, q);
+  return getAnalytics(
+    `${BASE}/v1/analytics/hero-ban-stats?${params}`,
+    HeroBanStatsSchema,
     q.signal,
   );
 }

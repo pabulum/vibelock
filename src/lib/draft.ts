@@ -21,10 +21,23 @@
 // cannot play, which loses more win rate than any matchup on the board is worth. `reorders` exists
 // so the UI can tell the two cases apart.
 //
-// Summing residuals across the comp is the additive model, and it was checked rather than assumed:
-// over 15.6M match_player rows, win rate kept falling at the same rate as more of a hero's
-// residual-identified counters appeared on the enemy team (−2.04pt for the first, −2.60pt for the
-// second), with no saturation. See the note at the top of lib/matchups for the full design.
+// Summing residuals across the comp is the additive model, and its limits are measured rather than
+// asserted. A full comp-vs-comp cell holds about one game (2.76M comps per side), so additivity is
+// not a shortcut past the data — it is the only estimable model at that resolution. What can be
+// checked, was:
+//
+//  - win rate keeps falling at the same rate as more of a hero's counters appear (−2.04pt for the
+//    first, −2.60pt for the second, over 15.6M match_player rows) — no saturation;
+//  - the second-order term is nonetheless REAL: against every enemy *pair*, the interaction beyond
+//    the two singles has signal sd ≈0.42pt, about the size of a first-order residual, which over a
+//    six-hero comp is up to ~1.6pt this sum does not model;
+//  - but it is hero-independent (r 0.68–0.76 across Haze, Drifter and Bebop; ≈1 corrected for
+//    noise). It describes the enemy comp's internal coherence, not your matchup with it, so it
+//    shifts every candidate alike and CANCELS in the ranking.
+//
+// Hence `expected` is a hero-quality number and not a prediction of the game: trust the order it
+// produces, not the percentage. The verdict line is written to argue only the former. Full design
+// and the third-order (ally trio) null in docs/METHODOLOGY and the note atop lib/matchups.
 
 import { residualFor, type MatchupTable } from "./matchups";
 import type { Hero } from "../types";
@@ -85,25 +98,34 @@ export interface PoolEntry {
   wins: number;
 }
 
+/** Enemies per match, and therefore how many times one match appears in a hero's row of the counter
+ * matrix — the matrix is keyed (hero, enemy), so summing a row counts each game once per opponent
+ * faced. Measured against hero-stats on the live matrix, row sums come to 6.01× that endpoint's
+ * match counts while the RATE agrees to 0.01pt, which is exactly this factor and nothing else. */
+const ENEMIES_PER_MATCH = 6;
+
 /** A hero's overall win rate and games across the whole counter matrix — the ladder rate at the
  * selected rank and patch, for free, out of data the counters panel already fetched. Deriving it
  * here rather than taking heroMeta keeps the draft panel alive for visitors with no Steam id
- * linked, who are exactly the ones with no other way to judge an unfamiliar hero. */
+ * linked, who are exactly the ones with no other way to judge an unfamiliar hero.
+ *
+ * `games` is de-duplicated back to real matches; the win rate needs no such correction, since every
+ * game is over-counted equally on both sides of the ratio. */
 export function ladderRates(
   matrix: Array<{ hero_id: number; wins: number; matches_played: number }>,
 ): Map<number, { winRate: number; games: number }> {
-  const acc = new Map<number, { wins: number; games: number }>();
+  const acc = new Map<number, { wins: number; cells: number }>();
   for (const r of matrix) {
-    const cur = acc.get(r.hero_id) ?? { wins: 0, games: 0 };
+    const cur = acc.get(r.hero_id) ?? { wins: 0, cells: 0 };
     cur.wins += r.wins;
-    cur.games += r.matches_played;
+    cur.cells += r.matches_played;
     acc.set(r.hero_id, cur);
   }
   const out = new Map<number, { winRate: number; games: number }>();
   for (const [id, a] of acc)
     out.set(id, {
-      winRate: a.games > 0 ? a.wins / a.games : 0.5,
-      games: a.games,
+      winRate: a.cells > 0 ? a.wins / a.cells : 0.5,
+      games: Math.round(a.cells / ENEMIES_PER_MATCH),
     });
   return out;
 }
@@ -163,7 +185,7 @@ export function draftRanking(opts: {
   laneMatchups: Record<string, Record<string, [number, number, number]>> | null;
   /** Win rate surrendered while learning a hero you don't play (features/useProfile). */
   newHeroTax: number;
-  /** Ladder games a hero needs before it can be suggested off-pool. */
+  /** Real matches a hero needs at this rank and patch before it can be suggested off-pool. */
   minLadderGames?: number;
   /** How many off-pool suggestions to return. */
   offPoolCount?: number;
@@ -176,7 +198,7 @@ export function draftRanking(opts: {
     ladder,
     laneMatchups,
     newHeroTax,
-    minLadderGames = 2000,
+    minLadderGames = 400,
     offPoolCount = 3,
   } = opts;
 

@@ -99,6 +99,15 @@ export const HeroLadderStatSchema = v.object({
 });
 export type HeroLadderStat = v.InferOutput<typeof HeroLadderStatSchema>;
 
+/** One row from /v1/analytics/hero-ban-stats — how often a hero is banned. Counts only: the endpoint
+ * carries no win rate, so this measures what players fear rather than what actually beats them, and
+ * lib/bans treats it as context beside a measured cost rather than as a reason of its own. */
+export const HeroBanStatSchema = v.object({
+  hero_id: v.number(),
+  bans: v.number(),
+});
+export type HeroBanStat = v.InferOutput<typeof HeroBanStatSchema>;
+
 /** One metric's distribution from /v1/analytics/player-stats/metrics — average plus a fixed
  * percentile grid. Fetched for a ladder slice (hero+rank) or a single account. */
 export const MetricDistributionSchema = v.object({

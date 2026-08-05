@@ -12,6 +12,7 @@ import "./DraftPanel.css";
 import { signedPt } from "../lib/matchups";
 import { laneEdgeIsReal } from "../lib/laneMatchups";
 import type { DraftCandidate, DraftRanking } from "../lib/draft";
+import type { BanAdvice } from "../lib/bans";
 import type { Hero } from "../types";
 
 /** Marks worth colouring. The item rows' ±2pt no-colour band is a win-rate-delta rule and does not
@@ -59,6 +60,7 @@ function Row({
             ? `${(c.base * 100).toFixed(1)}% before the comp: your ${c.matches} games on ${c.hero.name}, shrunk toward the hero's current ladder rate at this rank and patch.`
             : `${(c.base * 100).toFixed(1)}% before the comp: the hero's current ladder rate at this rank and patch.`) +
         ` Matchups against this comp are worth ${signedPt(c.compEdge)}pt on top of that — hero strength already removed, so this is the matchup itself.` +
+        ` Read the order, not the percentage: whole-comp effects this sum doesn't model shift every candidate here by about the same amount.` +
         (laneWarn && laneHero
           ? ` Lane caution: ${laneHero.name} beats you by ${Math.abs(laneWarn.resid)} souls at 10 min beyond what farming explains.`
           : "")
@@ -93,8 +95,84 @@ function Row({
   );
 }
 
+/**
+ * The ban row. Sits above the pick table because that's the order the game asks in, and unlike the
+ * pick table it needs no enemy comp — bans happen before anyone has picked.
+ *
+ * The copy carries two caveats that the number alone would paper over: a ban lowers how often you
+ * meet a hero rather than removing it, and banning one you play costs you a pick. Both are real
+ * reasons not to ban, and a panel that only ever argued *for* banning would be selling something.
+ */
+function BanRow({
+  advice,
+  heroes,
+  onIntent,
+}: {
+  advice: BanAdvice;
+  heroes: Hero[];
+  onIntent: (id: number) => void;
+}) {
+  const { candidates, poolSize } = advice;
+  if (candidates.length === 0) return null;
+  const best = candidates[0];
+  return (
+    <div className="bans">
+      <h3 className="dsub">
+        Worth banning
+        <span className="dnote">
+          cost to your {poolSize} heroes × how often you meet it
+        </span>
+      </h3>
+      <div className="banrow">
+        {candidates.map((c) => (
+          <span
+            key={c.hero.id}
+            className={`banchip${c.inYourPool ? " own" : ""}`}
+            onPointerEnter={() => onIntent(c.hero.id)}
+            title={
+              `${c.hero.name} takes ${(c.meanCost * 100).toFixed(1)}pt off your pool on average, and lands on the ` +
+              `enemy team in about ${Math.round(c.presence * 100)}% of games — ${(c.expectedCost * 100).toFixed(2)}pt ` +
+              `per game queued. Worst into ${c.hits
+                .slice(0, 2)
+                .map(
+                  (h) =>
+                    `${heroes.find((x) => x.id === h.heroId)?.name ?? "?"} (${signedPt(h.resid)})`,
+                )
+                .join(", ")}.` +
+              (c.banShare !== undefined
+                ? ` The community spends ${Math.round(c.banShare * 100)}% of its bans here.`
+                : "") +
+              (c.inYourPool
+                ? " You play this hero — banning it takes one of your own options off the board."
+                : "")
+            }
+          >
+            {c.hero.image && <img src={c.hero.image} alt="" loading="lazy" />}
+            <span className="bname">{c.hero.name}</span>
+            {/* Both factors, not their product. The product is what the list is ordered by (the
+                subhead says so), but "0.8pt when you meet it, and you meet it about a fifth of the
+                time" is the sentence a reader can act on — −0.16 alone is unreadably small. */}
+            <span className="bcost">−{(c.meanCost * 100).toFixed(1)}</span>
+            <span className="bfreq">{Math.round(c.presence * 100)}%</span>
+            {c.inYourPool && <span className="bown">yours</span>}
+          </span>
+        ))}
+      </div>
+      <p className="bannote">
+        <strong>{best.hero.name}</strong> costs your pool the most per game
+        queued — {(best.meanCost * 100).toFixed(1)}pt when you meet it, and you
+        meet it in about {Math.round(best.presence * 100)}% of games. A ban
+        lowers that frequency rather than removing the hero, so treat these as
+        the size of the problem, not the size of the win — and you&rsquo;ll
+        still face them often enough that learning the matchup pays.
+      </p>
+    </div>
+  );
+}
+
 export function DraftPanel(props: {
-  ranking: DraftRanking;
+  ranking: DraftRanking | null;
+  bans: BanAdvice | null;
   heroes: Hero[];
   enemyNames: string;
   heroId: number | null;
@@ -104,6 +182,7 @@ export function DraftPanel(props: {
 }) {
   const {
     ranking,
+    bans,
     heroes,
     enemyNames,
     heroId,
@@ -111,8 +190,12 @@ export function DraftPanel(props: {
     pickHero,
     onIntent,
   } = props;
-  const { candidates, offPool, reorders } = ranking;
-  if (candidates.length === 0) return null;
+  const candidates = ranking?.candidates ?? [];
+  const offPool = ranking?.offPool ?? [];
+  const reorders = ranking?.reorders ?? false;
+  // The two halves are independent: bans need a pool but no comp, picks need a comp but no pool.
+  // Either alone is a section worth showing; neither means there is nothing to draft with.
+  if (candidates.length === 0 && !bans) return null;
 
   const best = candidates[0];
   // Both spreads, so the verdict can state the comparison rather than assert it. The matchup
@@ -128,31 +211,22 @@ export function DraftPanel(props: {
   return (
     <section className="draft">
       <h2>
-        {hasProfile ? "Best pick" : "Strongest into this comp"}{" "}
-        <span className="sub">vs {enemyNames}</span>
+        Draft{" "}
+        <span className="sub">
+          {candidates.length > 0 ? `vs ${enemyNames}` : "before the picks land"}
+        </span>
       </h2>
-      <div className="drows">
-        {candidates.map((c) => (
-          <Row
-            key={c.hero.id}
-            c={c}
-            heroes={heroes}
-            selected={c.hero.id === heroId}
-            onPick={() => pickHero(c.hero.id)}
-            onIntent={() => onIntent(c.hero.id)}
-          />
-        ))}
-      </div>
-      {offPool.length > 0 && (
+
+      {bans && <BanRow advice={bans} heroes={heroes} onIntent={onIntent} />}
+
+      {candidates.length === 0 ? null : (
         <>
           <h3 className="dsub">
-            Beats your pool here
-            <span className="dnote">
-              already minus the new-hero learning tax
-            </span>
+            {hasProfile ? "Best pick" : "Strongest into this comp"}
+            <span className="dnote">your record + the matchup</span>
           </h3>
           <div className="drows">
-            {offPool.map((c) => (
+            {candidates.map((c) => (
               <Row
                 key={c.hero.id}
                 c={c}
@@ -163,30 +237,52 @@ export function DraftPanel(props: {
               />
             ))}
           </div>
+          {offPool.length > 0 && (
+            <>
+              <h3 className="dsub">
+                Beats your pool here
+                <span className="dnote">
+                  already minus the new-hero learning tax
+                </span>
+              </h3>
+              <div className="drows">
+                {offPool.map((c) => (
+                  <Row
+                    key={c.hero.id}
+                    c={c}
+                    heroes={heroes}
+                    selected={c.hero.id === heroId}
+                    onPick={() => pickHero(c.hero.id)}
+                    onIntent={() => onIntent(c.hero.id)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+          {/* The honest headline. A matchup is worth about a point; which hero you are actually good at
+          is worth several, so "no change" is the common and correct answer and gets said plainly. */}
+          <p className="dverdict">
+            {reorders ? (
+              <>
+                <strong>{best.hero.name}</strong> moves ahead for this comp
+                {hasProfile ? " — it isn't your best hero on paper" : ""}, worth{" "}
+                {signedPt(best.compEdge)}pt of matchup.
+              </>
+            ) : (
+              <>
+                This comp doesn&rsquo;t change your order — take{" "}
+                <strong>{best.hero.name}</strong>. Matchups spread{" "}
+                {(compSpread * 100).toFixed(1)}pt across these heroes
+                {hasProfile
+                  ? `, against ${(baseSpread * 100).toFixed(1)}pt between the heroes themselves`
+                  : ""}
+                .
+              </>
+            )}{" "}
+            Picking a hero here loads its build, already re-ranked for the comp.
+          </p>
         </>
       )}
-      {/* The honest headline. A matchup is worth about a point; which hero you are actually good at
-          is worth several, so "no change" is the common and correct answer and gets said plainly. */}
-      <p className="dverdict">
-        {reorders ? (
-          <>
-            <strong>{best.hero.name}</strong> moves ahead for this comp
-            {hasProfile ? " — it isn't your best hero on paper" : ""}, worth{" "}
-            {signedPt(best.compEdge)}pt of matchup.
-          </>
-        ) : (
-          <>
-            This comp doesn&rsquo;t change your order — take{" "}
-            <strong>{best.hero.name}</strong>. Matchups spread{" "}
-            {(compSpread * 100).toFixed(1)}pt across these heroes
-            {hasProfile
-              ? `, against ${(baseSpread * 100).toFixed(1)}pt between the heroes themselves`
-              : ""}
-            .
-          </>
-        )}{" "}
-        Picking a hero here loads its build, already re-ranked for the comp.
-      </p>
     </section>
   );
 }

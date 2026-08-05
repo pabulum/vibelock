@@ -23,6 +23,7 @@ import { rankFilterUsable } from "./lib/badgeOutage";
 import { switchTransition } from "./lib/viewTransition";
 import { foldTrendingBreakouts } from "./lib/patchMovers";
 import { draftRanking } from "./lib/draft";
+import { banAdvice, enemyPresence } from "./lib/bans";
 import { buildBatch } from "./lib/exportBatch";
 import { heroFarmProfile } from "./lib/matchAnalysis";
 import {
@@ -387,6 +388,7 @@ function AppInner() {
     topHeroes,
     tryHeroes,
     NEW_HERO_TAX,
+    ladderMeta,
     fundamentalsQ,
     fundamentals,
     soulsPerMinRow,
@@ -410,6 +412,9 @@ function AppInner() {
     canBackfill,
     priorKey,
     wpStats,
+    // The draft and ban panels want the ladder's hero win rates whether or not a profile is linked;
+    // the ban panel needs a pool, so in practice this is "a profile is set, or you're drafting".
+    wantLadder: enemies.length > 0,
   });
   // Your last game placed on that curve: per-phase income percentiles, the weakest-phase verdict,
   // and the trace the chart draws. Derived rather than fetched — the trace is already in hand from
@@ -581,7 +586,9 @@ function AppInner() {
     matrixQ,
     matchups,
     matchupTable,
-    ladder,
+    counterMatrix,
+    ladder: matrixLadder,
+    banStats,
     counterByItem,
     countersByPhase,
   } = useCounters({
@@ -596,12 +603,44 @@ function AppInner() {
     canBackfill,
     priorKey,
     patchesReady,
+    wantBans: !!heroPool?.length,
   });
 
   const toggleEnemy = (id: number) =>
     setEnemies((e) =>
       e.includes(id) ? e.filter((x) => x !== id) : [...e, id],
     );
+
+  // The ladder's hero win rate at this rank and patch, as the draft and ban panels read it. The
+  // blended one (features/useProfile) is the more defensible number and is preferred: it's
+  // backfilled like the rest of the app, and it has no per-cell sample floor quietly deciding which
+  // of a hero's matchups count toward its average. The counter matrix stands in while that's in
+  // flight or absent — same rank, same window, and it agrees with hero-stats to 0.01pt.
+  const ladder = useMemo(() => {
+    if (!ladderMeta) return matrixLadder;
+    const m = new Map<number, { winRate: number; games: number }>();
+    for (const [id, v] of ladderMeta)
+      m.set(id, { winRate: v.winRate, games: v.decided });
+    return m;
+  }, [ladderMeta, matrixLadder]);
+
+  // Which hero to BAN — the decision before the pick, and the one that doesn't need a comp on the
+  // board yet (lib/bans). Needs a pool: "what costs me the most" is only a question once there's a
+  // me, and without one the answer degenerates into "ban the strongest hero", which is the reflex
+  // the residuals exist to correct.
+  const bans = useMemo(
+    () =>
+      matchupTable && counterMatrix && heroPool?.length
+        ? banAdvice({
+            table: matchupTable,
+            pool: heroPool.map((p) => p.hero),
+            heroes,
+            presence: enemyPresence(counterMatrix),
+            bansByHero: banStats,
+          })
+        : null,
+    [matchupTable, counterMatrix, heroPool, heroes, banStats],
+  );
 
   // Which hero to pick against the comp on the board (lib/draft). Keyed off the LIVE enemy list,
   // not the committed one: the ranking is pure computation over the counter matrix, which is
@@ -668,9 +707,12 @@ function AppInner() {
     backfill !== null && backfill >= 0.01
       ? ` (${Math.round(backfill * 100)}% backfilled from the prior 30 days)`
       : "";
-  const enemyNames = enemies
-    .map((id) => heroes.find((h) => h.id === id)?.name ?? "?")
-    .join(", ");
+  const nameList = (ids: number[]) =>
+    ids.map((id) => heroes.find((h) => h.id === id)?.name ?? "?").join(", ");
+  // Live: what the picker shows and what the draft panel ranks against (it needs no fetch).
+  const enemyNames = nameList(enemies);
+  // Committed: the comp the build re-rank actually ran on, which is what the note below it claims.
+  const rerankedFor = nameList(sel.enemies);
   // Committed: these portraits tag build rows with the enemy each pick answers, so they have to
   // name the comp the counter numbers were actually computed for. (The picker's own chips above
   // read the live list, so adding an enemy still shows up the instant you pick it.)
@@ -1018,6 +1060,7 @@ function AppInner() {
       <CountersSection
         matchups={matchups}
         draft={draft}
+        bans={bans}
         heroId={heroId}
         hasProfile={!!heroPool?.length}
         pickHero={pickHero}
@@ -1027,6 +1070,7 @@ function AppInner() {
         heroes={heroes}
         enemies={enemies}
         enemyNames={enemyNames}
+        rerankedFor={rerankedFor}
         toggleEnemy={toggleEnemy}
         onIntentEnemy={(id) => prefetchIntent({ kind: "enemy", id })}
         onRemoveEnemy={(id) => setEnemies((e) => e.filter((x) => x !== id))}

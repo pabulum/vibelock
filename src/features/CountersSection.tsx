@@ -7,12 +7,15 @@ import { DraftPanel } from "./DraftPanel";
 import { laneInsight, laneStrengthNote } from "../lib/laneMatchups";
 import type { LaneMatchups } from "../lib/laneMatchups";
 import type { DraftRanking } from "../lib/draft";
+import type { BanAdvice } from "../lib/bans";
 import type { Hero, HeroMatchups } from "../types";
 
 export function CountersSection(props: {
   matchups: HeroMatchups | null;
   /** Comp-aware hero ranking (lib/draft); null until the matrix lands or with no enemies picked. */
   draft: DraftRanking | null;
+  /** Ban advice (lib/bans); null without a hero pool to weigh the cost against. */
+  bans: BanAdvice | null;
   heroId: number | null;
   hasProfile: boolean;
   pickHero: (id: number) => void;
@@ -22,7 +25,12 @@ export function CountersSection(props: {
   heroName: string | undefined;
   heroes: Hero[];
   enemies: number[];
+  /** The LIVE enemy list as names — what the picker shows and what the draft panel ranks against. */
   enemyNames: string;
+  /** The COMMITTED enemy list as names. The build re-rank runs on the settled selection, so the
+   * note describing it has to name that one; using the live list claimed a re-rank for a hero the
+   * build hadn't seen yet, for as long as the selection took to settle. */
+  rerankedFor: string;
   toggleEnemy: (id: number) => void;
   /** Prefetch the counter slices for an enemy the pointer is resting on (lib/prefetch). */
   onIntentEnemy: (id: number) => void;
@@ -34,6 +42,7 @@ export function CountersSection(props: {
   const {
     matchups,
     draft,
+    bans,
     heroId,
     hasProfile,
     pickHero,
@@ -43,6 +52,7 @@ export function CountersSection(props: {
     heroes,
     enemies,
     enemyNames,
+    rerankedFor,
     toggleEnemy,
     onIntentEnemy,
     onRemoveEnemy,
@@ -151,9 +161,10 @@ export function CountersSection(props: {
         {/* Directly under the picker, because that is the order the decision happens in: the enemy
             picks land, then you choose. Reads the LIVE enemy list — it's pure computation over the
             already-fetched matrix — so it re-ranks as you add each hero, with no request. */}
-        {draft && (
+        {(draft || bans) && (
           <DraftPanel
             ranking={draft}
+            bans={bans}
             heroes={heroes}
             enemyNames={enemyNames}
             heroId={heroId}
@@ -164,9 +175,9 @@ export function CountersSection(props: {
         )}
       </div>
 
-      {enemies.length > 0 && (
+      {rerankedFor && (
         <p className="counters-note">
-          The build below is re-ranked for {enemyNames}: picks that answer the
+          The build below is re-ranked for {rerankedFor}: picks that answer the
           comp rise and carry the enemy portrait (hover any row for the per-hero
           gain); picks that are weak into it are flagged{" "}
           <span className="weakcomp">▼</span>.{" "}

@@ -173,6 +173,23 @@ export function GuideModal({ onClose }: { onClose: () => void }) {
           you&rsquo;re actually good at moves more. Picking a hero there loads
           its build, already re-ranked for the comp.
         </p>
+        <p>
+          <strong>Worth banning</strong> needs no comp — bans come first. Each
+          candidate shows what it costs the heroes <em>you</em> play when you
+          meet it, and how often you meet it; the list is ordered by those two
+          multiplied together, so a hero you face every other game can outrank a
+          nastier one you rarely draw. Banning the strongest hero on the patch
+          is the reflex this is meant to replace: strength is already fitted
+          out, so what&rsquo;s left is what beats <em>your</em> heroes.
+        </p>
+        <p>
+          Two honest caveats live on that panel. A ban lowers how often you meet
+          a hero rather than deleting it, so the number is the size of the
+          problem and not the size of the win — you&rsquo;ll still face them
+          often enough that learning the matchup pays. And a candidate you play
+          yourself is marked <em>yours</em>: banning it takes one of your own
+          options off the board, which the cost column can&rsquo;t see.
+        </p>
       </section>
 
       <section>

@@ -160,15 +160,6 @@ export function heroMatchups(
     (r) => r.hero_id === heroId && r.matches_played >= MIN_SAMPLE,
   );
 
-  const totals = rows.reduce(
-    (a, r) => ({
-      wins: a.wins + r.wins,
-      matches: a.matches + r.matches_played,
-    }),
-    { wins: 0, matches: 0 },
-  );
-  const baseline = totals.matches > 0 ? totals.wins / totals.matches : 0.5;
-
   const all: Matchup[] = rows.map((r) => {
     const n = r.matches_played;
     const mine = table.strengths.get(r.hero_id) ?? 1;
@@ -192,5 +183,5 @@ export function heroMatchups(
     .sort((a, b) => b.resid - a.resid)
     .slice(0, TOP);
 
-  return { baseline, tough, favorable };
+  return { tough, favorable };
 }
