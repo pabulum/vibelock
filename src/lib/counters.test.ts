@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { must } from "../test/must";
 import type { Item, ItemStat } from "../types";
-import { computeItemCounters } from "./counters";
 import { isWeakVsComp } from "./buildGenerator";
+import { computeItemCounters } from "./counters";
 
 const item = (id: number): Item => ({
   id,
@@ -36,7 +37,7 @@ describe("computeItemCounters edgeByItem", () => {
       { enemyHeroId: 7, stats: [stat(1, 400, 600), stat(2, 100_000, 100_000)] }, // item 1: 40% vs 50% base
     ];
     const { edgeByItem } = computeItemCounters(baseline, perEnemy, items);
-    const e = edgeByItem.get(1)!;
+    const e = must(edgeByItem.get(1));
     expect(e.edge).toBeLessThan(0); // it under-performs vs this enemy
     // 1000 games against the K = 4000 prior keeps only n/(n+K) = 1/5 of the −10 pt raw edge.
     expect(e.edge).toBeCloseTo(-0.02, 2);
@@ -55,7 +56,7 @@ describe("computeItemCounters edgeByItem", () => {
       ],
       items,
     );
-    const eBig = bigger.edgeByItem.get(1)!;
+    const eBig = must(bigger.edgeByItem.get(1));
     expect(eBig.edge).toBeLessThan(-0.07);
     expect(Math.abs(eBig.edge)).toBeGreaterThan(Math.abs(e.edge) * 3);
   });
@@ -68,8 +69,12 @@ describe("computeItemCounters edgeByItem", () => {
       ...vsOne,
       { enemyHeroId: 8, stats: [stat(1, 400, 600), stat(2, 100_000, 100_000)] },
     ];
-    const one = computeItemCounters(baseline, vsOne, items).edgeByItem.get(1)!;
-    const two = computeItemCounters(baseline, vsTwo, items).edgeByItem.get(1)!;
+    const one = must(
+      computeItemCounters(baseline, vsOne, items).edgeByItem.get(1),
+    );
+    const two = must(
+      computeItemCounters(baseline, vsTwo, items).edgeByItem.get(1),
+    );
     // Equally bad vs both enemies → the comp edge doubles (the old weighted mean stayed flat).
     expect(two.edge).toBeCloseTo(2 * one.edge, 10);
     // …and the noise adds too: SE grows by √2 rather than tightening as if it were more
@@ -90,10 +95,12 @@ describe("computeItemCounters edgeByItem", () => {
       // 20 games vs enemy 8 — under MIN_SAMPLE, so it must not touch the comp edge.
       { enemyHeroId: 8, stats: [stat(1, 5, 15), stat(2, 100_000, 100_000)] },
     ];
-    const one = computeItemCounters(baseline, vsOne, items).edgeByItem.get(1)!;
-    const two = computeItemCounters(baseline, withThin, items).edgeByItem.get(
-      1,
-    )!;
+    const one = must(
+      computeItemCounters(baseline, vsOne, items).edgeByItem.get(1),
+    );
+    const two = must(
+      computeItemCounters(baseline, withThin, items).edgeByItem.get(1),
+    );
     expect(two.edge).toBeCloseTo(one.edge, 10);
     expect(two.se).toBeCloseTo(one.se, 10);
   });
@@ -134,8 +141,8 @@ describe("phase-centered lean", () => {
     const { edgeByItem } = computeItemCounters(flatBase, falloffEnemy, items);
     // The late average item carries ~no comp edge either way; the early over-performer keeps
     // a clearly positive one.
-    expect(Math.abs(edgeByItem.get(4)!.edge)).toBeLessThan(0.005);
-    expect(edgeByItem.get(1)!.edge).toBeGreaterThan(0.02);
+    expect(Math.abs(must(edgeByItem.get(4)).edge)).toBeLessThan(0.005);
+    expect(must(edgeByItem.get(1)).edge).toBeGreaterThan(0.02);
   });
 
   it("falls back to the global lean when a phase bucket is thin", () => {
@@ -154,7 +161,7 @@ describe("phase-centered lean", () => {
     const { counters } = computeItemCounters(flatBase, thin, items);
     const four = counters.find((c) => c.item.id === 4);
     expect(four).toBeDefined();
-    expect(four!.marks[0].delta).toBeGreaterThan(0.05);
+    expect(must(four).marks[0].delta).toBeGreaterThan(0.05);
   });
 });
 
@@ -173,7 +180,7 @@ describe("the ~1 pt effect floor", () => {
     const { counters } = computeItemCounters(base, perEnemy, items);
     const c = counters.find((c) => c.item.id === 1);
     expect(c).toBeDefined();
-    expect(c!.marks[0].delta).toBeCloseTo(0.0119, 3);
+    expect(must(c).marks[0].delta).toBeCloseTo(0.0119, 3);
   });
 
   it("still rejects the same edge on a thin sample — the confidence bar is separate", () => {

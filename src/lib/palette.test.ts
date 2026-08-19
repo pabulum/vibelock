@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { Hero, Patch } from "../types";
 import {
   buildPaletteCommands,
-  searchPalette,
   type PaletteState,
+  searchPalette,
 } from "./palette";
 
 const hero = (id: number, name: string): Hero => ({

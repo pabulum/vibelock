@@ -92,7 +92,10 @@ export function fitBradleyTerry(matrix: HeroCounterRow[]): Map<number, number> {
   for (const r of matrix) {
     winsOf.set(r.hero_id, (winsOf.get(r.hero_id) ?? 0) + r.wins);
     let arr = pairs.get(r.hero_id);
-    if (!arr) pairs.set(r.hero_id, (arr = []));
+    if (!arr) {
+      arr = [];
+      pairs.set(r.hero_id, arr);
+    }
     arr.push({ other: r.enemy_hero_id, n: r.matches_played });
   }
 
@@ -100,19 +103,20 @@ export function fitBradleyTerry(matrix: HeroCounterRow[]): Map<number, number> {
     let maxDelta = 0;
     for (const id of heroIds) {
       const w = winsOf.get(id) ?? 0;
-      const cur = pi.get(id)!;
+      const cur = pi.get(id) ?? 1;
       let denom = 0;
       for (const p of pairs.get(id) ?? [])
-        denom += p.n / (cur + pi.get(p.other)!);
+        denom += p.n / (cur + (pi.get(p.other) ?? 1));
       const next = denom > 0 ? Math.max(1e-6, w / denom) : cur;
       maxDelta = Math.max(maxDelta, Math.abs(next - cur));
       pi.set(id, next);
     }
     // Normalize to geometric mean 1 so strengths stay comparable across iterations.
     const logMean =
-      heroIds.reduce((s, id) => s + Math.log(pi.get(id)!), 0) / heroIds.length;
+      heroIds.reduce((s, id) => s + Math.log(pi.get(id) ?? 1), 0) /
+      heroIds.length;
     const scale = Math.exp(logMean);
-    for (const id of heroIds) pi.set(id, pi.get(id)! / scale);
+    for (const id of heroIds) pi.set(id, (pi.get(id) ?? 1) / scale);
     if (maxDelta < BT_TOL) break;
   }
   return pi;

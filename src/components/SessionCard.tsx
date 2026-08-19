@@ -9,7 +9,7 @@
 // than defaulting to the folk wisdom.
 
 import "./SessionCard.css";
-import { tiltVerdict, type SessionStats } from "../lib/sessions";
+import { type SessionStats, tiltVerdict } from "../lib/sessions";
 
 export function SessionCard({ stats }: { stats: SessionStats }) {
   const worst = stats.byStreak.reduce(

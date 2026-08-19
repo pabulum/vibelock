@@ -1,7 +1,7 @@
 // A community-build row in the "Community check" panel, with its on-hover build preview:
 // a structured, color-coded diff of that build against ours (see diffBuild in lib/communityBuilds).
 
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { diffBuild } from "../lib/communityBuilds";
 import { maxOrder } from "../lib/skills";
@@ -106,6 +106,7 @@ export function CommunityRow({
       <div className="cfoot">
         <span className="cmeta">updated {fmtDate(rb.build.updatedAt)}</span>
         <button
+          type="button"
           className="cid"
           onClick={(e) => {
             e.stopPropagation(); // on touch the row toggles the preview; copying shouldn't also toggle it

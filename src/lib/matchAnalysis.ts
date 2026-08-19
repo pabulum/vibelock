@@ -13,6 +13,7 @@
 //    lane soak is presented neutrally — its raw volume inverts on roamers, so it's context, not a
 //    grade. There is no per-source ladder benchmark: the analytics API can't slice gold by source.
 
+import type { WpStats } from "../api/wpStats";
 import type {
   MatchDeath,
   MatchGoldSource,
@@ -21,9 +22,8 @@ import type {
   MatchStatSample,
   PlayerMetrics,
 } from "../types";
-import type { WpStats } from "../api/wpStats";
-import { FUNDAMENTALS, percentileOf } from "./fundamentals";
 import type { FundamentalRow } from "./fundamentals";
+import { FUNDAMENTALS, percentileOf } from "./fundamentals";
 import { PHASE_END_S, PHASE_LABELS } from "./phases";
 
 // --- Team & interpolation helpers ---

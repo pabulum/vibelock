@@ -77,13 +77,9 @@
   }
 
   /* ---- Fundamentals: percentile bars vs the selected ladder ---------------- */
+  /* biome-ignore lint/style/noDescendingSpecificity: the `.dash > *` frame group above sets only margin/padding/border-top — no declaration here is shadowed by it */
   .fundamentals {
-    max-width: 520px;
     cursor: help;
-  }
-  .dash > .fundamentals {
-    /* The standalone card caps itself at 520px; as a column item it should fill its column. */
-    max-width: none;
   }
   .fundrow {
     display: grid;
@@ -128,9 +124,6 @@
   .climbcard .climbtip {
     margin-bottom: 6px;
   }
-  .climbcard .lastgamelink {
-    margin-top: 2px;
-  }
 
   /* Games-window selector in the fundamentals header — scoping by games, not days, is what keeps
      a long break out of the average (lib/fundamentals.recentWindow). */
@@ -169,6 +162,10 @@
     text-decoration: underline;
     text-decoration-color: var(--rule-strong);
     text-underline-offset: 2px;
+  }
+  /* Tighter inside the climb card, where it sits under a line of prose. */
+  .climbcard .lastgamelink {
+    margin-top: 2px;
   }
   .lastgamelink:hover {
     color: var(--accent-ui);
@@ -274,7 +271,7 @@
     pointer-events: none;
     color: var(--ink);
     /* Portaled to document.body, so it's outside .app and won't inherit its font. */
-    font: 400 12.5px/1.45 var(--font-text);
+    font: 400 12.5px / 1.45 var(--font-text);
   }
   /* Native path (Popover API + CSS anchor positioning, see SUPPORTS_ANCHOR): the preview is a
      top-layer [popover] anchored to its row's `anchor-name` — below the row by default, flipping
@@ -440,9 +437,6 @@
   }
 
   /* ---- Skill order --------------------------------------------------------- */
-  .skills {
-    margin: 4px 0 10px;
-  }
   /* One shared label column (subgrid) sized to the widest ability name, so labels align across
      rows and names show in full instead of truncating in a fixed box. */
   .skill-grid {
@@ -464,6 +458,7 @@
     padding: 2px 0 2px 7px;
     border-left: 2px solid; /* ability colour, set inline */
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: .buildprev (CommunityRow popover) and .srow-label (skill grid) are disjoint subtrees — no img is ever matched by both */
   .srow-label img {
     width: 24px;
     height: 24px;

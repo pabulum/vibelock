@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildJointGamesLookup } from "./pairs";
 import type { ItemPermutationStats } from "../types";
+import { buildJointGamesLookup } from "./pairs";
 
 const row = (
   ids: [number, number],

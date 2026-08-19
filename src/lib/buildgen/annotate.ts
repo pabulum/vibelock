@@ -40,7 +40,10 @@ export function annotateRelations(
   const edgeW = new Map<number, Map<number, number>>();
   for (const e of flow.edges) {
     let m = edgeW.get(e.from_item_id);
-    if (!m) edgeW.set(e.from_item_id, (m = new Map()));
+    if (!m) {
+      m = new Map();
+      edgeW.set(e.from_item_id, m);
+    }
     m.set(e.to_item_id, (m.get(e.to_item_id) ?? 0) + e.matches);
   }
   // How many of this hero's players touch each item at all (relevance gate + tiebreak).

@@ -7,9 +7,9 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import {
-  searchPalette,
   type PaletteAction,
   type PaletteCommand,
+  searchPalette,
 } from "../lib/palette";
 import { useScrollLock } from "./useScrollLock";
 
@@ -63,6 +63,9 @@ export function CommandPalette({
   const hi = Math.min(highlight, Math.max(0, results.length - 1));
 
   // Keep the highlighted row in view while arrowing through a scrolled list.
+  // hi/results are deliberate triggers, not reads — the body queries the DOM for the rendered
+  // row, so it must re-run whenever the highlight moves or the list is rebuilt.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deliberate — see above
   useEffect(() => {
     listRef.current
       ?.querySelector(".pal-opt.on")
@@ -118,6 +121,7 @@ export function CommandPalette({
   };
 
   return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: native <dialog> handles Escape itself and the onClick is the backdrop-dismiss coordinate check — the rule treats <dialog> as non-interactive, which it isn't
     <dialog
       ref={ref}
       className="palette"
@@ -192,7 +196,7 @@ export function CommandPalette({
               )}
               <span className="pal-lbl">{c.label}</span>
               {c.active && (
-                <span className="pal-check" aria-label="current">
+                <span className="pal-check" role="img" aria-label="current">
                   ✓
                 </span>
               )}

@@ -17,7 +17,12 @@
 // phase is a place to LOOK, not a lever with a payout.
 
 import "./PacePanel.css";
-import type { PaceDiagnosis, PaceProfile, PaceWindowRead } from "../lib/pace";
+import type {
+  PaceDiagnosis,
+  PaceProfile,
+  PaceTick,
+  PaceWindowRead,
+} from "../lib/pace";
 import { paceInsight } from "../lib/pace";
 import { useMeasuredWidth } from "./useMeasuredWidth";
 
@@ -64,7 +69,11 @@ export function PacePanel({
   const [chartRef, measured] = useMeasuredWidth<HTMLElement>(W_FALLBACK);
   const W = Math.max(W_MIN, measured);
 
-  const ticks = profile.ticks.filter((t) => t.lv);
+  // Predicate, not a plain filter: every read below wants `lv` as a number[], and a bare
+  // `.filter(t => t.lv)` leaves it `number[] | null` for the type checker.
+  const ticks = profile.ticks.filter(
+    (t): t is PaceTick & { lv: number[] } => t.lv !== null,
+  );
   const mid = profile.levelPcts.indexOf(50);
   const lo = 0;
   const hi = profile.levelPcts.length - 1;
@@ -75,7 +84,7 @@ export function PacePanel({
   const peak =
     1.06 *
     Math.max(
-      ...ticks.map((t) => Math.max(t.lv![hi], t.won ?? 0)),
+      ...ticks.map((t) => Math.max(t.lv[hi], t.won ?? 0)),
       ...(curve?.nw.map((v) => v ?? 0) ?? [0]),
       1,
     );
@@ -89,44 +98,45 @@ export function PacePanel({
   // p25–p75 as one closed band: up the low edge, back down the high one.
   const band =
     ticks.length > 1
-      ? `${line(ticks.map((t) => [x(t.t), y(t.lv![lo])]))} ` +
+      ? `${line(ticks.map((t) => [x(t.t), y(t.lv[lo])]))} ` +
         `${[...ticks]
           .reverse()
-          .map((t) => `L${x(t.t).toFixed(1)} ${y(t.lv![hi]).toFixed(1)}`)
+          .map((t) => `L${x(t.t).toFixed(1)} ${y(t.lv[hi]).toFixed(1)}`)
           .join(" ")} Z`
       : "";
   const medianPts = ticks.map(
-    (t) => [x(t.t), y(t.lv![mid >= 0 ? mid : 0])] as [number, number],
+    (t) => [x(t.t), y(t.lv[mid >= 0 ? mid : 0])] as [number, number],
   );
-  const wonTicks = ticks.filter((t) => t.won !== null);
-  const wonPts = wonTicks.map((t) => [x(t.t), y(t.won!)] as [number, number]);
-  const youTicks = curve
-    ? ticks.filter(
-        (t, i) => curve.nw[profile.ticks.indexOf(t)] != null && i >= 0,
-      )
+  const wonTicks = ticks.filter(
+    (t): t is PaceTick & { lv: number[]; won: number } => t.won !== null,
+  );
+  const wonPts = wonTicks.map((t) => [x(t.t), y(t.won)] as [number, number]);
+  // Carry your net worth alongside its tick instead of looking it up a second time when plotting —
+  // the second lookup is what used to need an assertion to get back to a number.
+  const youSamples = curve
+    ? ticks.flatMap((t) => {
+        const nw = curve.nw[profile.ticks.indexOf(t)];
+        return nw == null ? [] : [{ t: t.t, nw }];
+      })
     : [];
-  const youPts = curve
-    ? youTicks.map(
-        (t) =>
-          [x(t.t), y(curve.nw[profile.ticks.indexOf(t)]!)] as [number, number],
-      )
-    : [];
+  const youPts = youSamples.map((s) => [x(s.t), y(s.nw)] as [number, number]);
 
   const lastYou = youPts.length ? youPts[youPts.length - 1] : null;
-  const lastYouVal = youTicks.length
-    ? curve!.nw[profile.ticks.indexOf(youTicks[youTicks.length - 1])]!
+  const lastSample = youSamples.length
+    ? youSamples[youSamples.length - 1]
     : null;
   const lastMedian = ticks.length
-    ? ticks[ticks.length - 1].lv![mid >= 0 ? mid : 0]
+    ? ticks[ticks.length - 1].lv[mid >= 0 ? mid : 0]
     : null;
 
   const hasCurve = youPts.length > 1;
-  const chartLabel = hasCurve
-    ? `Your net worth over time against the ${dataRankLabel ?? rankLabel} band for ${heroName}. ` +
-      `At ${mmss(youTicks[youTicks.length - 1].t)} you had ${Math.round(lastYouVal!)} souls; ` +
-      `the median was ${lastMedian}.`
-    : `Net worth over time for ${heroName} at ${dataRankLabel ?? rankLabel}: the middle half of ` +
-      `games, the median, and the mean among games won.`;
+  const chartLabel =
+    hasCurve && lastSample
+      ? `Your net worth over time against the ${dataRankLabel ?? rankLabel} band for ${heroName}. ` +
+        `At ${mmss(lastSample.t)} you had ${Math.round(lastSample.nw)} souls; ` +
+        `the median was ${lastMedian}.`
+      : `Net worth over time for ${heroName} at ${dataRankLabel ?? rankLabel}: the middle half of ` +
+        `games, the median, and the mean among games won.`;
 
   return (
     <section className="pace">
@@ -251,17 +261,17 @@ export function PacePanel({
               <span className="lg band">middle half</span>
               <span className="lg median">median</span>
               {wonPts.length > 1 && <span className="lg won">won games</span>}
-              {hasCurve && (
+              {hasCurve && curve && (
                 <span className="lg you">
-                  your last game{curve!.won ? " (won)" : " (lost)"}
+                  your last game{curve.won ? " (won)" : " (lost)"}
                 </span>
               )}
             </figcaption>
           </figure>
-          {hasCurve && lastYouVal !== null && lastMedian !== null && (
+          {hasCurve && lastSample && lastMedian !== null && (
             <p className="pacegap">
-              At {mmss(youTicks[youTicks.length - 1].t)} you had{" "}
-              <strong>{souls(lastYouVal)}</strong> souls; the median game had{" "}
+              At {mmss(lastSample.t)} you had{" "}
+              <strong>{souls(lastSample.nw)}</strong> souls; the median game had{" "}
               <strong>{souls(lastMedian)}</strong>.
             </p>
           )}

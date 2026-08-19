@@ -7,8 +7,9 @@
 import { StrictMode } from "react";
 import { beforeEach, expect, test } from "vitest";
 import { render } from "vitest-browser-react";
-import { installApiMock } from "./apiMock";
 import App from "../App";
+import { installApiMock } from "./apiMock";
+import { must } from "./must";
 
 const api = installApiMock();
 const BAKE = { timeout: 15_000 } as const;
@@ -25,10 +26,10 @@ function pressCtrlK() {
   );
 }
 
-const nativeSetValue = Object.getOwnPropertyDescriptor(
-  HTMLInputElement.prototype,
-  "value",
-)!.set!;
+const nativeSetValue = must(
+  must(Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value"))
+    .set,
+);
 
 /** Type into the palette's controlled input (native setter so React's onChange fires) and Enter. */
 function typeAndEnter(input: HTMLInputElement, text: string) {
@@ -62,7 +63,9 @@ test("Ctrl+K enemy add chains and releases scroll on close", async () => {
   expect(getComputedStyle(document.body).overflow).toBe("hidden");
 
   // First counter via its "vs …" command.
-  const input = screen.container.querySelector<HTMLInputElement>(".pal-in")!;
+  const input = must(
+    screen.container.querySelector<HTMLInputElement>(".pal-in"),
+  );
   typeAndEnter(input, "vs bebop");
   await expect
     .poll(
@@ -135,12 +138,14 @@ test("opening a modal from the palette does not strip scroll (overlap lock)", as
     .toBe(true);
 
   // Commit the "Lab" panel command: the palette closes (deferred) while the Lab modal opens.
-  const input = screen.container.querySelector<HTMLInputElement>(".pal-in")!;
+  const input = must(
+    screen.container.querySelector<HTMLInputElement>(".pal-in"),
+  );
   input.focus();
-  const setValue = Object.getOwnPropertyDescriptor(
-    HTMLInputElement.prototype,
-    "value",
-  )!.set!;
+  const setValue = must(
+    must(Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value"))
+      .set,
+  );
   setValue.call(input, "lab experimental");
   input.dispatchEvent(new Event("input", { bubbles: true }));
   await expect

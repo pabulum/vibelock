@@ -79,10 +79,6 @@
       margin: 0;
     }
   }
-  .phase.overtime .phasenum,
-  .phase.overtime h2 .time {
-    color: var(--accent-ui);
-  }
 
   .phase h2 {
     margin: 0 0 7px;
@@ -114,6 +110,11 @@
     letter-spacing: 0.1em;
     color: var(--ink-3);
     white-space: nowrap;
+  }
+  /* Overtime tint, after the base heading parts so specificity ascends. */
+  .phase.overtime .phasenum,
+  .phase.overtime h2 .time {
+    color: var(--accent-ui);
   }
 
   .budget {

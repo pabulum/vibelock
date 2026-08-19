@@ -2,17 +2,17 @@
 // palette + guide + lab + match buttons, the theme toggle, and the indeterminate loading strip.
 import { useSyncExternalStore } from "react";
 import "./TopBar.css";
-import { resolvedTheme, setTheme, subscribeTheme } from "../lib/theme";
+import { type SteamPlayerMatch, searchSteamPlayers } from "../api/deadlock";
+import { ShuffleMark } from "../components/panels";
 import { IS_MAC, type PaletteMode } from "../lib/palette";
 import {
   RANK_TIERS,
+  type RankSel,
   rankFloorLabel,
   rankSelLabel,
-  type RankSel,
 } from "../lib/ranks";
 import { parseSteamInput, parseVanityName } from "../lib/steamId";
-import { searchSteamPlayers, type SteamPlayerMatch } from "../api/deadlock";
-import { ShuffleMark } from "../components/panels";
+import { resolvedTheme, setTheme, subscribeTheme } from "../lib/theme";
 import type { Hero, Item, Patch } from "../types";
 
 const SUN = (

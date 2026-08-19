@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { must } from "../test/must";
 import type { FlowNode, FlowSummary, ItemFlowStats, ItemStat } from "../types";
 import {
-  PATCH_K_DEFAULT,
-  PATCH_K_MAX,
   blendFlow,
   blendItemStats,
   estimatePatchK,
+  PATCH_K_DEFAULT,
+  PATCH_K_MAX,
 } from "./patchBlend";
 
 function summary(wins: number, losses: number): FlowSummary {
@@ -87,7 +88,7 @@ const priorBig = flow(
 describe("blendFlow", () => {
   it("on day one the prior dominates: blended rate sits near the pre-patch rate", () => {
     const { flow: f, borrowedShare } = blendFlow(freshThin, priorBig);
-    const n = f.nodes.find((x) => x.item_id === 7)!;
+    const n = must(f.nodes.find((x) => x.item_id === 7));
     // ~10 fresh games vs ~950 borrowed (K=1000 minus a small agreement discount).
     expect(n.adjusted_win_rate).toBeGreaterThan(0.54);
     expect(n.adjusted_win_rate).toBeLessThan(0.55);
@@ -96,7 +97,7 @@ describe("blendFlow", () => {
 
   it("caps borrowing at K: effective decided games ≤ fresh n + K", () => {
     const { flow: f } = blendFlow(freshThin, priorBig);
-    const n = f.nodes.find((x) => x.item_id === 7)!;
+    const n = must(f.nodes.find((x) => x.item_id === 7));
     expect(n.wins + n.losses).toBeLessThanOrEqual(10 + PATCH_K_DEFAULT);
     expect(n.wins + n.losses).toBeGreaterThan(10); // ...but it did borrow
   });
@@ -118,7 +119,7 @@ describe("blendFlow", () => {
       100000,
     );
     const { flow: f, borrowedShare } = blendFlow(freshMature, priorBig);
-    const n = f.nodes.find((x) => x.item_id === 7)!;
+    const n = must(f.nodes.find((x) => x.item_id === 7));
     expect(n.adjusted_win_rate).toBeLessThan(0.485);
     expect(borrowedShare).toBeLessThan(0.05);
   });
@@ -141,7 +142,7 @@ describe("blendFlow", () => {
       4000,
     );
     const { flow: f } = blendFlow(freshChanged, priorBig);
-    const n = f.nodes.find((x) => x.item_id === 7)!;
+    const n = must(f.nodes.find((x) => x.item_id === 7));
     // An undiscounted K=1000 borrow would land ≈ (2000·0.40 + 1000·0.55)/3000 = 0.45.
     expect(n.adjusted_win_rate).toBeLessThan(0.41);
     expect(n.wins + n.losses).toBeLessThan(2000 + 100);
@@ -172,7 +173,7 @@ describe("blendFlow", () => {
       25000,
     );
     const { flow: f } = blendFlow(freshThin, priorTwoItems);
-    const ghost = f.nodes.find((x) => x.item_id === 9)!;
+    const ghost = must(f.nodes.find((x) => x.item_id === 9));
     // β = min(1, K/reachedPrior) = 1000/50000 = 0.02 ⇒ 20000 players scale to 400,
     // reached = 500 + 0.02·50000 = 1500 — same denominator for every item in the column.
     expect(ghost.players).toBe(400);
@@ -205,7 +206,7 @@ describe("blendFlow", () => {
       250,
     );
     const { flow: f } = blendFlow(freshNew, priorBig);
-    const fnew = f.nodes.find((x) => x.item_id === 42)!;
+    const fnew = must(f.nodes.find((x) => x.item_id === 42));
     expect(fnew.wins + fnew.losses).toBe(50);
     expect(fnew.adjusted_win_rate).toBeCloseTo(0.58, 6);
     expect(fnew.players).toBe(55);
@@ -259,7 +260,7 @@ describe("blendItemStats", () => {
 
   it("borrows for a thin fresh slice, capped at K", () => {
     const { stats } = blendItemStats([stat(7, 4, 6)], [stat(7, 2750, 2250)]);
-    const r = stats.find((s) => s.item_id === 7)!;
+    const r = must(stats.find((s) => s.item_id === 7));
     const n = r.wins + r.losses;
     expect(n).toBeGreaterThan(500);
     expect(n).toBeLessThanOrEqual(10 + PATCH_K_DEFAULT);
@@ -269,17 +270,17 @@ describe("blendItemStats", () => {
   it("shares the base discount so both sides of a counter delta borrow alike", () => {
     // Base slice: big fresh sample contradicts the prior (patch changed the item) ⇒ tiny discount.
     const base = blendItemStats([stat(7, 800, 1200)], [stat(7, 2750, 2250)]);
-    expect(base.discounts.get(7)!).toBeLessThan(0.1);
+    expect(must(base.discounts.get(7))).toBeLessThan(0.1);
     // Enemy slice: fresh is too thin to contradict anything on its own (locally disc ≈ 1)…
     const solo = blendItemStats([stat(7, 5, 5)], [stat(7, 550, 450)]);
-    expect(solo.discounts.get(7)!).toBeGreaterThan(0.8);
+    expect(must(solo.discounts.get(7))).toBeGreaterThan(0.8);
     // …but with the base's discounts it borrows almost nothing, like the base did.
     const sharedBlend = blendItemStats(
       [stat(7, 5, 5)],
       [stat(7, 550, 450)],
       base,
     );
-    const r = sharedBlend.stats.find((s) => s.item_id === 7)!;
+    const r = must(sharedBlend.stats.find((s) => s.item_id === 7));
     expect(r.wins + r.losses).toBeLessThan(10 + PATCH_K_DEFAULT * 0.1);
   });
 
@@ -288,10 +289,10 @@ describe("blendItemStats", () => {
       [stat(1, 30, 20)],
       [stat(1, 500, 500), stat(2, 600, 400)],
     );
-    const ghost = stats.find((s) => s.item_id === 2)!;
+    const ghost = must(stats.find((s) => s.item_id === 2));
     expect(ghost.wins + ghost.losses).toBeGreaterThan(100);
     const { stats: fresh } = blendItemStats([stat(3, 30, 20)], []);
-    expect(fresh.find((s) => s.item_id === 3)!.wins).toBe(30);
+    expect(must(fresh.find((s) => s.item_id === 3)).wins).toBe(30);
   });
 
   it("a zero sell time (rarely sold) yields to the informative side instead of averaging", () => {

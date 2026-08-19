@@ -10,14 +10,14 @@
 // "why" list whole groups. A bare item name finds its build row when it's in the build and its
 // "why isn't … here" verdict when it isn't (the item's name is a word of that label).
 
+import type { Hero, Patch } from "../types";
 import { rankByFuzzy } from "./fuzzy";
 import {
   RANK_TIERS,
+  type RankSel,
   rankFloorLabel,
   rankSelLabel,
-  type RankSel,
 } from "./ranks";
-import type { Hero, Patch } from "../types";
 
 /** Apple keyboards: affordances should read ⌘K (the listeners accept Ctrl or ⌘ anywhere). */
 export const IS_MAC =

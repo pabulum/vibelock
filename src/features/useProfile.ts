@@ -1,8 +1,9 @@
 // The player-identity feature: Steam id entry, the linked profile's heroes and rank, the
 // your-heroes / worth-picking-up rows, the fundamentals benchmark, and the last-game overlay.
 // Everything here fails soft — a typo'd id or a missing profile never trips the main banner.
-import { useEffect, useMemo, useState } from "react";
+
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import {
   getHeroLadderStats,
   getMatchMetadata,
@@ -10,32 +11,32 @@ import {
   getPlayerMatchHistory,
   getPlayerMetrics,
   getPlayerRankTier,
-  searchSteamPlayers,
   type SteamPlayerMatch,
+  searchSteamPlayers,
   type TimeWindow,
 } from "../api/deadlock";
 import type { WpStats } from "../api/wpStats";
 import type { LastGameFarm } from "../components/EconomyPanel";
+import { useCommitted } from "../hooks";
 import {
-  fundamentalsRows,
-  recentWindow,
-  RECENT_GAMES_DEFAULT,
   type FundamentalRow,
+  fundamentalsRows,
+  RECENT_GAMES_DEFAULT,
   type RecentWindow,
+  recentWindow,
 } from "../lib/fundamentals";
 import { benchmarkEconomy, economyRows } from "../lib/matchAnalysis";
 import { blendItemStats } from "../lib/patchBlend";
-import { sessionStats } from "../lib/sessions";
 import {
   climbBand,
+  type RankSel,
   rankBandLabel,
   tierOf,
   tierToMaxBadge,
   tierToMinBadge,
-  type RankSel,
 } from "../lib/ranks";
+import { sessionStats } from "../lib/sessions";
 import { parseVanityName, typedAccountId } from "../lib/steamId";
-import { useCommitted } from "../hooks";
 import type {
   Hero,
   HeroLadderStat,
@@ -164,9 +165,12 @@ export function useProfile(opts: {
     enabled: accountId !== null,
     placeholderData: keepPreviousData,
     queryFn: async () => {
+      // Gated by `enabled` above — assert the contract instead of `!`-ing it at each use.
+      if (accountId === null)
+        throw new Error("profile query ran without an account");
       const [stats, rankTier] = await Promise.all([
-        getPlayerHeroStats(accountId!).catch(() => [] as PlayerHeroStat[]),
-        getPlayerRankTier(accountId!).catch(() => null),
+        getPlayerHeroStats(accountId).catch(() => [] as PlayerHeroStat[]),
+        getPlayerRankTier(accountId).catch(() => null),
       ]);
       // Wall-clock is only legal here (render must stay pure) — the recency gate below anchors
       // to when the profile was fetched, which is also the more honest "now" for it.
@@ -329,6 +333,9 @@ export function useProfile(opts: {
     enabled: accountId !== null && !!hero,
     placeholderData: keepPreviousData,
     queryFn: async () => {
+      // Gated by `enabled` above — assert the contract instead of `!`-ing it at each use.
+      if (accountId === null || !hero)
+        throw new Error("fundamentals query ran without account/hero");
       const ladderWindow = canBackfill
         ? {
             minUnixTimestamp: priorWin.minUnixTimestamp,
@@ -338,10 +345,10 @@ export function useProfile(opts: {
       // Scope MY side to my last N games on this hero. Without this the metrics endpoint applies its
       // own default (last 30 days), which on an occasionally-played hero is two or three games — and
       // for a player returning from a break it would happily average in a year-old version of them.
-      const history = await getPlayerMatchHistory(accountId!).catch(
+      const history = await getPlayerMatchHistory(accountId).catch(
         () => [] as MatchHistoryRow[],
       );
-      const heroWin = recentWindow(history, hero!.id, recentGames);
+      const heroWin = recentWindow(history, hero.id, recentGames);
 
       // Benchmark against the rank you're CLIMBING TO (one tier up), not your own peers — the card
       // answers "how do I rank up", and your own-rank players are where you already are.
@@ -359,13 +366,13 @@ export function useProfile(opts: {
         // whose answer was thrown away.
         heroWin
           ? getPlayerMetrics({
-              accountIds: [accountId!],
-              heroId: hero!.id,
+              accountIds: [accountId],
+              heroId: hero.id,
               minUnixTimestamp: heroWin.minUnixTimestamp,
             }).catch(() => ({}))
           : Promise.resolve({}),
         getPlayerMetrics({
-          heroId: hero!.id,
+          heroId: hero.id,
           ...climbBadges,
           ...ladderWindow,
         }).catch(() => ({})),
@@ -380,7 +387,7 @@ export function useProfile(opts: {
         const allWin = recentWindow(history, null, recentGames);
         const meAll = allWin
           ? await getPlayerMetrics({
-              accountIds: [accountId!],
+              accountIds: [accountId],
               minUnixTimestamp: allWin.minUnixTimestamp,
             }).catch(() => ({}))
           : {};
@@ -417,7 +424,9 @@ export function useProfile(opts: {
     enabled: accountId !== null,
     placeholderData: keepPreviousData,
     queryFn: async () => {
-      const history = await getPlayerMatchHistory(accountId!).catch(
+      if (accountId === null)
+        throw new Error("sessions query ran without an account");
+      const history = await getPlayerMatchHistory(accountId).catch(
         () => [] as MatchHistoryRow[],
       );
       return sessionStats(history);
@@ -444,11 +453,14 @@ export function useProfile(opts: {
       matchId: number | null;
       trace: LastGameTrace | null;
     }> => {
-      const history = await getPlayerMatchHistory(accountId!).catch(
+      // Gated by `enabled` above — assert the contract instead of `!`-ing it at each use.
+      if (accountId === null || !hero)
+        throw new Error("last-game query ran without account/hero");
+      const history = await getPlayerMatchHistory(accountId).catch(
         () => [] as MatchHistoryRow[],
       );
       // History is newest-first, so the first match on this hero is the latest one.
-      const last = history.find((r) => r.hero_id === hero!.id);
+      const last = history.find((r) => r.hero_id === hero.id);
       const matchId = last?.match_id ?? null;
       if (!last || !wpStats) return { farm: null, matchId, trace: null };
       // Cached-first: 404 (not ingested yet) throws and we simply show no overlay.
@@ -457,7 +469,7 @@ export function useProfile(opts: {
       if (!match || !focus) return { farm: null, matchId, trace: null };
       const rows = benchmarkEconomy(
         economyRows(focus, match.duration_s),
-        hero!.id,
+        hero.id,
         tierOf(rankSel),
         wpStats,
       );

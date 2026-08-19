@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { shareCardModel, shareLinks, CARD_PHASE_ROWS } from "./shareCard";
 import type { BuildItem, BuildPhase, GeneratedBuild, Item } from "../types";
+import { CARD_PHASE_ROWS, shareCardModel, shareLinks } from "./shareCard";
 
 function item(id: number, name: string, slot: Item["slot"] = "weapon"): Item {
   return { id, name, tier: 2, cost: 1250, slot, componentIds: [] };

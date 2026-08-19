@@ -1,30 +1,35 @@
-import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getBadgeDistribution } from "./api/deadlock";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { getBadgeDistribution } from "./api/deadlock";
 import "./App.css";
-import { persistOptions, queryClient } from "./queryClient";
-import { itemVerdict, rerankBuildForComp } from "./lib/buildGenerator";
-import { friendlyError } from "./lib/errors";
-import {
-  decodeUrlState,
-  encodeUrlState,
-  slugify,
-  type UrlState,
-} from "./lib/urlState";
-import {
-  hasSpan,
-  moversWindowFor,
-  priorWindowFor,
-  SESSION_NOW_S,
-  windowFor,
-} from "./lib/patchWindows";
+import { wpStatsQueryOptions } from "./api/wpStats";
+import type { PaceCurve } from "./components/PacePanel";
+import { LoadingState } from "./components/panels";
+import { AppModals } from "./features/AppModals";
+import { BuildMeta } from "./features/BuildMeta";
+import { CountersSection } from "./features/CountersSection";
+import { DashGrid } from "./features/DashGrid";
+import { Footer } from "./features/Footer";
+import { MoversStrip } from "./features/MoversStrip";
+import { MyHeroes } from "./features/MyHeroes";
+import { NewsStrip } from "./features/NewsStrip";
+import { PhaseColumns } from "./features/PhaseColumns";
+import { TopBar } from "./features/TopBar";
+import { useAssets } from "./features/useAssets";
+import { useBuildData } from "./features/useBuildData";
+import { useCounters } from "./features/useCounters";
+import { useModals } from "./features/useModals";
+import { useProfile } from "./features/useProfile";
+import { useCommitted, useSettle } from "./hooks";
 import { rankFilterUsable } from "./lib/badgeOutage";
-import { switchTransition } from "./lib/viewTransition";
-import { foldTrendingBreakouts } from "./lib/patchMovers";
-import { draftRanking } from "./lib/draft";
 import { banAdvice, enemyPresence } from "./lib/bans";
+import { itemVerdict, rerankBuildForComp } from "./lib/buildGenerator";
+import { draftRanking } from "./lib/draft";
+import { friendlyError } from "./lib/errors";
 import { buildBatch } from "./lib/exportBatch";
+import { heroAccent } from "./lib/heroAccent";
+import { laneMatchups } from "./lib/laneMatchups";
 import { heroFarmProfile } from "./lib/matchAnalysis";
 import {
   paceDiagnosis,
@@ -32,41 +37,36 @@ import {
   readPaceWindows,
   seriesNwAt,
 } from "./lib/pace";
-import type { PaceCurve } from "./components/PacePanel";
-import { laneMatchups } from "./lib/laneMatchups";
-import { heroAccent } from "./lib/heroAccent";
-import { prefetchBuild, prefetchEnemy } from "./lib/prefetch";
 import {
   buildPaletteCommands,
   type PaletteAction,
   type PaletteItem,
 } from "./lib/palette";
+import { foldTrendingBreakouts } from "./lib/patchMovers";
+import {
+  hasSpan,
+  moversWindowFor,
+  priorWindowFor,
+  SESSION_NOW_S,
+  windowFor,
+} from "./lib/patchWindows";
+import { prefetchBuild, prefetchEnemy } from "./lib/prefetch";
 import {
   bandForTier,
   highestPopulatedFloor,
+  type RankSel,
   rankSelLabel,
   rankSelToBadges,
   tierOf,
-  type RankSel,
 } from "./lib/ranks";
-import { useCommitted, useSettle } from "./hooks";
-import { useAssets } from "./features/useAssets";
-import { useProfile } from "./features/useProfile";
-import { useBuildData } from "./features/useBuildData";
-import { useCounters } from "./features/useCounters";
-import { useModals } from "./features/useModals";
-import { wpStatsQueryOptions } from "./api/wpStats";
-import { LoadingState } from "./components/panels";
-import { TopBar } from "./features/TopBar";
-import { MoversStrip } from "./features/MoversStrip";
-import { NewsStrip } from "./features/NewsStrip";
-import { MyHeroes } from "./features/MyHeroes";
-import { BuildMeta } from "./features/BuildMeta";
-import { DashGrid } from "./features/DashGrid";
-import { CountersSection } from "./features/CountersSection";
-import { PhaseColumns } from "./features/PhaseColumns";
-import { Footer } from "./features/Footer";
-import { AppModals } from "./features/AppModals";
+import {
+  decodeUrlState,
+  encodeUrlState,
+  slugify,
+  type UrlState,
+} from "./lib/urlState";
+import { switchTransition } from "./lib/viewTransition";
+import { persistOptions, queryClient } from "./queryClient";
 import type { Hero, Item } from "./types";
 
 /** Scroll the build row for `id` into view and flash it — the palette's item jump. Direct DOM on
@@ -194,9 +194,9 @@ function AppInner() {
     () =>
       wpStats &&
       new Map(
-        wpStats.heroes
-          .filter((h) => h.resid !== undefined)
-          .map((h) => [h.id, h.resid!]),
+        wpStats.heroes.flatMap((h) =>
+          h.resid === undefined ? [] : [[h.id, h.resid] as const],
+        ),
       ),
     [wpStats],
   );
@@ -239,7 +239,7 @@ function AppInner() {
       const idBySlug = new Map(h.map((x) => [slugify(x.name), x.id]));
       const linked = url0.hero ? idBySlug.get(url0.hero) : undefined;
       if (linked) heroTouched.current = true; // a deep-linked hero is a deliberate choice
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing the resolved deep link into selection state
+      // Deliberate set-in-effect: syncing the resolved deep link into selection state.
       setHeroId(linked || h[0].id);
       if (url0.enemies?.length) {
         const ids = url0.enemies
@@ -459,7 +459,7 @@ function AppInner() {
   // their actual neighborhood, tilted one rank into the climb.
   useEffect(() => {
     if (!profile) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- profile cleared; drop its cue
+      // Deliberate set-in-effect: profile cleared, so drop its cue.
       setRankAutoSet(null);
       return;
     }
@@ -487,7 +487,8 @@ function AppInner() {
     if (tierTouched.current || !badgeDist || profile?.rankTier != null) return;
     const floor = highestPopulatedFloor(badgeDist);
     if (floor !== null && floor < DEFAULT_RANK_FLOOR) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot: walks an untouched default down to a ladder shape only known once the distribution lands
+      // Deliberate set-in-effect, one-shot: walks an untouched default down to a ladder shape
+      // that's only known once the distribution lands.
       setRankSel(floor);
       setRankAutoSet({
         label: rankSelLabel(floor),
@@ -847,11 +848,13 @@ function AppInner() {
   const runBuildBatch = (
     batchHeroes: Hero[],
     onProgress: (done: number, total: number, hero: Hero) => void,
-  ) =>
-    buildBatch(
+  ) => {
+    if (!items)
+      throw new Error("batch export ran before the item asset loaded");
+    return buildBatch(
       batchHeroes,
       {
-        items: items!,
+        items,
         abilities,
         rankLabel,
         patchLabel,
@@ -869,6 +872,7 @@ function AppInner() {
       },
       onProgress,
     );
+  };
 
   // activeFlow (the flow the shown build was generated from) comes from useBuildData; the why-not
   // verdict re-runs the generator's gates for any item against that same flow.

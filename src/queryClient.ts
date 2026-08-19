@@ -8,8 +8,8 @@
 // `queryClient.fetchQuery` directly — that's what dedupes two composed queries asking for the
 // same underlying URL, exactly like the old URL-keyed promise cache did.
 
-import { QueryClient } from "@tanstack/react-query";
 import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
+import { QueryClient } from "@tanstack/react-query";
 import type { PersistQueryClientOptions } from "@tanstack/react-query-persist-client";
 
 export const queryClient = new QueryClient({

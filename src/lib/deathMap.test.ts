@@ -1,20 +1,21 @@
 import { describe, expect, it } from "vitest";
+import { must } from "../test/must";
 import type { MatchDeath } from "../types";
 import {
   cellRect,
   clusterInsight,
+  type DeathMark,
   deathCluster,
   deathMarks,
   decodeDensity,
   depthInsight,
   depthRead,
   landmarks,
+  type MapFrame,
   placeName,
   teamSign,
   timeDead,
   worldToUnit,
-  type DeathMark,
-  type MapFrame,
 } from "./deathMap";
 
 const H = 11520;
@@ -72,7 +73,7 @@ describe("decodeDensity", () => {
   it("decodes a grid of the declared size", () => {
     const bytes = new Uint8Array(4).fill(200);
     const b64 = Buffer.from(bytes).toString("base64");
-    const d = decodeDensity(b64, 2, H)!;
+    const d = must(decodeDensity(b64, 2, H));
     expect(d.size).toBe(2);
     expect(Array.from(d.cells)).toEqual([200, 200, 200, 200]);
   });
@@ -148,7 +149,7 @@ describe("deathCluster", () => {
       at(0.1, 0.9),
       at(0.9, 0.1),
     ];
-    const c = deathCluster(marks)!;
+    const c = must(deathCluster(marks));
     expect(c.count).toBe(3);
     expect(c.share).toBeCloseTo(0.6, 5);
     expect(c.u).toBeCloseTo(0.5033, 2);
@@ -185,7 +186,7 @@ describe("deathCluster", () => {
       at(0.51, 0.5),
       at(0.5, 0.51),
     ];
-    expect(deathCluster(marks)!.deadS).toBeUndefined();
+    expect(must(deathCluster(marks)).deadS).toBeUndefined();
   });
 });
 
@@ -194,7 +195,7 @@ describe("clusterInsight", () => {
 
   it("reports the count, the share and the cost", () => {
     const c = { u: 0.5, v: 0.5, x: 0, y: 0, count: 6, share: 0.6, deadS: 180 };
-    const s = clusterInsight(c, 10)!;
+    const s = must(clusterInsight(c, 10));
     expect(s).toContain("6 of your 10 deaths");
     expect(s).toContain("one place");
     expect(s).toContain("3 minutes dead");
@@ -216,12 +217,12 @@ describe("clusterInsight", () => {
 
   it("stays placeless without a frame rather than guessing", () => {
     const c = { u: 0.5, v: 0.5, x: 0, y: 0, count: 6, share: 0.6, deadS: 0 };
-    const s = clusterInsight(c, 10)!;
+    const s = must(clusterInsight(c, 10));
     expect(s).not.toMatch(/tier|base|half|midline|left|right/i);
   });
 
   it("says so when deaths are spread and there were enough to mean it", () => {
-    const s = clusterInsight(null, 8)!;
+    const s = must(clusterInsight(null, 8));
     expect(s).toContain("spread across the map");
   });
 
@@ -283,10 +284,10 @@ describe("landmarks", () => {
   it("negates the enemy's, so their left-lane structure mirrors the viewer's right", () => {
     // The map is 180°-rotation symmetric, not left-right mirrored: the enemy structure in the
     // viewer's LEFT corridor is the negation of the viewer's RIGHT-lane one.
-    const ownRight = FRAME.tier1.find((t) => t.x > 3000)!;
-    const enemyLeft = lms.find(
-      (l) => !l.own && l.kind === "tier1" && l.side === "left",
-    )!;
+    const ownRight = must(FRAME.tier1.find((t) => t.x > 3000));
+    const enemyLeft = must(
+      lms.find((l) => !l.own && l.kind === "tier1" && l.side === "left"),
+    );
     expect(enemyLeft.x).toBe(-ownRight.x);
     expect(enemyLeft.side).toBe("left");
   });
@@ -368,7 +369,7 @@ describe("depthRead", () => {
       mark(3, -5000, 4),
       mark(3, -5000, 5),
     ];
-    const r = depthRead(marks, norms)!;
+    const r = must(depthRead(marks, norms));
     expect(r.observed).toBeCloseTo(4 / 6, 5);
     expect(r.expected).toBeCloseTo(0.7, 5);
     expect(r.real).toBe(false);
@@ -380,7 +381,7 @@ describe("depthRead", () => {
     const marks = Array.from({ length: 10 }, (_, i) =>
       mark(1, i < 7 ? 5000 : -5000, i),
     );
-    const r = depthRead(marks, norms)!;
+    const r = must(depthRead(marks, norms));
     expect(r.real).toBe(false);
     expect(depthInsight(r)).toBeNull();
   });
@@ -390,9 +391,9 @@ describe("depthRead", () => {
     const marks = Array.from({ length: 12 }, (_, i) =>
       mark(2, i < 10 ? 5000 : -5000, i),
     );
-    const r = depthRead(marks, norms)!;
+    const r = must(depthRead(marks, norms));
     expect(r.real).toBe(true);
-    const s = depthInsight(r)!;
+    const s = must(depthInsight(r));
     expect(s).toContain("10 of your 12");
     expect(s).toContain("further forward");
   });
@@ -415,7 +416,7 @@ describe("depthRead", () => {
       mark(3, 5000, 4),
       mark(3, -5000, 5),
     ];
-    const r = depthRead(marks, [null, null, null, norm(0.5)])!;
+    const r = must(depthRead(marks, [null, null, null, norm(0.5)]));
     expect(r.total).toBe(4);
     expect(r.past).toBe(3);
   });

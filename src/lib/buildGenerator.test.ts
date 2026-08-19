@@ -1,15 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  WIN_STATE_GAP,
-  classifyWinState,
-  finalizeOvertimeBuys,
-  generateBuild,
-  overtimeBuyList,
-  unreliableAdjustedNodes,
-  overtimeSellList,
-  rerankBuildForComp,
-} from "./buildGenerator";
-import type { CompEdge } from "./counters";
+import { must } from "../test/must";
 import type {
   BuildItem,
   BuildPhase,
@@ -20,6 +10,17 @@ import type {
   Item,
   ItemFlowStats,
 } from "../types";
+import {
+  classifyWinState,
+  finalizeOvertimeBuys,
+  generateBuild,
+  overtimeBuyList,
+  overtimeSellList,
+  rerankBuildForComp,
+  unreliableAdjustedNodes,
+  WIN_STATE_GAP,
+} from "./buildGenerator";
+import type { CompEdge } from "./counters";
 
 // classifyWinState reads the raw-vs-adjusted (game-state-corrected) win-rate gap: a pick whose raw
 // rate runs well above its adjusted rate mostly wins games you were already winning ("win more"); the
@@ -574,7 +575,7 @@ describe("generateBuild — buyer-vs-non-buyer gate on the universal bypass", ()
     expect(coreIds).not.toContain(trap.id);
     const row = lane.situational.find((s) => s.item.id === trap.id);
     expect(row).toBeDefined();
-    expect(row!.why).toMatch(/behind the ones who don't/);
+    expect(must(row).why).toMatch(/behind the ones who don't/);
   });
 
   it("keeps a popular pick whose observed dip is within the contrast margin", () => {

@@ -5,6 +5,7 @@ import "./AppModals.css";
 import { lazy, Suspense } from "react";
 import { CommandPalette } from "../components/CommandPalette";
 import { VerdictCard } from "../components/VerdictCard";
+
 // The five heavy modals are code-split: none is needed for first paint, and each pulls its own
 // weight (Lab's charts, Match's analysis, Export's KV3 writer, Share's canvas painter). They load
 // on first open behind a null fallback — the native <dialog> just appears a beat later. The
@@ -24,17 +25,18 @@ const ExportPanel = lazy(() =>
 const SharePanel = lazy(() =>
   import("../components/SharePanel").then((m) => ({ default: m.SharePanel })),
 );
-import { shareCardModel, shareLinks } from "../lib/shareCard";
-import { vibelockBuildName } from "../lib/heroBuildExport";
+
 import type { ItemVerdict } from "../lib/buildGenerator";
 import type { BatchEntry } from "../lib/exportBatch";
+import type { FundamentalRow } from "../lib/fundamentals";
+import { vibelockBuildName } from "../lib/heroBuildExport";
 import type {
   PaletteAction,
   PaletteCommand,
   PaletteMode,
 } from "../lib/palette";
+import { shareCardModel, shareLinks } from "../lib/shareCard";
 import type { UrlState } from "../lib/urlState";
-import type { FundamentalRow } from "../lib/fundamentals";
 import type {
   Archetype,
   ArchetypeSet,

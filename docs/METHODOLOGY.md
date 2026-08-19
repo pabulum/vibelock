@@ -222,11 +222,14 @@ sample _does_ exist. Measured, on the two orders below the full comp:
   sd ≈ 0.42–0.48pt — comparable to the 0.50pt first-order residual itself — and 16.4% of cells clear
   2 s.e. where chance gives 5%. Over the fifteen pairs in a six-hero comp that is up to ~1.6pt of
   effect the sum does not model.
-- **But it is not a matchup.** The same interaction correlates at _r_ = 0.68–0.76 across those three
-  very different heroes (noise-corrected, ≈ 1). It is a property of the enemy comp's own internal
-  coherence — Vindicta + Grey Talon reads +2.6pt against everyone, Dynamo + Paige −3.5pt against
-  everyone — not of who you bring into it. A term that shifts every candidate by the same amount
-  cancels exactly in a ranking, and the ranking is what this panel is for.
+- **But it is not a matchup — it is the enemy team's own synergy.** The same interaction correlates
+  at _r_ = 0.68–0.76 across those three very different heroes (noise-corrected, ≈ 1), so it does not
+  depend on who you bring. Measuring the identical hero pairs on the _friendly_ side settles what it
+  is: **_r_ = −0.946 with slope −1.03** across 594 pairs, from independent populations. A pair worth
+  +3.5pt to its own team costs the opponent 3.5pt, and that −1 slope — the conservation property a
+  zero-sum game requires — emerged rather than being imposed. Vindicta + Grey Talon is −1.8pt to the
+  team that fields it; Dynamo + Paige is +3.5pt. A term that shifts every candidate by the same
+  amount cancels exactly in a ranking, and the ranking is what this panel is for.
 - **Third order, the ally side.** All 8,436 hero trios exist with usable sample (median 4,649
   games), and the three-way interaction beyond pairs has observed sd 0.62pt against 0.65pt of
   sampling noise — signal sd 0.00pt. Team effects are pairwise and nothing above that is estimable
@@ -235,10 +238,11 @@ sample _does_ exist. Measured, on the two orders below the full comp:
 So the ordering the panel reports survives the second-order effect; the absolute expected win rate
 carries it. That number is a hero-quality estimate — your record plus the matchup — and is not a
 prediction of the game, which is why the verdict line argues about order and never about the
-percentage. Two caveats on the measurement itself: within a hero, one game feeds fifteen pair cells,
-so the binomial noise term is understated and 0.42pt is an upper bound; and the leading candidate
-explanation for a hero-independent pair effect is party composition (`match_player.party` is
-present, so it is directly testable) rather than anything about the heroes.
+percentage. One caveat on the measurement itself: within a hero, one game feeds fifteen pair cells,
+so the binomial noise term is understated and 0.42pt is an upper bound. Party composition would have
+been the obvious alternative explanation for a hero-independent pair effect, but
+`match_player.party` is unpopulated upstream — 0.0% premade across 38M pair-observations — so it is
+untestable from that column rather than ruled out.
 
 The honest headline is usually "play your best hero". Comp edge spreads about 2.5pt across a
 realistic five-hero pool (p90 4.0pt), while the same player's own record spreads wider than that

@@ -39,8 +39,8 @@
 // produces, not the percentage. The verdict line is written to argue only the former. Full design
 // and the third-order (ally trio) null in docs/METHODOLOGY and the note atop lib/matchups.
 
-import { residualFor, type MatchupTable } from "./matchups";
 import type { Hero } from "../types";
+import { type MatchupTable, residualFor } from "./matchups";
 
 /** Ladder games of evidence the hero's current rate is worth against your own record. A 20-game
  * dabble still reads mostly as the ladder; a 300-game main mostly as you. Same constant the

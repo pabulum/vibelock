@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  bucketForTime,
   FLOW_PHASE_COUNT,
   FLOW_PHASE_INTERVAL_S,
   PHASE_END_S,
   PHASE_LABELS,
   PHASE_TIME_LABELS,
-  bucketForTime,
   phaseForTime,
 } from "./phases";
 

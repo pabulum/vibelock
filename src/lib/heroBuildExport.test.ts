@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { must } from "../test/must";
 import type {
   BuildItem,
   BuildPhase,
@@ -49,7 +50,7 @@ function parse(b: Uint8Array): Field[] {
   return out;
 }
 const sub = (fields: Field[], f: number) =>
-  parse(fields.find((x) => x.f === f)!.v as Uint8Array);
+  parse(must(fields.find((x) => x.f === f)).v as Uint8Array);
 const all = (fields: Field[], f: number) => fields.filter((x) => x.f === f);
 
 // Decode one CurrencyChange { 1: ability_id, 2: currency_type, 3: delta(int32) } with a BigInt
@@ -84,9 +85,9 @@ function currencyChange(bytes: Uint8Array): {
   };
 }
 const str = (fields: Field[], f: number) =>
-  new TextDecoder().decode(fields.find((x) => x.f === f)!.v as Uint8Array);
+  new TextDecoder().decode(must(fields.find((x) => x.f === f)).v as Uint8Array);
 const num = (fields: Field[], f: number) =>
-  fields.find((x) => x.f === f)!.v as number;
+  must(fields.find((x) => x.f === f)).v as number;
 
 // ---- fixtures ----
 const item = (id: number): Item => ({
@@ -200,10 +201,10 @@ describe("buildExportCategories", () => {
 
   it("gives every category identical coords so the browser lays them out by list order", () => {
     const bytes = encodeHeroBuild(build(), { name: "x" });
-    const hb = parse(parse(bytes).find((x) => x.f === 1)!.v as Uint8Array);
+    const hb = parse(must(parse(bytes).find((x) => x.f === 1)).v as Uint8Array);
     const cats = all(sub(hb, 10), 1).map((c) => parse(c.v as Uint8Array));
-    const xs = cats.map((c) => c.find((f) => f.f === 4)!.v as number);
-    const ys = cats.map((c) => c.find((f) => f.f === 5)!.v as number);
+    const xs = cats.map((c) => must(c.find((f) => f.f === 4)).v as number);
+    const ys = cats.map((c) => must(c.find((f) => f.f === 5)).v as number);
     expect(new Set(xs).size).toBe(1); // every category shares one x…
     expect(new Set(ys).size).toBe(1); // …and one y
   });
@@ -249,9 +250,11 @@ describe("encodeHeroBuild", () => {
 
   it("stamps the author id (f3) so the owner can edit/delete it in-game", () => {
     const hb = parse(
-      parse(encodeHeroBuild(build(), { name: "x", authorId: 48664091 })).find(
-        (x) => x.f === 1,
-      )!.v as Uint8Array,
+      must(
+        parse(encodeHeroBuild(build(), { name: "x", authorId: 48664091 })).find(
+          (x) => x.f === 1,
+        ),
+      ).v as Uint8Array,
     );
     expect(num(hb, 3)).toBe(48664091);
   });
@@ -259,8 +262,9 @@ describe("encodeHeroBuild", () => {
   it('defaults the timestamp to now so a fresh export is not "[OUTDATED]"', () => {
     const before = Math.floor(Date.now() / 1000);
     const hb = parse(
-      parse(encodeHeroBuild(build(), { name: "x" })).find((x) => x.f === 1)!
-        .v as Uint8Array,
+      must(
+        parse(encodeHeroBuild(build(), { name: "x" })).find((x) => x.f === 1),
+      ).v as Uint8Array,
     );
     expect(num(hb, 4)).toBeGreaterThanOrEqual(before);
   });
@@ -278,7 +282,7 @@ describe("encodeHeroBuild", () => {
       ],
     ]);
     const bytes = encodeHeroBuild(build(), { name: "x", imbues });
-    const hb = parse(parse(bytes).find((x) => x.f === 1)!.v as Uint8Array);
+    const hb = parse(must(parse(bytes).find((x) => x.f === 1)).v as Uint8Array);
     const lane = parse(all(sub(hb, 10), 1)[0].v as Uint8Array);
     const mods = all(lane, 1).map((m) => parse(m.v as Uint8Array));
 
@@ -371,7 +375,7 @@ describe("skill order (ability_order)", () => {
   // Pull details.2 → ability_order's repeated currency_changes (field 1) out of an encoded build.
   const changesFor = (skillOrder?: number[]) => {
     const bytes = encodeHeroBuild(build(), { name: "x", skillOrder });
-    const hb = parse(parse(bytes).find((x) => x.f === 1)!.v as Uint8Array);
+    const hb = parse(must(parse(bytes).find((x) => x.f === 1)).v as Uint8Array);
     const details = sub(hb, 10);
     const ao = details.find((x) => x.f === 2);
     if (!ao) return null;
@@ -387,14 +391,14 @@ describe("skill order (ability_order)", () => {
 
   it("encodes each point as an unlock then 1/2/5-cost upgrades, in order", () => {
     // ability 100 invested 4×, ability 200 once — interleaved as the order points were spent.
-    const cc = changesFor([100, 200, 100, 100, 100])!;
+    const cc = must(changesFor([100, 200, 100, 100, 100]));
     expect(cc.map((c) => c.abilityId)).toEqual([100, 200, 100, 100, 100]);
     expect(cc.map((c) => c.type)).toEqual([2, 2, 1, 1, 1]); // first point in each = unlock (type 2)
     expect(cc.map((c) => c.delta)).toEqual([-1, -1, -1, -2, -5]); // 100's four levels cost 1,1,2,5
   });
 
   it("drops investments past an ability’s 4th point (only four levels exist)", () => {
-    const cc = changesFor([7, 7, 7, 7, 7, 7])!; // 6 points in one ability → only 4 survive
+    const cc = must(changesFor([7, 7, 7, 7, 7, 7])); // 6 points in one ability → only 4 survive
     expect(cc).toHaveLength(4);
     expect(cc.map((c) => c.delta)).toEqual([-1, -1, -2, -5]);
   });

@@ -15,26 +15,26 @@ import {
   getItemStats,
   type TimeWindow,
 } from "../api/deadlock";
-import { assembleArchetypes, pickSignatures } from "./archetypes";
-import {
-  guessSignatures,
-  rememberSignatures,
-  signaturesMatch,
-} from "./signatureCache";
-import { blendFlow } from "./patchBlend";
-import { findAdoptionMovers, findPatchMovers } from "./patchMovers";
-import { touchedItems } from "./patchChanges";
-import { buildJointGamesLookup } from "./pairs";
-import { buildSynergyLookup, singleRecordsFromFlow } from "./synergy";
 import type {
   ArchetypeSet,
   Hero,
   HeroLadderStat,
   Item,
+  ItemFlowStats,
   ItemStat,
 } from "../types";
+import { assembleArchetypes, pickSignatures } from "./archetypes";
+import { buildJointGamesLookup } from "./pairs";
+import { blendFlow } from "./patchBlend";
+import { touchedItems } from "./patchChanges";
 import type { AdoptionMover, PatchMover } from "./patchMovers";
-import type { ItemFlowStats } from "../types";
+import { findAdoptionMovers, findPatchMovers } from "./patchMovers";
+import {
+  guessSignatures,
+  rememberSignatures,
+  signaturesMatch,
+} from "./signatureCache";
+import { buildSynergyLookup, singleRecordsFromFlow } from "./synergy";
 
 /** The rank + patch slice a build is generated from, plus the generator's options. */
 export interface BuildSlice {
@@ -230,7 +230,7 @@ export async function fetchBuildSet(opts: {
   const heroRecord = (rows: HeroLadderStat[]) => {
     const row = rows.find((r) => r.hero_id === h.id);
     const decided = row ? row.wins + row.losses : 0;
-    return { rate: decided > 0 ? row!.wins / decided : 0, decided };
+    return { rate: row && decided > 0 ? row.wins / decided : 0, decided };
   };
   const heroFresh = heroRecord(ladderFresh);
   const heroPrev = heroRecord(ladderPrev);

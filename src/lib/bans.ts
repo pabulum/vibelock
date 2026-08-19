@@ -23,8 +23,8 @@
 //  - It does not treat community ban counts as evidence. hero-ban-stats measures what players fear,
 //    which is a different thing from what beats you; it rides along as context only.
 
-import { residualFor, type MatchupTable } from "./matchups";
 import type { Hero } from "../types";
+import { type MatchupTable, residualFor } from "./matchups";
 
 /** Enemy hero slots per match — how many chances a given game has to contain the hero you're
  * considering banning. Shared with lib/draft's reading of the same matrix. */

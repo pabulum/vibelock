@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { counterSliceQueries, type CounterSlice } from "./prefetch";
+import { type CounterSlice, counterSliceQueries } from "./prefetch";
 
 // A prefetch only pays off if it resolves the *same* URL the real query asks for — the analytics
 // layer is keyed by URL, so a near-miss is invisible and just does the work twice. These pin the

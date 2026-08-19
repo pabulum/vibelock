@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  GATE_Z,
   benjaminiHochberg,
+  GATE_Z,
   normalCdf,
   significantlyHigher,
   winRateSE,

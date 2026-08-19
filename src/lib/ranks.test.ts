@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  RANK_TIERS,
   badgeLabel,
   highestPopulatedFloor,
+  RANK_TIERS,
   rankFloorLabel,
   tierToMinBadge,
 } from "./ranks";

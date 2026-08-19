@@ -4,8 +4,8 @@
 import "./ItemRow.css";
 import {
   classifyWinState,
-  WIN_STATE_GAP,
   type LabWinState,
+  WIN_STATE_GAP,
 } from "../lib/buildGenerator";
 import type { AdoptionMover } from "../lib/patchMovers";
 import type {
@@ -152,10 +152,20 @@ function ItemTags({
     rawWr !== undefined && adjWr !== undefined && baseline !== undefined
       ? classifyWinState(rawWr, adjWr, baseline, lab)
       : undefined;
-  // Which evidence produced the tag decides what the tooltip cites.
-  const gapBased =
-    state !== undefined &&
-    Math.abs((rawWr ?? 0) - (adjWr ?? 0)) >= WIN_STATE_GAP;
+  // Which evidence produced the tag decides what the tooltip cites — carried with the tag rather
+  // than re-derived, so the tooltip reads the numbers it was classified from. classifyWinState
+  // returns a state from the raw/adjusted gap or from lab evidence and from nothing else, so
+  // these two arms are exhaustive whenever `state` is set.
+  const evidence =
+    state === undefined
+      ? null
+      : rawWr !== undefined &&
+          adjWr !== undefined &&
+          Math.abs(rawWr - adjWr) >= WIN_STATE_GAP
+        ? ({ kind: "gap", rawWr, adjWr } as const)
+        : lab
+          ? ({ kind: "lab", lab } as const)
+          : null;
   const hasTags =
     !!reason ||
     bubbles.length > 0 ||
@@ -188,13 +198,14 @@ function ItemTags({
           imbue → {imbue.ability.name}
         </span>
       )}
-      {bubbles.map((m) => (
-        <CounterBubble
-          key={m.enemyHeroId}
-          mark={m}
-          hero={enemiesById!.get(m.enemyHeroId)}
-        />
-      ))}
+      {enemiesById &&
+        bubbles.map((m) => (
+          <CounterBubble
+            key={m.enemyHeroId}
+            mark={m}
+            hero={enemiesById.get(m.enemyHeroId)}
+          />
+        ))}
       {weakEdge !== undefined && (
         <span className="weakcomp" title="Weak into the selected comp">
           ▼ {fmtDelta(weakEdge)}
@@ -218,17 +229,17 @@ function ItemTags({
           {swapLabel} {swapFor.name}
         </span>
       )}
-      {state && (
+      {state && evidence && (
         <span
           className={`statetag ${state}`}
           title={
-            gapBased
+            evidence.kind === "gap"
               ? state === "winmore"
-                ? `Win-more: raw ${pct(rawWr!)} ≫ adjusted ${pct(adjWr!)} — its win rate leans on already being ahead${lab ? ` (roster-wide it's bought at ${pct(lab.wpBuy)} win probability)` : ""}`
-                : `Comeback: adjusted ${pct(adjWr!)} ≫ raw ${pct(rawWr!)} — holds up even when bought behind${lab ? ` (roster-wide it's bought at ${pct(lab.wpBuy)} win probability)` : ""}`
+                ? `Win-more: raw ${pct(evidence.rawWr)} ≫ adjusted ${pct(evidence.adjWr)} — its win rate leans on already being ahead${lab ? ` (roster-wide it's bought at ${pct(lab.wpBuy)} win probability)` : ""}`
+                : `Comeback: adjusted ${pct(evidence.adjWr)} ≫ raw ${pct(evidence.rawWr)} — holds up even when bought behind${lab ? ` (roster-wide it's bought at ${pct(lab.wpBuy)} win probability)` : ""}`
               : state === "winmore"
-                ? `Win-more: across the roster it's bought when already winning (${pct(lab!.wpBuy)} win probability at purchase) and buyers finish ${Math.abs(lab!.excess * 100).toFixed(1)}pt below that — the win rate is flattered by when it's bought`
-                : `Comeback: across the roster it's bought from behind (${pct(lab!.wpBuy)} win probability at purchase) and buyers still finish ${(lab!.excess * 100).toFixed(1)}pt above that — it holds up bought behind`
+                ? `Win-more: across the roster it's bought when already winning (${pct(evidence.lab.wpBuy)} win probability at purchase) and buyers finish ${Math.abs(evidence.lab.excess * 100).toFixed(1)}pt below that — the win rate is flattered by when it's bought`
+                : `Comeback: across the roster it's bought from behind (${pct(evidence.lab.wpBuy)} win probability at purchase) and buyers still finish ${(evidence.lab.excess * 100).toFixed(1)}pt above that — it holds up bought behind`
           }
         >
           {state === "winmore" ? "win more" : "comeback"}

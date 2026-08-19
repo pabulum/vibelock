@@ -16,8 +16,8 @@
 //    with a win rate attached. Nothing here returns a win probability, deliberately.
 
 import type { WpStats } from "../api/wpStats";
-import { PHASE_LABELS } from "./phases";
 import { placeOnGrid, TIER_FALLBACK_OFFSETS } from "./matchAnalysis";
+import { PHASE_LABELS } from "./phases";
 
 /** One baked tick of the ladder's level curve. `lv` is null when the tick was under the bake's
  * sample floor — the arrays stay index-aligned with the shared axis rather than shifting. */

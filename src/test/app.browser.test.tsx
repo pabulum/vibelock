@@ -8,8 +8,9 @@
 import { beforeEach, expect, test } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import { installApiMock } from "./apiMock";
 import App from "../App";
+import { installApiMock } from "./apiMock";
+import { must } from "./must";
 
 const api = installApiMock();
 
@@ -69,7 +70,7 @@ test("renders the news strip, including announcements that aren't patches", asyn
   // date, so the title rule alone would keep it out of the patch list — but the ranked-seasons
   // fixture opens Beta Season 1 on it, which makes it a boundary. Both halves are asserted: the
   // strip shows it, and the strip knows it is a patch (no "note" class).
-  const first = container.querySelector(".news .entry")!;
+  const first = must(container.querySelector(".news .entry"));
   expect(first.textContent).toContain("Matchmaking");
   expect(first.classList.contains("note")).toBe(false);
   expect(first.getAttribute("href")).toContain("steampowered.com");
@@ -223,10 +224,10 @@ test("the palette jumps to a build item's row and flashes it", async () => {
   ].find((h) => h.textContent === "Items");
   expect(itemsHdr).toBeDefined();
   const name =
-    itemsHdr!.nextElementSibling?.querySelector(".pal-lbl")?.textContent;
+    must(itemsHdr).nextElementSibling?.querySelector(".pal-lbl")?.textContent;
   expect(name).toBeTruthy();
 
-  await input.fill(name!);
+  await input.fill(must(name));
   await userEvent.keyboard("{Enter}");
   await expect
     .poll(() => screen.container.querySelector("dialog.palette"), BAKE)
@@ -279,11 +280,11 @@ test("hovering a community build shows the structured diff", async () => {
     .poll(() => screen.container.querySelector(".crow"), BAKE)
     .not.toBeNull();
 
-  const row = screen.container.querySelector(".crow")!;
+  const row = must(screen.container.querySelector(".crow"));
   await page.elementLocator(row).hover();
   await expect.poll(() => document.querySelector(".buildprev")).not.toBeNull();
 
-  const prev = document.querySelector(".buildprev")!;
+  const prev = must(document.querySelector(".buildprev"));
   // The diff renders verdict sections with classed icons and a counts footer.
   expect(prev.querySelectorAll(".bp-sub").length).toBeGreaterThan(0);
   expect(

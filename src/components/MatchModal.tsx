@@ -7,27 +7,27 @@
 // match is ingested within the hour (the API crawls, and uploader users submit their own salts).
 // Only on a miss does the UI offer the explicit Steam fallback, behind a 20-minute cooldown.
 
-import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  getItems,
   getItemStats,
+  getItems,
   getMatchMetadata,
   getPlayerMatchHistory,
   getPlayerMetrics,
   MatchNotIngestedError,
   steamFetchAvailableAt,
 } from "../api/deadlock";
-import { computeItemCounters } from "../lib/counters";
 import { deathMapQueryOptions } from "../api/deathMap";
+import { getWpStats, type WpStats } from "../api/wpStats";
+import { computeItemCounters } from "../lib/counters";
 import {
   deathMarks,
   teamSign,
   timeDead,
   WORLD_HALF_EXTENT,
 } from "../lib/deathMap";
-import { DeathMap } from "./DeathMap";
-import { getWpStats, type WpStats } from "../api/wpStats";
+import { friendlyError } from "../lib/errors";
 import {
   analyzeMatch,
   deathInsights,
@@ -39,9 +39,9 @@ import {
   tierToMaxBadge,
   tierToMinBadge,
 } from "../lib/ranks";
-import { friendlyError } from "../lib/errors";
-import { ModalShell } from "./ModalShell";
 import type { Hero, ItemCounters, MatchHistoryRow, MatchInfo } from "../types";
+import { DeathMap } from "./DeathMap";
+import { ModalShell } from "./ModalShell";
 
 const mmss = (s: number) =>
   `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -130,9 +130,9 @@ function WpChart({ a }: { a: MatchAnalysis }) {
         <line x1={PAD} x2={W - PAD} y1={y(0.5)} y2={y(0.5)} className="wpmid" />
         <path d={area} className="wparea" />
         <path d={path} className="wpline" />
-        {deaths.map((t, i) => (
+        {deaths.map((t) => (
           <line
-            key={i}
+            key={t}
             x1={x(t)}
             x2={x(t)}
             y1={H - PAD}
@@ -330,6 +330,10 @@ export function MatchModal({
   // "analyze last game" link, jump straight to the newest game. Declared after `load` so it can call
   // it; the fetch continuation keeps the state updates off the synchronous effect body.
   const autoLoaded = useRef(false);
+  // `load` is redeclared each render; this fetch is once-per-open, keyed on the profile and the
+  // caller's target, with autoLoaded guarding the jump. Depending on `load` would re-fetch the
+  // history on every render.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deliberate — see above
   useEffect(() => {
     if (!accountId) return;
     getPlayerMatchHistory(accountId).then(
@@ -356,7 +360,6 @@ export function MatchModal({
       },
       () => live.current && setRecent([]),
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId, autoLoadLatest, autoLoadMatchId]);
 
   const a = analysis;
@@ -533,9 +536,10 @@ export function MatchModal({
             {/* Only for the seat the linked profile actually played — the ladder move is that
                 account's, and analysing a teammate must not label it with their name. */}
             {a.focus.account_id === accountId &&
-              rankedByMatch.has(a.matchId) && (
-                <LpChip row={rankedByMatch.get(a.matchId)!} />
-              )}
+              (() => {
+                const ranked = rankedByMatch.get(a.matchId);
+                return ranked ? <LpChip row={ranked} /> : null;
+              })()}
             <span className="mmuted">
               {Math.round(a.focus.net_worth / 100) / 10}k souls ·{" "}
               {Math.round(a.durationS / 60)} min

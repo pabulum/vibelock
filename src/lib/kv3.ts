@@ -76,7 +76,7 @@ export function lz4BlockDecode(
     // Literal run: length in the high nibble, 15 meaning "keep adding the next byte(s)".
     let litLen = token >> 4;
     if (litLen === 0xf) {
-      let b;
+      let b: number;
       do {
         b = src[s++];
         litLen += b;
@@ -95,7 +95,7 @@ export function lz4BlockDecode(
       throw new Error("Corrupt LZ4 block: match offset out of range");
     let matchLen = (token & 0xf) + 4;
     if ((token & 0xf) === 0xf) {
-      let b;
+      let b: number;
       do {
         b = src[s++];
         matchLen += b;
@@ -340,9 +340,11 @@ class V5Reader {
 
   private readBlob(): Uint8Array {
     if (this.blobSizes) {
-      const size = this.blobSizes.shift()!;
+      const size = this.blobSizes.shift();
+      if (size === undefined || !this.blobs)
+        throw new Error("KV3: blob table ran out before its last blob");
       if (size === 0) return new Uint8Array(0);
-      return this.blobs!.read(size);
+      return this.blobs.read(size);
     }
     return this.active.bytes.read(this.active.ints.i32());
   }

@@ -18,7 +18,7 @@ import type {
   Item,
   ItemFlowStats,
 } from "../types";
-import { generateBuild, type BuildOptions } from "./buildGenerator";
+import { type BuildOptions, generateBuild } from "./buildGenerator";
 
 const SIG_MIN_TIER = 3; // signatures must be scaling items, not lane fillers
 // A hero is flex only if both archetypes are well-played (≥ MIN), neither is so
@@ -45,12 +45,16 @@ export function pickSignatures(
 
   const ranked = [...players.entries()]
     .map(([id, n]) => ({ id, n, item: items.get(id) }))
-    .filter((x) => x.item && x.item.tier >= SIG_MIN_TIER)
+    // Predicate, not a plain filter: the two `find`s below read `.slot` off the item.
+    .filter(
+      (x): x is { id: number; n: number; item: Item } =>
+        !!x.item && x.item.tier >= SIG_MIN_TIER,
+    )
     .sort((a, b) => b.n - a.n);
 
   return {
-    gun: ranked.find((x) => x.item!.slot === "weapon")?.id,
-    spirit: ranked.find((x) => x.item!.slot === "spirit")?.id,
+    gun: ranked.find((x) => x.item.slot === "weapon")?.id,
+    spirit: ranked.find((x) => x.item.slot === "spirit")?.id,
   };
 }
 
@@ -73,14 +77,12 @@ export function assembleArchetypes(
 ): ArchetypeSet {
   const baseMatches = flows.all.baseline.matches || 1;
 
-  // Conditioning on a rare item can return an empty/baseline-less response — guard it.
-  const make = (
+  const build = (
     key: ArchetypeKey,
     label: string,
-    flow: ItemFlowStats | undefined,
+    flow: ItemFlowStats,
     sigId?: number,
-  ): Archetype | undefined => {
-    if (!flow?.baseline) return undefined;
+  ): Archetype => {
     return {
       key,
       label,
@@ -100,7 +102,18 @@ export function assembleArchetypes(
     };
   };
 
-  const all = make("all", "All builds", flows.all)!; // base always has a baseline
+  // Conditioning on a rare item can return an empty/baseline-less response — guard it. The base
+  // flow always has one (baseMatches above already reads it), so it goes through `build` directly
+  // and comes back as an Archetype rather than something the caller has to re-check.
+  const make = (
+    key: ArchetypeKey,
+    label: string,
+    flow: ItemFlowStats | undefined,
+    sigId?: number,
+  ): Archetype | undefined =>
+    flow?.baseline ? build(key, label, flow, sigId) : undefined;
+
+  const all = build("all", "All builds", flows.all);
   const gun = make("gun", "Gun", flows.gun, sig.gun);
   const spirit = make("spirit", "Spirit", flows.spirit, sig.spirit);
 
@@ -119,8 +132,8 @@ export function assembleArchetypes(
   const bothViable = !!gun && !!spirit && inRange(gun) && inRange(spirit);
   const flex = bothViable && overlap <= FLEX_MAX_OVERLAP;
 
-  if (flex) {
-    const split = [gun!, spirit!].sort((a, b) => b.winRate - a.winRate); // best win rate first
+  if (flex && gun && spirit) {
+    const split = [gun, spirit].sort((a, b) => b.winRate - a.winRate); // best win rate first
     const note = `Two distinct builds — ${split[0].label} wins more (${pct(split[0].winRate)} vs ${pct(split[1].winRate)}). Pick a style.`;
     return { flex: true, kind: "flex", note, archetypes: [...split, all] };
   }

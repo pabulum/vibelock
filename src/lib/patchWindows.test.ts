@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { must } from "../test/must";
+import type { Patch } from "../types";
+import { PRIOR_WINDOW_S } from "./patchBlend";
 import {
   hasSpan,
   moversWindowFor,
   priorWindowFor,
   windowFor,
 } from "./patchWindows";
-import { PRIOR_WINDOW_S } from "./patchBlend";
-import type { Patch } from "../types";
 
 const DAY = 86400;
 // Newest first, as the patch feed is sorted.
@@ -91,7 +92,7 @@ describe("moversWindowFor", () => {
     const span = (w: {
       minUnixTimestamp?: number;
       maxUnixTimestamp?: number;
-    }) => w.maxUnixTimestamp! - w.minUnixTimestamp!;
+    }) => must(w.maxUnixTimestamp) - must(w.minUnixTimestamp);
     expect(span(day1)).toBe(DAY);
     expect(span(day5)).toBe(5 * DAY);
   });
@@ -106,7 +107,9 @@ describe("moversWindowFor", () => {
 
   it("caps at the borrow window so a long patch doesn't reach back into ancient drift", () => {
     const w = moversWindowFor(patches, 0, 1_000_000 + 120 * DAY);
-    expect(w.maxUnixTimestamp! - w.minUnixTimestamp!).toBe(PRIOR_WINDOW_S);
+    expect(must(w.maxUnixTimestamp) - must(w.minUnixTimestamp)).toBe(
+      PRIOR_WINDOW_S,
+    );
   });
 
   it("stops the comparator at a ranked reset even when that costs the two sides equal length", () => {

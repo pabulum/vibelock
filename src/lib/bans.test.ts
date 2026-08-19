@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { must } from "../test/must";
+import type { Hero, HeroCounterRow } from "../types";
 import { banAdvice, enemyPresence } from "./bans";
 import { matchupTable } from "./matchups";
-import type { Hero, HeroCounterRow } from "../types";
 
 const hero = (id: number): Hero =>
   ({ id, name: `H${id}`, image: "", signatureClasses: [] }) as unknown as Hero;
@@ -56,11 +57,11 @@ describe("enemyPresence", () => {
 
   it("is higher for a hero that is played more", () => {
     const p = enemyPresence(matrix(10, {}, { 3: 2 }));
-    expect(p.get(3)!).toBeGreaterThan(p.get(4)! * 1.5);
+    expect(must(p.get(3))).toBeGreaterThan(must(p.get(4)) * 1.5);
     // …and still a probability. A hero played enough to fill an enemy slot every game caps at 1
     // rather than reporting nonsense, which is what keeps expectedCost interpretable.
     const skewed = enemyPresence(matrix(10, {}, { 3: 40 }));
-    expect(skewed.get(3)!).toBeLessThanOrEqual(1);
+    expect(must(skewed.get(3))).toBeLessThanOrEqual(1);
   });
 });
 
@@ -73,7 +74,7 @@ describe("banAdvice", () => {
       2: { 9: -0.05 },
       8: { 1: 0.05, 2: 0.05, 3: 0.05, 4: 0.05, 5: 0.05, 6: 0.05, 7: 0.05 },
     });
-    const a = advise(m, [1, 2, 3])!;
+    const a = must(advise(m, [1, 2, 3]));
     expect(a.candidates[0].hero.id).toBe(9);
     expect(a.candidates.map((c) => c.hero.id)).not.toContain(8);
     expect(a.poolSize).toBe(3);
@@ -88,16 +89,18 @@ describe("banAdvice", () => {
       { 1: { 9: -0.06, 7: -0.06 }, 2: { 9: -0.06, 7: -0.06 } },
       { 7: 3 },
     );
-    const a = advise(m, [1, 2])!;
+    const a = must(advise(m, [1, 2]));
     expect(a.candidates[0].hero.id).toBe(7);
-    const nine = a.candidates.find((c) => c.hero.id === 9)!;
+    const nine = must(a.candidates.find((c) => c.hero.id === 9));
     expect(a.candidates[0].presence).toBeGreaterThan(nine.presence);
     expect(a.candidates[0].expectedCost).toBeGreaterThan(nine.expectedCost);
   });
 
   it("names the pool heroes a ban would protect, worst first", () => {
     const m = matrix(10, { 1: { 9: -0.02 }, 2: { 9: -0.06 } });
-    const c = advise(m, [1, 2, 3])!.candidates.find((x) => x.hero.id === 9)!;
+    const c = must(
+      must(advise(m, [1, 2, 3])).candidates.find((x) => x.hero.id === 9),
+    );
     expect(c.hits.map((h) => h.heroId)).toEqual([2, 1]);
     expect(c.hits[0].resid).toBeLessThan(c.hits[1].resid);
   });
@@ -106,29 +109,35 @@ describe("banAdvice", () => {
     // Hero 3 is in the pool AND beats the rest of it. It stays on the list — banning it is a real
     // option — but the flag is what lets the UI say it costs you a pick.
     const m = matrix(10, { 1: { 3: -0.06 }, 2: { 3: -0.06 } });
-    const c = advise(m, [1, 2, 3])!.candidates.find((x) => x.hero.id === 3);
+    const c = must(advise(m, [1, 2, 3])).candidates.find(
+      (x) => x.hero.id === 3,
+    );
     expect(c?.inYourPool).toBe(true);
     // Its own row is excluded from the average — a hero can't be its own matchup — so the cost is
     // the mean over the OTHER two, near the 6pt effect the matrix was built with. (Near, not equal:
     // the fit absorbs part of any counter effect into strength; see lib/matchups.)
-    expect(c!.meanCost).toBeGreaterThan(0.04);
+    expect(must(c).meanCost).toBeGreaterThan(0.04);
   });
 
   it("drops heroes that cost the pool nothing", () => {
-    const a = advise(matrix(10), [1, 2, 3])!;
+    const a = must(advise(matrix(10), [1, 2, 3]));
     expect(a.candidates).toHaveLength(0);
   });
 
   it("carries community ban share as context, normalized", () => {
     const m = matrix(10, { 1: { 9: -0.05 }, 2: { 9: -0.05 } });
-    const c = advise(
-      m,
-      [1, 2],
-      new Map([
-        [9, 300],
-        [8, 100],
-      ]),
-    )!.candidates.find((x) => x.hero.id === 9)!;
+    const c = must(
+      must(
+        advise(
+          m,
+          [1, 2],
+          new Map([
+            [9, 300],
+            [8, 100],
+          ]),
+        ),
+      ).candidates.find((x) => x.hero.id === 9),
+    );
     expect(c.banShare).toBeCloseTo(0.75, 6);
   });
 

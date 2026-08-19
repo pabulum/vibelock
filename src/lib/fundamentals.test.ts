@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { must } from "../test/must";
 import type { MatchHistoryRow, MetricDistribution } from "../types";
 import {
   climbAdvice,
+  type FundamentalRow,
   fundamentalsRows,
   percentileOf,
   recentWindow,
   WEAK_PERCENTILE,
-  type FundamentalRow,
 } from "./fundamentals";
 
 const dist = (scale = 1): MetricDistribution => ({
@@ -51,8 +52,8 @@ describe("fundamentalsRows", () => {
       deaths: { ...dist(0.1), avg: 6.5 }, // p75 of deaths ⇒ goodness 25
     };
     const rows = fundamentalsRows(player, ladder);
-    const souls = rows.find((r) => r.key === "net_worth_per_min")!;
-    const deaths = rows.find((r) => r.key === "deaths")!;
+    const souls = must(rows.find((r) => r.key === "net_worth_per_min"));
+    const deaths = must(rows.find((r) => r.key === "deaths"));
     expect(souls.percentile).toBe(75);
     expect(deaths.percentile).toBe(25);
     expect(deaths.value).toBe("6.5");
@@ -99,7 +100,7 @@ describe("recentWindow", () => {
       game(1, 10),
       game(1, 40), // outside the last 3
     ];
-    const w = recentWindow(history, 1, 3)!;
+    const w = must(recentWindow(history, 1, 3));
     expect(w.games).toBe(3);
     // Window opens just before the 3rd-newest hero-1 game (10 days ago), so the 40-day-old one is out.
     expect(w.minUnixTimestamp).toBe(now - 10 * DAY - 1);
@@ -115,25 +116,27 @@ describe("recentWindow", () => {
       game(1, 4),
       game(1, 650),
     ];
-    const w = recentWindow(history, 1, 4)!;
+    const w = must(recentWindow(history, 1, 4));
     expect(w.games).toBe(4);
     expect(w.spanDays).toBe(4);
     expect(w.minUnixTimestamp).toBeGreaterThan(now - 5 * DAY);
   });
 
   it("takes everything when the player has fewer games than asked for", () => {
-    const w = recentWindow([game(1, 1), game(1, 9), game(1, 20)], 1, 50)!;
+    const w = must(recentWindow([game(1, 1), game(1, 9), game(1, 20)], 1, 50));
     expect(w.games).toBe(3);
     expect(w.spanDays).toBe(20);
   });
 
   it("pools all heroes when heroId is null", () => {
-    const w = recentWindow([game(1, 1), game(2, 2), game(3, 3)], null, 20)!;
+    const w = must(
+      recentWindow([game(1, 1), game(2, 2), game(3, 3)], null, 20),
+    );
     expect(w.games).toBe(3);
   });
 
   it("honors an explicit last-game request rather than widening it", () => {
-    const w = recentWindow([game(1, 1), game(1, 8)], 1, 1)!;
+    const w = must(recentWindow([game(1, 1), game(1, 8)], 1, 1));
     expect(w.games).toBe(1);
     expect(w.spanDays).toBe(1); // just the newest game
   });

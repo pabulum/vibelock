@@ -2,22 +2,22 @@
 // cached_hero_builds.kv3 so the in-game shop walks them through it top-to-bottom.
 
 import { useEffect, useState } from "react";
-import { encodeHeroBuild } from "../lib/heroBuildExport";
 import {
-  injectBuildsIntoCache,
-  type InjectResult,
-} from "../lib/heroBuildCache";
-import type { BatchEntry } from "../lib/exportBatch";
-import {
+  type BuildFileHandle,
   ensureWritable,
   forgetBuildFile,
   recallBuildFile,
   rememberBuildFile,
-  type BuildFileHandle,
 } from "../lib/buildCacheHandle";
+import type { BatchEntry } from "../lib/exportBatch";
+import {
+  type InjectResult,
+  injectBuildsIntoCache,
+} from "../lib/heroBuildCache";
+import { encodeHeroBuild } from "../lib/heroBuildExport";
 import { parseSteamInput } from "../lib/steamId";
-import { ModalShell } from "./ModalShell";
 import type { GeneratedBuild, Hero, ImbueTarget } from "../types";
+import { ModalShell } from "./ModalShell";
 
 // File System Access API — not in the default TS DOM lib, so we type only what we call. Present on
 // Chromium (lets us edit the file in place); absent elsewhere (we fall back to upload + download).
@@ -244,8 +244,9 @@ export function ExportPanel({
         if (!(await ensureWritable(handle))) handle = null;
       }
       if (!handle) {
+        if (!picker) throw new Error("in-place edit needs showOpenFilePicker");
         setStatus("Pick your cached_hero_builds.kv3…");
-        const [picked] = await picker!({
+        const [picked] = await picker({
           types: [
             {
               description: "Deadlock build cache",

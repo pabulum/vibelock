@@ -3,7 +3,7 @@
 // down-payment upside) behind the experimental lineAware toggle.
 
 import type { BuildItem, BuildPhase, Item, ItemFlowStats } from "../../types";
-import { UNIVERSAL_PICK, meritWr } from "./scoring";
+import { meritWr, UNIVERSAL_PICK } from "./scoring";
 
 // --- Line-aware down-payment (opts.lineAware) ---
 // How much a component's *future upgrade upside* counts toward its early-phase core ranking, so a Lane
@@ -123,22 +123,30 @@ export function buildLineModel(
   for (const [id, item] of items)
     if (profile.has(id))
       for (const cid of item.componentIds)
-        if (profile.has(cid))
-          (builtFrom.get(cid) ?? builtFrom.set(cid, []).get(cid)!).push(id);
+        if (profile.has(cid)) {
+          let ups = builtFrom.get(cid);
+          if (!ups) {
+            ups = [];
+            builtFrom.set(cid, ups);
+          }
+          ups.push(id);
+        }
 
   const downpaymentOf = new Map<
     number,
     Array<{ upgradeId: number; upside: number; upgradeCol: number }>
   >();
   for (const [cid, ups] of builtFrom) {
-    const comp = profile.get(cid)!;
+    const comp = profile.get(cid);
+    if (!comp) continue;
     const arr: Array<{
       upgradeId: number;
       upside: number;
       upgradeCol: number;
     }> = [];
     for (const uid of ups) {
-      const up = profile.get(uid)!;
+      const up = profile.get(uid);
+      if (!up) continue;
       const lambda = comp.pick > 0 ? Math.min(1, up.pick / comp.pick) : 0;
       const upside = Math.max(0, lambda * (up.wr - comp.wr));
       if (upside > 0) arr.push({ upgradeId: uid, upside, upgradeCol: up.col });
@@ -178,12 +186,13 @@ export function collapseLines(phases: BuildPhase[]): void {
         if (!best || meritWr(s) > meritWr(best)) best = s;
       }
       if (!best) continue;
-      p.situational = p.situational.filter((s) => s.item.id !== best!.item.id);
+      const chosen = best;
+      p.situational = p.situational.filter((s) => s.item.id !== chosen.item.id);
       p.core.push({
-        ...best,
-        role: best.pickRate >= UNIVERSAL_PICK ? "universal" : "value",
+        ...chosen,
+        role: chosen.pickRate >= UNIVERSAL_PICK ? "universal" : "value",
       });
-      coreAnywhere.add(best.item.id);
+      coreAnywhere.add(chosen.item.id);
     }
   }
 }

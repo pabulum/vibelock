@@ -3,25 +3,25 @@
 // by subject (see DashGrid.css .dash).
 import "./DashGrid.css";
 import type { Ref } from "react";
-import { EconomyPanel } from "../components/EconomyPanel";
-import type { LastGameFarm } from "../components/EconomyPanel";
-import { PacePanel } from "../components/PacePanel";
-import { SessionCard } from "../components/SessionCard";
-import type { SessionStats } from "../lib/sessions";
-import type { PaceCurve } from "../components/PacePanel";
-import type { PaceDiagnosis, PaceProfile, PaceWindowRead } from "../lib/pace";
 import { CommunityRow } from "../components/CommunityRow";
+import type { LastGameFarm } from "../components/EconomyPanel";
+import { EconomyPanel } from "../components/EconomyPanel";
+import type { PaceCurve } from "../components/PacePanel";
+import { PacePanel } from "../components/PacePanel";
 import { SkillEmpty, SkillOrder } from "../components/panels";
+import { SessionCard } from "../components/SessionCard";
 import { CAN_HOVER } from "../components/usePinnablePopover";
 import {
   climbAdvice,
   FARM_LEVER_KEYS,
   type FundamentalRow,
 } from "../lib/fundamentals";
-import { rankFloorLabel } from "../lib/ranks";
 import type { HeroFarmProfile } from "../lib/matchAnalysis";
-import type { FundamentalsData } from "./useProfile";
+import type { PaceDiagnosis, PaceProfile, PaceWindowRead } from "../lib/pace";
+import { rankFloorLabel } from "../lib/ranks";
+import type { SessionStats } from "../lib/sessions";
 import type { Ability, CommunityMatch, Hero, Item, SkillBuild } from "../types";
+import type { FundamentalsData } from "./useProfile";
 
 export function DashGrid(props: {
   hero: Hero | null;

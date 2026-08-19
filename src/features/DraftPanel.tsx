@@ -9,10 +9,10 @@
 // the best pick, and saying that plainly is worth more than a ranking that always finds a
 // counter-pick — see the note at the top of lib/draft.
 import "./DraftPanel.css";
-import { signedPt } from "../lib/matchups";
-import { laneEdgeIsReal } from "../lib/laneMatchups";
-import type { DraftCandidate, DraftRanking } from "../lib/draft";
 import type { BanAdvice } from "../lib/bans";
+import type { DraftCandidate, DraftRanking } from "../lib/draft";
+import { laneEdgeIsReal } from "../lib/laneMatchups";
+import { signedPt } from "../lib/matchups";
 import type { Hero } from "../types";
 
 /** Marks worth colouring. The item rows' ±2pt no-colour band is a win-rate-delta rule and does not

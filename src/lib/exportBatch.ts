@@ -13,11 +13,11 @@
 // IP and a six-hero batch is around ninety, which is fine spread out and rude in one burst.
 
 import { getAbilityOrder, getCommunityBuilds } from "../api/deadlock";
-import { fetchBuildSet, type BuildSlice } from "./buildFetch";
+import type { Ability, Hero, Item } from "../types";
+import { type BuildSlice, fetchBuildSet } from "./buildFetch";
 import { encodeHeroBuild, vibelockBuildName } from "./heroBuildExport";
 import { bestImbueTargets } from "./imbue";
 import { bestSkillBuild } from "./skills";
-import type { Ability, Hero, Item } from "../types";
 
 /** How many heroes are fetched at once. Two keeps a batch inside the analytics budget while still
  * overlapping the slow flow requests, which dominate the wall clock. */

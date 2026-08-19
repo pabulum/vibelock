@@ -216,11 +216,12 @@ describe("findAdoptionMovers", () => {
   });
 });
 
+import { must } from "../test/must";
+import type { BuildItem, BuildPhase, GeneratedBuild } from "../types";
 // foldTrendingBreakouts adds current breakouts as tagged situational options where they're not
 // already in the build, placing each by tier (T1→Lane … T4→Late) and never duplicating an existing
 // pick. It's purely additive — the core build is untouched.
-import { foldTrendingBreakouts, type AdoptionMover } from "./patchMovers";
-import type { BuildItem, BuildPhase, GeneratedBuild } from "../types";
+import { type AdoptionMover, foldTrendingBreakouts } from "./patchMovers";
 
 const bi = (id: number): BuildItem =>
   ({
@@ -289,7 +290,7 @@ describe("foldTrendingBreakouts", () => {
     const mid = out.phases[2];
     const added = mid.situational.find((b) => b.item.id === 20);
     expect(added).toBeDefined();
-    expect(added!.why).toMatch(/trending up/);
+    expect(must(added).why).toMatch(/trending up/);
     // other phases untouched, core untouched
     expect(out.phases[2].core.map((b) => b.item.id)).toEqual([3]);
   });

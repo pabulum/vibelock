@@ -7,8 +7,8 @@
 // (This used to run the Python `keyvalues3` reader under Pyodide — ~12 MB from three CDNs on first
 // use; kv3.test.ts pins the TS port byte-for-byte against that implementation.)
 
-import { parseKv3, encodeTextKv3 } from "./kv3";
 import { isOurBuildFor, readHeroBuildInfo } from "./heroBuildExport";
+import { encodeTextKv3, parseKv3 } from "./kv3";
 
 /** What an injection did, so the panel can say "updated 3" rather than implying it added them. */
 export interface InjectResult {

@@ -1,6 +1,6 @@
 import type { TimeWindow } from "../api/deadlock";
-import { PRIOR_WINDOW_S } from "./patchBlend";
 import type { Patch } from "../types";
+import { PRIOR_WINDOW_S } from "./patchBlend";
 
 /** Time window for a chosen patch index. Patches are newest-first. */
 export function windowFor(patches: Patch[], idx: number): TimeWindow {

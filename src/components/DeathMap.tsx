@@ -18,18 +18,19 @@
 
 import "./DeathMap.css";
 import { useState } from "react";
+import type { DeathMapData } from "../api/deathMap";
 import {
   cellRect,
   clusterInsight,
+  type DeathDensity,
+  type DeathMark,
   deathCluster,
   decodeDensity,
   depthInsight,
   depthRead,
   landmarks,
   worldToUnit,
-  type DeathMark,
 } from "../lib/deathMap";
-import type { DeathMapData } from "../api/deathMap";
 
 const SIZE = 260; // drawing box, px in viewBox units
 
@@ -80,20 +81,24 @@ export function DeathMap({
     const grids = (phase === null ? data.phases : [data.phases[phase]])
       .filter(Boolean)
       .map((p) => decodeDensity(p.grid, data.size, data.halfExtent))
-      .filter((g) => g !== null);
+      // Predicate, not a plain filter: the averaging below reads .cells/.size off every grid.
+      .filter((g): g is DeathDensity => g !== null);
     if (grids.length === 0) return null;
-    if (grids.length === 1) return grids[0];
-    const cells = new Uint8Array(grids[0]!.cells.length);
+    const first = grids[0];
+    if (grids.length === 1) return first;
+    const cells = new Uint8Array(first.cells.length);
     for (let i = 0; i < cells.length; i++) {
       let sum = 0;
-      for (const g of grids) sum += g!.cells[i];
+      for (const g of grids) sum += g.cells[i];
       cells[i] = Math.min(255, sum / grids.length);
     }
-    return { size: grids[0]!.size, halfExtent: grids[0]!.halfExtent, cells };
+    return { size: first.size, halfExtent: first.halfExtent, cells };
   })();
 
   return (
     <div className="deathmap">
+      {/* biome-ignore lint/a11y/useSemanticElements: role="group" on a div is the right ARIA for
+          a set of filter buttons; the suggested <fieldset> is form furniture and wants a <legend>. */}
       <div
         className="dmfilter"
         role="group"
@@ -144,20 +149,17 @@ export function DeathMap({
               a density field shows where the game is played but not what the place looks like.
               Under the density so it never competes with the data. No rotation: the set of three
               routes maps onto itself under the same 180° rotation the rest of the frame uses. */}
-          {(data?.ziplines?.length ?? 0) > 0 && (
+          {data?.ziplines && data.ziplines.length > 0 && (
             <g className="dmzip">
-              {data!.ziplines!.map((path, i) => (
-                <path
-                  key={i}
-                  d={path
-                    .map(([wx, wy], j) => {
-                      const p = worldToUnit(wx, wy, data!.halfExtent);
-                      return `${j ? "L" : "M"}${(p.u * SIZE).toFixed(1)} ${(p.v * SIZE).toFixed(1)}`;
-                    })
-                    .join(" ")}
-                  vectorEffect="non-scaling-stroke"
-                />
-              ))}
+              {data.ziplines.map((path) => {
+                const d = path
+                  .map(([wx, wy], j) => {
+                    const p = worldToUnit(wx, wy, data.halfExtent);
+                    return `${j ? "L" : "M"}${(p.u * SIZE).toFixed(1)} ${(p.v * SIZE).toFixed(1)}`;
+                  })
+                  .join(" ");
+                return <path key={d} d={d} vectorEffect="non-scaling-stroke" />;
+              })}
             </g>
           )}
 
@@ -171,7 +173,7 @@ export function DeathMap({
                 const r = cellRect(i, density.size, SIZE);
                 return (
                   <rect
-                    key={i}
+                    key={`${r.x},${r.y}`}
                     x={r.x}
                     y={r.y}
                     width={r.w}

@@ -71,11 +71,6 @@
     color: var(--accent-ui);
     box-shadow: inset 2px 0 0 var(--accent-ui);
   }
-  /* Off-pool suggestions read as provisional — the same dashed vocabulary the "Worth picking up"
-     chips use for a hero you don't play yet. */
-  .drow.try .dname {
-    border-bottom: 1px dashed var(--rule-strong);
-  }
   .drow > img {
     width: 22px;
     height: 22px;
@@ -89,6 +84,11 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* Off-pool suggestions read as provisional — the same dashed vocabulary the "Worth picking up"
+     chips use for a hero you don't play yet. */
+  .drow.try .dname {
+    border-bottom: 1px dashed var(--rule-strong);
   }
   /* Every number is mono and tabular so the columns line up down the list. */
   .drow .dexp,

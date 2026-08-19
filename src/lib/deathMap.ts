@@ -343,7 +343,7 @@ export function depthRead(
 
 /** The depth sentence, or null when the gap is inside the noise. */
 export function depthInsight(r: DepthRead | null): string | null {
-  if (!r || !r.real) return null;
+  if (!r?.real) return null;
   const them = Math.round(r.expected * r.total);
   const deep = r.observed > r.expected;
   return (

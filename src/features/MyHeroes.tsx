@@ -69,6 +69,7 @@ export function MyHeroes(props: {
       </span>
       {topHeroes.map(({ hero: h, matches, winRate, meta, expected }) => (
         <button
+          type="button"
           key={h.id}
           className={`chip${h.id === heroId ? " active" : ""}`}
           onClick={() => pickHero(h.id)}
@@ -97,6 +98,7 @@ export function MyHeroes(props: {
           </span>
           {tryHeroes.map(({ hero: h, metaWinRate, taxed }) => (
             <button
+              type="button"
               key={h.id}
               className={`chip try${h.id === heroId ? " active" : ""}`}
               onClick={() => pickHero(h.id)}

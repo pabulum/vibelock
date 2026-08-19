@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { must } from "../test/must";
+import type { Hero, HeroCounterRow } from "../types";
 import { draftRanking, ladderRates, type PoolEntry } from "./draft";
 import { matchupTable } from "./matchups";
-import type { Hero, HeroCounterRow } from "../types";
 
 const hero = (id: number): Hero =>
   ({ id, name: `H${id}`, image: "", signatureClasses: [] }) as unknown as Hero;
@@ -55,11 +56,11 @@ describe("ladderRates", () => {
     const m = matrix(4, { 1: { 2: 0.1 } });
     const r = ladderRates(m);
     // Hero 1 wins 60% of one of its three cells and 50% of the rest.
-    expect(r.get(1)!.winRate).toBeCloseTo((0.6 + 0.5 + 0.5) / 3, 6);
+    expect(must(r.get(1)).winRate).toBeCloseTo((0.6 + 0.5 + 0.5) / 3, 6);
     // Three cells of 100,000 is 300,000 cell-appearances but 50,000 real matches: the matrix is
     // keyed (hero, enemy), so a game shows up once per opponent faced. The rate needs no such
     // correction — every game is over-counted equally above and below the line.
-    expect(r.get(1)!.games).toBe(50000);
+    expect(must(r.get(1)).games).toBe(50000);
   });
 });
 
@@ -92,12 +93,14 @@ describe("draftRanking", () => {
 
   it("sums the comp rather than reading one enemy", () => {
     const m = matrix(10, { 2: { 9: 0.04, 10: 0.04 } });
-    const one = rank({ m, enemies: [9], pool }).candidates.find(
-      (c) => c.hero.id === 2,
-    )!;
-    const both = rank({ m, enemies: [9, 10], pool }).candidates.find(
-      (c) => c.hero.id === 2,
-    )!;
+    const one = must(
+      rank({ m, enemies: [9], pool }).candidates.find((c) => c.hero.id === 2),
+    );
+    const both = must(
+      rank({ m, enemies: [9, 10], pool }).candidates.find(
+        (c) => c.hero.id === 2,
+      ),
+    );
     expect(both.compEdge).toBeGreaterThan(one.compEdge * 1.8);
   });
 
@@ -116,9 +119,11 @@ describe("draftRanking", () => {
 
   it("names the enemies that moved a hero, biggest first", () => {
     const m = matrix(10, { 2: { 9: 0.05, 10: -0.02 } });
-    const c = rank({ m, enemies: [9, 10, 8], pool }).candidates.find(
-      (x) => x.hero.id === 2,
-    )!;
+    const c = must(
+      rank({ m, enemies: [9, 10, 8], pool }).candidates.find(
+        (x) => x.hero.id === 2,
+      ),
+    );
     expect(c.marks.map((x) => x.enemyHeroId)).toEqual([9, 10]);
     expect(c.marks[0].resid).toBeGreaterThan(0);
     expect(c.marks[1].resid).toBeLessThan(0);
@@ -140,8 +145,11 @@ describe("draftRanking", () => {
     expect(r.offPool.map((c) => c.hero.id)).toContain(7);
     expect(r.offPool.every((c) => c.offPool)).toBe(true);
     // The tax is really applied: hero 7's base sits a full tax below its ladder rate.
-    const seven = r.offPool.find((c) => c.hero.id === 7)!;
-    expect(seven.base).toBeCloseTo(ladderRates(m).get(7)!.winRate - 0.02, 6);
+    const seven = must(r.offPool.find((c) => c.hero.id === 7));
+    expect(seven.base).toBeCloseTo(
+      must(ladderRates(m).get(7)).winRate - 0.02,
+      6,
+    );
     expect(r.offPool.every((c) => c.expected > r.candidates[0].expected)).toBe(
       true,
     );
@@ -165,9 +173,11 @@ describe("draftRanking", () => {
         "10": [900, 0, 40] as [number, number, number],
       },
     };
-    const c = rank({ m, enemies: [9, 10], pool, lane }).candidates.find(
-      (x) => x.hero.id === 1,
-    )!;
+    const c = must(
+      rank({ m, enemies: [9, 10], pool, lane }).candidates.find(
+        (x) => x.hero.id === 1,
+      ),
+    );
     expect(c.worstLane).toEqual({ enemyHeroId: 9, resid: -250 });
     // Souls are not win-rate points: `expected` is base + compEdge and nothing else.
     expect(c.expected).toBeCloseTo(c.base + c.compEdge, 12);

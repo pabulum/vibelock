@@ -18,8 +18,8 @@
 
 import { createReadStream, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createGunzip } from "node:zlib";
 import { createInterface } from "node:readline";
+import { createGunzip } from "node:zlib";
 
 const SHARDS_DIR = process.env.SHARDS_DIR || "_data/shards";
 const OUT = process.env.OUT || "_data/wp-stats.json";
@@ -157,26 +157,24 @@ const RATE_PCTS = [10, 25, 50, 75, 90];
 const paceCells = new Map();
 const paceCell = (key) => {
   let c = paceCells.get(key);
-  if (!c)
-    paceCells.set(
-      key,
-      (c = {
-        // One flat array: the tick levels first, then the window rates.
-        hist: new Uint32Array(
-          PACE_TICKS.length * LEVEL_BUCKETS +
-            PACE_WINDOWS.length * RATE_BUCKETS,
-        ),
-        levelN: new Uint32Array(PACE_TICKS.length),
-        rateN: new Uint32Array(PACE_WINDOWS.length),
-        // Mean level at each tick split by outcome — the "winning pace" line drawn over the
-        // percentile band. Means, not percentiles: two numbers per tick instead of a histogram,
-        // and the line only has to show the gap, not support a placement.
-        winSum: new Float64Array(PACE_TICKS.length),
-        winN: new Uint32Array(PACE_TICKS.length),
-        lossSum: new Float64Array(PACE_TICKS.length),
-        lossN: new Uint32Array(PACE_TICKS.length),
-      }),
-    );
+  if (!c) {
+    c = {
+      // One flat array: the tick levels first, then the window rates.
+      hist: new Uint32Array(
+        PACE_TICKS.length * LEVEL_BUCKETS + PACE_WINDOWS.length * RATE_BUCKETS,
+      ),
+      levelN: new Uint32Array(PACE_TICKS.length),
+      rateN: new Uint32Array(PACE_WINDOWS.length),
+      // Mean level at each tick split by outcome — the "winning pace" line drawn over the
+      // percentile band. Means, not percentiles: two numbers per tick instead of a histogram,
+      // and the line only has to show the gap, not support a placement.
+      winSum: new Float64Array(PACE_TICKS.length),
+      winN: new Uint32Array(PACE_TICKS.length),
+      lossSum: new Float64Array(PACE_TICKS.length),
+      lossN: new Uint32Array(PACE_TICKS.length),
+    };
+    paceCells.set(key, c);
+  }
   return c;
 };
 const RATE_OFFSET = PACE_TICKS.length * LEVEL_BUCKETS;
@@ -272,9 +270,13 @@ for (const f of shardFiles) {
       if (p.gold_src && tier !== null) {
         const key = p.hero_id * 100 + tier;
         let cell = farmCells.get(key);
-        if (!cell) farmCells.set(key, (cell = {}));
+        if (!cell) {
+          cell = {};
+          farmCells.set(key, cell);
+        }
         for (const src of SRC_KEEP) {
-          (cell[src] ??= []).push((p.gold_src[src] ?? 0) / mins);
+          cell[src] ??= [];
+          cell[src].push((p.gold_src[src] ?? 0) / mins);
         }
       }
 
@@ -324,7 +326,10 @@ for (const f of shardFiles) {
       for (const p of m.players) {
         if (p.assigned_lane == null || !heroIdx.has(p.hero_id)) continue;
         let l = byLane.get(p.assigned_lane);
-        if (!l) byLane.set(p.assigned_lane, (l = { Team0: [], Team1: [] }));
+        if (!l) {
+          l = { Team0: [], Team1: [] };
+          byLane.set(p.assigned_lane, l);
+        }
         (p.team === "Team0" ? l.Team0 : l.Team1).push(p);
       }
       for (const l of byLane.values()) {
@@ -362,12 +367,18 @@ for (const f of shardFiles) {
           for (let y = 0; y < 2; y++) {
             const key = ia[x] * NH + ib[y];
             let pr = lanePairs.get(key);
-            if (!pr) lanePairs.set(key, (pr = { n: 0, sum: 0 }));
+            if (!pr) {
+              pr = { n: 0, sum: 0 };
+              lanePairs.set(key, pr);
+            }
             pr.n++;
             pr.sum += diff;
             const rev = ib[y] * NH + ia[x];
             let rp = lanePairs.get(rev);
-            if (!rp) lanePairs.set(rev, (rp = { n: 0, sum: 0 }));
+            if (!rp) {
+              rp = { n: 0, sum: 0 };
+              lanePairs.set(rev, rp);
+            }
             rp.n++;
             rp.sum -= diff;
           }
@@ -442,7 +453,10 @@ for (let j = 0; j < pWon.length; j++) {
     [heroAgg, pHid[j]],
   ]) {
     let a = map.get(key);
-    if (!a) map.set(key, (a = [0, 0, 0, 0]));
+    if (!a) {
+      a = [0, 0, 0, 0];
+      map.set(key, a);
+    }
     a[0]++;
     a[1] += e;
     a[2] += wp;
@@ -698,7 +712,8 @@ for (const [key, pr] of lanePairs) {
   const resid = (observed - predicted) * (pr.n / (pr.n + LANE_SHRINK_K));
   // [n, rawDiff, residual] — a tuple rather than a keyed object, for the same transfer reason the
   // pace cells are positional: this is ~1,200 pairs on a file fetched every session.
-  (laneMatchups[heroIds[ai]] ??= {})[heroIds[bi]] = [
+  laneMatchups[heroIds[ai]] ??= {};
+  laneMatchups[heroIds[ai]][heroIds[bi]] = [
     pr.n,
     Math.round(observed),
     Math.round(resid),
@@ -752,7 +767,7 @@ const out = {
     matchups: laneMatchups,
   },
 };
-writeFileSync(OUT, JSON.stringify(out) + "\n");
+writeFileSync(OUT, `${JSON.stringify(out)}\n`);
 console.log(
   `wrote ${OUT}: ${items.length} items, ${heroes.length} heroes, meanExcess ${out.meanExcess}`,
 );

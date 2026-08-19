@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { must } from "../test/must";
 import type { MatchHistoryRow } from "../types";
 import {
   QUICK_REQUEUE_S,
@@ -57,7 +58,7 @@ describe("sessionStats", () => {
       game(true, SESSION_GAP_S + 60), // new session
       ...Array.from({ length: 6 }, () => game(false, 600)),
     ];
-    const s = sessionStats(h)!;
+    const s = must(sessionStats(h));
     expect(s.sessions).toBe(2);
     expect(s.games).toBe(13);
   });
@@ -73,7 +74,7 @@ describe("sessionStats", () => {
       game(true),
       ...Array.from({ length: 9 }, () => game(true)),
     ];
-    const s = sessionStats(h)!;
+    const s = must(sessionStats(h));
     const at = (k: number) => s.byStreak.find((r) => r.losses === k);
     expect(at(1)?.games).toBe(1);
     expect(at(2)?.games).toBe(1);
@@ -91,7 +92,7 @@ describe("sessionStats", () => {
       game(false),
       game(true, RESTED_S + 60),
     ];
-    const s = sessionStats(h)!;
+    const s = must(sessionStats(h));
     expect(s.sessions).toBe(2);
     expect(s.byStreak.find((r) => r.losses === 2)?.games).toBe(1);
   });
@@ -99,7 +100,7 @@ describe("sessionStats", () => {
   it("reports no contrast until both arms have real samples", () => {
     reset();
     const h = Array.from({ length: 40 }, (_, i) => game(i % 3 === 0));
-    expect(sessionStats(h)!.tilt).toBeNull();
+    expect(must(sessionStats(h)).tilt).toBeNull();
   });
 
   it("measures requeue-vs-rest at equal streak state", () => {
@@ -114,7 +115,7 @@ describe("sessionStats", () => {
       h.push(filler(), filler());
       h.push(game(true, RESTED_S + 60)); // same streak state, rested → win
     }
-    const t = sessionStats(h)!.tilt!;
+    const t = must(must(sessionStats(h)).tilt);
     expect(t.quick.games).toBeGreaterThanOrEqual(20);
     expect(t.rested.games).toBeGreaterThanOrEqual(20);
     expect(t.quick.winRate).toBeLessThan(t.rested.winRate);
@@ -132,7 +133,7 @@ describe("sessionStats", () => {
       h.push(filler(), filler());
       h.push(game(i % 2 === 0, RESTED_S + 60));
     }
-    const t = sessionStats(h)!.tilt!;
+    const t = must(must(sessionStats(h)).tilt);
     expect(t.significant).toBe(false);
     const v = tiltVerdict(t);
     expect(v).toContain("indistinguishable from noise");
@@ -148,7 +149,7 @@ describe("sessionStats", () => {
       h.push(filler(), filler());
       h.push(game(false, RESTED_S + 60));
     }
-    const t = sessionStats(h)!.tilt!;
+    const t = must(must(sessionStats(h)).tilt);
     expect(t.delta).toBeGreaterThan(0);
     expect(tiltVerdict(t)).toContain("aren't tilt");
   });

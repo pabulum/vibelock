@@ -1,15 +1,15 @@
 // The item shop card popover: a row/cell wrapper that reveals the full card on hover (or tap).
 
 import {
+  type CSSProperties,
+  type ReactNode,
   useLayoutEffect,
   useRef,
   useState,
-  type CSSProperties,
-  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { SLOT_COLORS } from "./colors";
 import type { Hero, Item, ItemCounters, ItemRef } from "../types";
+import { SLOT_COLORS } from "./colors";
 import {
   CARD_GAP,
   SUPPORTS_ANCHOR,
@@ -165,7 +165,11 @@ function ItemCard({
       )}
 
       {item.card?.sections.map((s, i) => (
-        <div className={`ic-sec ${s.kind}`} key={i}>
+        <div
+          className={`ic-sec ${s.kind}`}
+          // biome-ignore lint/suspicious/noArrayIndexKey: card sections come from the item asset in a fixed authored order and `kind` repeats (an item can have two passives) — position is the only identity they have
+          key={i}
+        >
           {s.kind !== "innate" && (
             <span className="ic-kind">
               {s.kind === "active" ? "Active" : "Passive"}
@@ -175,9 +179,19 @@ function ItemCard({
             <p className="ic-text">
               {s.text.map((seg, j) =>
                 seg.highlight ? (
-                  <strong key={j}>{seg.text}</strong>
+                  <strong
+                    // biome-ignore lint/suspicious/noArrayIndexKey: runs of one parsed sentence; the same word can appear twice, so position is the identity
+                    key={j}
+                  >
+                    {seg.text}
+                  </strong>
                 ) : (
-                  <span key={j}>{seg.text}</span>
+                  <span
+                    // biome-ignore lint/suspicious/noArrayIndexKey: runs of one parsed sentence; the same word can appear twice, so position is the identity
+                    key={j}
+                  >
+                    {seg.text}
+                  </span>
                 ),
               )}
             </p>
@@ -185,7 +199,11 @@ function ItemCard({
           {s.stats.length > 0 && (
             <ul className="ic-stats">
               {s.stats.map((st, j) => (
-                <li key={j} className={st.strong ? "strong" : undefined}>
+                <li
+                  // biome-ignore lint/suspicious/noArrayIndexKey: CardStat.label is optional and not unique within a section, so position is the identity
+                  key={j}
+                  className={st.strong ? "strong" : undefined}
+                >
                   <span className="v">{st.value}</span> {st.label}
                 </li>
               ))}

@@ -8,8 +8,8 @@
 //   - drawShareCard is the impure canvas painter. Fail-soft throughout: any icon that won't load
 //     (network, CORS) becomes a lettered placeholder tile, so the card always renders.
 
-import type { BuildItem, GeneratedBuild, SlotType } from "../types";
 import { SLOT_COLORS } from "../components/colors";
+import type { BuildItem, GeneratedBuild, SlotType } from "../types";
 import { encodeUrlState, type UrlState } from "./urlState";
 
 /** One item row on the card. `delta` is adjustedWinRate − hero baseline (the same ± the app rows

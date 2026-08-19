@@ -8,19 +8,19 @@ import type {
   Item,
   SlotType,
 } from "../../types";
-import { GATE_Z } from "../stats";
 import type { CompEdge } from "../counters";
-import { UNIVERSAL_PICK, VALUE_EDGE } from "./scoring";
+import { GATE_Z } from "../stats";
+import { annotateSlotRelations } from "./annotate";
+import { finalizeOvertimeBuys, overtimeSellList } from "./overtime";
 import { SITUATIONAL_MAX, substituteRival } from "./phaseFill";
+import { UNIVERSAL_PICK, VALUE_EDGE } from "./scoring";
 import {
-  SLOT_CAP,
   capStandingSlots,
   countItemsBought,
   dropSamePhaseComponents,
   recomputeCosts,
+  SLOT_CAP,
 } from "./slotEconomy";
-import { annotateSlotRelations } from "./annotate";
-import { finalizeOvertimeBuys, overtimeSellList } from "./overtime";
 
 const COMP_DEMOTE = 0.015; // effect floor: a pick this far below the matchup lean is "weak vs comp".
 // Calibrated to the comp edge's *shrunk* scale (counters.ts EDGE_PRIOR_K): posterior-mean edges on a

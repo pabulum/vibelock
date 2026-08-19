@@ -7,7 +7,7 @@
     margin: 64px auto;
     padding: 0 var(--gutter);
     color: var(--ink);
-    font: 400 13.5px/1.6 var(--font-text);
+    font: 400 13.5px / 1.6 var(--font-text);
   }
   .crash .lbl {
     margin: 0 0 10px;

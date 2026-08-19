@@ -1,7 +1,8 @@
 // Static game assets — heroes, items, patches, abilities — as persisted queries (see
 // api/deadlock.ts + queryClient.ts), plus the id-keyed lookup maps every feature reads.
-import { useMemo } from "react";
+
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import {
   abilityListQueryOptions,
   heroesQueryOptions,

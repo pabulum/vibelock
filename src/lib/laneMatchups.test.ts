@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WpStats } from "../api/wpStats";
+import { must } from "../test/must";
 import {
   laneEdgeIsReal,
   laneInsight,
@@ -43,63 +44,67 @@ describe("laneMatchups", () => {
   it("splits on the residual, not the raw differential", () => {
     // Hero 15 out-farms 20 by 400 souls raw, but strengths already explain all of it — that is not
     // a matchup, it is two heroes with different farm rates.
-    const s = laneMatchups(
-      wp(
-        { "15": 300, "20": -100, "21": 0 },
-        {
-          "15": {
-            "20": [N, 400, 0],
-            "21": [N, 0, -300],
+    const s = must(
+      laneMatchups(
+        wp(
+          { "15": 300, "20": -100, "21": 0 },
+          {
+            "15": {
+              "20": [N, 400, 0],
+              "21": [N, 0, -300],
+            },
           },
-        },
+        ),
+        15,
       ),
-      15,
-    )!;
+    );
     expect(s.hard.map((m) => m.enemyHeroId)).toEqual([21]);
     expect(s.good).toHaveLength(0);
   });
 
   it("orders hard worst-first and good best-first", () => {
-    const s = laneMatchups(
-      wp(
-        { "15": 0 },
-        {
-          "15": {
-            "20": [N, 0, -200],
-            "21": [N, 0, -500],
-            "22": [N, 0, 900],
-            "23": [N, 0, 300],
+    const s = must(
+      laneMatchups(
+        wp(
+          { "15": 0 },
+          {
+            "15": {
+              "20": [N, 0, -200],
+              "21": [N, 0, -500],
+              "22": [N, 0, 900],
+              "23": [N, 0, 300],
+            },
           },
-        },
+        ),
+        15,
       ),
-      15,
-    )!;
+    );
     expect(s.hard.map((m) => m.resid)).toEqual([-500, -200]);
     expect(s.good.map((m) => m.resid)).toEqual([900, 300]);
   });
 
   it("drops pairs under the display sample floor", () => {
-    const s = laneMatchups(
-      wp({ "15": 0 }, { "15": { "20": [10, 0, -900] } }),
-      15,
-    )!;
+    const s = must(
+      laneMatchups(wp({ "15": 0 }, { "15": { "20": [10, 0, -900] } }), 15),
+    );
     expect(s.hard).toHaveLength(0);
   });
 
   it("drops residuals inside the noise floor", () => {
-    const s = laneMatchups(
-      wp({ "15": 0 }, { "15": { "20": [N, 0, -80], "21": [N, 0, 60] } }),
-      15,
-    )!;
+    const s = must(
+      laneMatchups(
+        wp({ "15": 0 }, { "15": { "20": [N, 0, -80], "21": [N, 0, 60] } }),
+        15,
+      ),
+    );
     expect(s.hard).toHaveLength(0);
     expect(s.good).toHaveLength(0);
   });
 
   it("carries the hero's own fitted lane strength", () => {
-    const s = laneMatchups(
-      wp({ "15": 380 }, { "15": { "20": [N, 0, -200] } }),
-      15,
-    )!;
+    const s = must(
+      laneMatchups(wp({ "15": 380 }, { "15": { "20": [N, 0, -200] } }), 15),
+    );
     expect(s.strength).toBe(380);
     expect(s.tickS).toBe(600);
   });
@@ -110,7 +115,7 @@ describe("laneReadFor", () => {
 
   it("returns an even matchup rather than hiding it", () => {
     // A picked enemy must get an answer; silence would read as missing data.
-    const r = laneReadFor(stats, 15, 20)!;
+    const r = must(laneReadFor(stats, 15, 20));
     expect(r.resid).toBe(40);
     expect(laneEdgeIsReal(r.resid)).toBe(false);
     expect(laneInsight(r, "Seven")).toContain("even lane");

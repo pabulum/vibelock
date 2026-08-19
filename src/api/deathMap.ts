@@ -8,8 +8,8 @@
 // Fail-soft by design: without it the death map still plots the player's own deaths, just with no
 // population underlay. The query's error is deliberately never surfaced.
 
-import * as v from "valibot";
 import { queryOptions } from "@tanstack/react-query";
+import * as v from "valibot";
 import { parseAs } from "./schemas";
 
 /** Deaths past the midline, as a share, for one phase and one outcome. */

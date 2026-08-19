@@ -10,7 +10,9 @@ docs/METHODOLOGY.md before touching anything statistical.
   components — do NOT add `useMemo`/`useCallback`/`React.memo` for performance; the
   compiler memoizes automatically and bails out per-component on anything unsafe.
   Existing hand-memoization predates the compiler: harmless, remove it opportunistically
-  when editing a component, don't add more.
+  when editing a component, don't add more. **Nothing lints this any more** — the compiler's
+  own rules (purity, immutability, set-state-in-effect, preserve-manual-memoization) shipped
+  only in eslint-plugin-react-hooks, which left with ESLint. Bailouts now fail silently.
 - **Comment culture**: comments state constraints, gotchas, and _why_ — never what the
   next line does. Match the density and voice of the file you're in.
 - **Never `git commit`** — the user commits their own work. Keep changes chunked
@@ -58,6 +60,17 @@ docs/METHODOLOGY.md before touching anything statistical.
   src/test/matchModal.browser.test.tsx with the new one. Note the capture projection drops nulls,
   so the fixture proves nothing about nullability — that's src/api/schemas.test.ts's job, which
   walks the schema and nulls every `nullish` field back in.
+- **Biome is both linter and formatter** (biome.jsonc — `.jsonc` because Biome rejects comments in
+  `biome.json`). It runs the stock `recommended` preset with **no rules disabled**: every exception
+  is an inline `// biome-ignore lint/<group>/<rule>: reason` at the one site that needs it, so a
+  blanket opt-out is never the answer to a new finding. `npm run lint` and `npm run format` are the
+  halves; `npx biome ci .` is what CI runs. The directive must sit on the line *immediately* above
+  the node it suppresses — prose goes on earlier lines, never between the directive and the code,
+  and inside a JSX opening tag it goes between the attributes.
+- **`must()` (src/test/must.ts) replaces `!` in tests** — same assertion, but it throws where the
+  assumption broke instead of surfacing as a null deref three frames later. Production code narrows
+  instead: type predicates on `.filter`, a guard at the top of a `queryFn` whose `enabled` gate
+  already promises the value, a `const` capture where a `let` re-widens inside a closure.
 - `npm run build` typechecks (`tsc -b`) then bundles. `npm run lint` must stay clean.
 - **`npm run test:contract` validates every Valibot schema against the LIVE API** (project
   `contract`, src/test/contract.live.test.ts) — the guard fixtures structurally cannot provide,

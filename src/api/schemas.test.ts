@@ -3,11 +3,11 @@
 // fixtures, so a fixture recorded before an upstream change keeps passing forever (see the
 // avg_sell_time_s nullability lesson). These assert the shapes we've observed LIVE.
 
-import { describe, expect, it } from "vitest";
 import * as v from "valibot";
-import { MatchMetadataResponseSchema } from "./schemas";
+import { describe, expect, it } from "vitest";
 import { analyzeMatch } from "../lib/matchAnalysis";
 import matchFixture from "../test/fixtures/matchMetadata.json";
+import { MatchMetadataResponseSchema } from "./schemas";
 
 const match = (winning: unknown, team: unknown) => ({
   match_info: {

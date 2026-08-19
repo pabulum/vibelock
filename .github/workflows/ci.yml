@@ -26,10 +26,9 @@ jobs:
       - run: npm ci
       # The browser smoke tests (src/test/) run the real app in headless Chromium.
       - run: npx playwright install --with-deps chromium
-      # Formatting is checked here and nowhere else: `npm run format` is the fix, and a repo where
-      # half the diff is whitespace churn is one where nobody reads diffs.
-      - run: npx prettier --check .
-      - run: npm run lint
+      # Formatting and lint in one pass. `npm run format` is the fix for the formatting half, and a
+      # repo where half the diff is whitespace churn is one where nobody reads diffs.
+      - run: npx biome ci .
       - run: npm test
       # `npm run build` is `tsc -b && vite build`, so this also typechecks.
       - run: npm run build

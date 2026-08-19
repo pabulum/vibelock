@@ -31,7 +31,9 @@ applyTheme();
 // The boundary wraps <App/> here rather than inside it: a throw from the query provider itself (a
 // corrupt persisted cache is the realistic one) has to be caught by something *outside* the
 // provider, and that's also the only place a fallback can still render after the tree unmounts.
-createRoot(document.getElementById("root")!).render(
+const rootEl = document.getElementById("root");
+if (!rootEl) throw new Error("index.html is missing #root");
+createRoot(rootEl).render(
   <StrictMode>
     <ErrorBoundary scope="root" what="Vibelock">
       <App />

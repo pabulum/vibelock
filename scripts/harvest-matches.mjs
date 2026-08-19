@@ -34,23 +34,23 @@
 //    name ("Team0", "Unranked") and DateTime as "YYYY-MM-DD hh:mm:ss", which is exactly what the
 //    bulk endpoint sends. Casting them to numbers would silently split the archive in two.
 
+import { once } from "node:events";
 import {
   createReadStream,
   createWriteStream,
+  existsSync,
   mkdirSync,
   readdirSync,
   renameSync,
+  rmSync,
   statSync,
   writeFileSync,
-  rmSync,
-  existsSync,
 } from "node:fs";
-import { once } from "node:events";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { createGzip, createGunzip } from "node:zlib";
+import { createGunzip, createGzip } from "node:zlib";
 
 const SQL_API = "https://api.deadlock-api.com/v1/sql";
 const MATCH_API = "https://api.deadlock-api.com/v1/matches";
@@ -416,7 +416,7 @@ async function purgeAndManifest(dir) {
   }
   writeFileSync(
     join(dir, "..", "manifest.json"),
-    JSON.stringify(manifest, null, 1) + "\n",
+    `${JSON.stringify(manifest, null, 1)}\n`,
   );
   return manifest;
 }
@@ -462,7 +462,7 @@ if (existsSync(shardPath) && !process.env.FORCE) {
 
     let chunk = "";
     for await (const m of fetchDayMatches(dayStart, dayEnd, MATCHES_PER_DAY)) {
-      chunk += JSON.stringify(trimMatch(m, gold.get(m.match_id))) + "\n";
+      chunk += `${JSON.stringify(trimMatch(m, gold.get(m.match_id)))}\n`;
       written++;
       // Batch the writes: one gzip.write per match would be ~3,600 tiny deflate calls.
       if (chunk.length > 4 << 20) {

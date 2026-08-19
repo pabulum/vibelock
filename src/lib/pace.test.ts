@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { WpStats } from "../api/wpStats";
+import { must } from "../test/must";
 import {
   FALLOFF_GAP,
+  type PaceWindowRead,
   paceDiagnosis,
   paceInsight,
   paceProfile,
   readPaceWindows,
   WEAK_PACE_PERCENTILE,
-  type PaceWindowRead,
 } from "./pace";
 
 /** A WpStats carrying only what the pace code reads — the rest of the file is required by the
@@ -87,7 +88,7 @@ describe("paceProfile", () => {
   });
 
   it("keeps arrays index-aligned with the shared axes", () => {
-    const p = paceProfile(wp({ "15:5": cell() }), 15, 5)!;
+    const p = must(paceProfile(wp({ "15:5": cell() }), 15, 5));
     expect(p.ticks.map((t) => t.t)).toEqual([240, 480, 720]);
     expect(p.windows.map((w) => w.label)).toEqual([
       "Lane",
@@ -100,7 +101,7 @@ describe("paceProfile", () => {
   });
 
   it("carries the winner/loser means through", () => {
-    const p = paceProfile(wp({ "15:5": cell() }), 15, 5)!;
+    const p = must(paceProfile(wp({ "15:5": cell() }), 15, 5));
     expect(p.ticks[2].won).toBe(9100);
     expect(p.ticks[2].lost).toBe(8750);
   });
@@ -111,21 +112,21 @@ describe("readPaceWindows", () => {
   const flat = (rate: number) => (t: number) => (t / 60) * rate;
 
   it("places a flat median earner at p50 in every window", () => {
-    const p = paceProfile(wp({ "15:5": cell() }), 15, 5)!;
+    const p = must(paceProfile(wp({ "15:5": cell() }), 15, 5));
     const reads = readPaceWindows(flat(700), 2400, p);
     expect(reads).toHaveLength(4);
     for (const r of reads) expect(r.percentile).toBe(50);
   });
 
   it("drops windows the game did not fully play rather than pro-rating them", () => {
-    const p = paceProfile(wp({ "15:5": cell() }), 15, 5)!;
+    const p = must(paceProfile(wp({ "15:5": cell() }), 15, 5));
     // A 24-minute game has a Lane and an Early mid, but no full 20–30 window.
     const reads = readPaceWindows(flat(700), 24 * 60, p);
     expect(reads.map((r) => r.label)).toEqual(["Lane", "Early mid"]);
   });
 
   it("reads each window's own rate, not the whole-game average", () => {
-    const p = paceProfile(wp({ "15:5": cell() }), 15, 5)!;
+    const p = must(paceProfile(wp({ "15:5": cell() }), 15, 5));
     // Strong lane, then a hard flatline: 900/min to 600s, then 300/min after.
     const nwAt = (t: number) =>
       t <= 600 ? (t / 60) * 900 : 9000 + ((t - 600) / 60) * 300;
@@ -137,7 +138,7 @@ describe("readPaceWindows", () => {
   });
 
   it("reports the ladder median for each window", () => {
-    const p = paceProfile(wp({ "15:5": cell([1, 2, 1, 1]) }), 15, 5)!;
+    const p = must(paceProfile(wp({ "15:5": cell([1, 2, 1, 1]) }), 15, 5));
     const reads = readPaceWindows(flat(700), 2400, p);
     expect(reads[0].median).toBe(700);
     expect(reads[1].median).toBe(1400);
@@ -161,7 +162,9 @@ describe("paceDiagnosis", () => {
   });
 
   it("finds a fall-off when one phase is far below the player's best", () => {
-    const d = paceDiagnosis([read("Lane", 70), read("Mid", 70 - FALLOFF_GAP)])!;
+    const d = must(
+      paceDiagnosis([read("Lane", 70), read("Mid", 70 - FALLOFF_GAP)]),
+    );
     expect(d.falloff).toBe(true);
     expect(d.weakest.label).toBe("Mid");
     expect(d.strongest?.label).toBe("Lane");
@@ -171,7 +174,7 @@ describe("paceDiagnosis", () => {
   it("reports a flat deficit as a deficit, not a fall-off", () => {
     // Weak everywhere and evenly so — naming "your worst phase" here would invent a specific
     // problem out of a general one.
-    const d = paceDiagnosis([read("Lane", 20), read("Mid", 22)])!;
+    const d = must(paceDiagnosis([read("Lane", 20), read("Mid", 22)]));
     expect(d.falloff).toBe(false);
     expect(d.strongest).toBeNull();
     expect(d.weakest.percentile).toBe(20);
@@ -184,17 +187,17 @@ describe("paceDiagnosis", () => {
   });
 
   it("still names a genuinely low phase when the spread is small", () => {
-    const d = paceDiagnosis([read("Lane", WEAK_PACE_PERCENTILE - 1)])!;
+    const d = must(paceDiagnosis([read("Lane", WEAK_PACE_PERCENTILE - 1)]));
     expect(d.falloff).toBe(false);
     expect(d.weakest.percentile).toBe(WEAK_PACE_PERCENTILE - 1);
   });
 
   it("wording distinguishes the two findings", () => {
     const falloff = paceInsight(
-      paceDiagnosis([read("Lane", 75), read("Mid", 40)])!,
+      must(paceDiagnosis([read("Lane", 75), read("Mid", 40)])),
     );
     expect(falloff).toContain("where the game leaves you");
-    const flat = paceInsight(paceDiagnosis([read("Mid", 15)])!);
+    const flat = paceInsight(must(paceDiagnosis([read("Mid", 15)])));
     expect(flat).toContain("souls/min is normal here");
     expect(flat).not.toContain("where the game leaves you");
   });

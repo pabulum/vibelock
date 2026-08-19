@@ -3,8 +3,8 @@
 // build-identity note.
 import "./BuildMeta.css";
 import type { Ref } from "react";
-import { SLOT_CAP } from "../lib/buildGenerator";
 import { InGamePick } from "../components/InGamePick";
+import { SLOT_CAP } from "../lib/buildGenerator";
 import type {
   Archetype,
   ArchetypeKey,
@@ -138,6 +138,7 @@ export function BuildMeta(props: {
           <span className="lbl">Build style</span>
           {archetypeSet.archetypes.map((a) => (
             <button
+              type="button"
               key={a.key}
               className={`archtab ${a.key === archKey ? "active" : ""}`}
               onClick={() => setArchKey(a.key)}

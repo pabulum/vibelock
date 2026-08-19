@@ -1,18 +1,19 @@
 // The counters feature: item counters vs the chosen enemy comp, the hero-vs-hero matchup matrix,
 // and the per-item / per-phase lookups the build render tags rows from.
-import { useMemo } from "react";
+
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import type { TimeWindow } from "../api/deadlock";
 import {
   getHeroBanStats,
   getHeroCounters,
   getItemStats,
 } from "../api/deadlock";
-import type { TimeWindow } from "../api/deadlock";
 import { computeItemCounters } from "../lib/counters";
-import { counterSliceQueries } from "../lib/prefetch";
-import { heroMatchups, matchupTable } from "../lib/matchups";
 import { ladderRates } from "../lib/draft";
+import { heroMatchups, matchupTable } from "../lib/matchups";
 import { blendItemStats } from "../lib/patchBlend";
+import { counterSliceQueries } from "../lib/prefetch";
 import type { Hero, Item, ItemCounters, ItemStat } from "../types";
 
 export function useCounters(opts: {
@@ -58,6 +59,9 @@ export function useCounters(opts: {
     enabled: !!hero && !!items && enemies.length > 0,
     placeholderData: keepPreviousData,
     queryFn: async () => {
+      // Gated by `enabled` above — assert the contract instead of `!`-ing it at each use.
+      if (!hero || !items)
+        throw new Error("counters query ran before hero/items");
       // One query per enemy (not a combined `any-of` query) so each item keeps a per-enemy
       // delta — that's what lets a row carry the portrait of the specific hero it answers.
       // With backfill on, each slice is fetched for both windows (all in parallel) and blended.
@@ -70,7 +74,7 @@ export function useCounters(opts: {
       // fires — one definition, so the two can't drift into near-miss URLs that do the work twice.
       const slice = (enemyHeroIds?: number[]) => {
         const [fresh, prior] = counterSliceQueries(
-          hero!.id,
+          hero.id,
           { minBadge, maxBadge, dataWindow, priorWin, canBackfill },
           enemyHeroIds,
         );
@@ -97,7 +101,7 @@ export function useCounters(opts: {
           stats: blendItemStats(pair[0], pair[1], baseBlend).stats,
         }));
       }
-      return computeItemCounters(baseStats, perEnemy, items!);
+      return computeItemCounters(baseStats, perEnemy, items);
     },
   });
   const counters =

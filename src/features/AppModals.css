@@ -28,7 +28,7 @@
     box-shadow: var(--shadow-pop);
     /* Top-layer element, so it doesn't inherit the app's font/color — set them here. */
     color: var(--ink);
-    font: 400 13.5px/1.5 var(--font-text);
+    font: 400 13.5px / 1.5 var(--font-text);
     /* Enter/exit: @starting-style below fades/rises the sheet in; on close, allow-discrete holds
        display and top-layer membership (overlay) until the fade-out ends. ModalShell defers its
        unmount to match (EXIT_MS). */
@@ -216,7 +216,7 @@
     border: 1px solid var(--rule-strong);
     box-shadow: var(--shadow-pop);
     color: var(--ink);
-    font: 400 13.5px/1.45 var(--font-text);
+    font: 400 13.5px / 1.45 var(--font-text);
     opacity: 1;
     transform: translateY(0) scale(1);
     transition:
@@ -604,10 +604,12 @@
     padding: 0;
     list-style: none;
   }
-  .export-where li {
+  /* `ul li`, not `li`: these sit inside ModalShell's .guide-body, whose own `.guide-body ul li`
+     rule is (0,1,2) and outranks a bare `.export-where li`. Matching specificity + later wins. */
+  .export-where ul li {
     margin: 0 0 8px;
   }
-  .export-where li strong {
+  .export-where ul li strong {
     display: block;
     margin-bottom: 3px;
     font-size: 12px;
@@ -693,12 +695,12 @@
     grid-template-columns: subgrid;
     align-items: center;
   }
+  .labname {
+    font-size: 13px;
+  }
   .labhero.current .labname {
     color: var(--accent-ui);
     font-weight: 600;
-  }
-  .labname {
-    font-size: 13px;
   }
   .labval {
     font-size: 12px;
@@ -926,8 +928,8 @@
     letter-spacing: -0.01em;
     margin: 8px 0 4px;
   }
-  .matchhead .mmuted,
-  .mmuted {
+  .mmuted,
+  .matchhead .mmuted {
     font-family: var(--font-mono);
     color: var(--ink-3);
     font-weight: 400;

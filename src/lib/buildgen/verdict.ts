@@ -14,17 +14,17 @@ import type {
 import { toCandidate, unreliableAdjustedNodes } from "./candidates";
 import { PAIR_MIN_N, PHASE_META, substituteRival } from "./phaseFill";
 import {
-  FILL_WR_FLOOR,
-  MIN_SUPPORT_ABS,
-  MIN_SUPPORT_FRAC,
-  UNIVERSAL_PICK,
   buyerContrast,
   buyersLoseSignificantly,
   coreWrScore,
   costPowerForSlots,
+  FILL_WR_FLOOR,
   lowerConfidenceWinRate,
+  MIN_SUPPORT_ABS,
+  MIN_SUPPORT_FRAC,
   meritWr,
   priorStrength,
+  UNIVERSAL_PICK,
 } from "./scoring";
 
 /** The item's numbers at its primary phase — the evidence every verdict shows. */

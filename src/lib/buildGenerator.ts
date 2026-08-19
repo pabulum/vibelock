@@ -30,57 +30,57 @@ import type {
   ItemFlowStats,
   PairGames,
 } from "../types";
-import { priorStrength } from "./buildgen/scoring";
+import { annotateRelations, annotateSlotRelations } from "./buildgen/annotate";
 import { primaryColumnByItem } from "./buildgen/candidates";
 import {
-  DOWNPAYMENT_WEIGHT,
   buildLineModel,
   collapseLines,
+  DOWNPAYMENT_WEIGHT,
 } from "./buildgen/lines";
 import {
-  PHASE_META,
-  buildPhase,
-  type BuildOptions,
-} from "./buildgen/phaseFill";
+  finalizeOvertimeBuys,
+  overtimeCandidates,
+  overtimeSellList,
+} from "./buildgen/overtime";
 import {
-  SLOT_CAP,
+  type BuildOptions,
+  buildPhase,
+  PHASE_META,
+} from "./buildgen/phaseFill";
+import { priorStrength } from "./buildgen/scoring";
+import {
   capStandingSlots,
   countItemsBought,
   dedupeAcrossPhases,
   dropSamePhaseComponents,
   markTransient,
   recomputeCosts,
+  SLOT_CAP,
 } from "./buildgen/slotEconomy";
-import { annotateRelations, annotateSlotRelations } from "./buildgen/annotate";
-import {
-  finalizeOvertimeBuys,
-  overtimeCandidates,
-  overtimeSellList,
-} from "./buildgen/overtime";
 
-export { SLOT_CAP };
-export type { BuildOptions };
+export { annotateSlotRelations } from "./buildgen/annotate";
+export { unreliableAdjustedNodes } from "./buildgen/candidates";
+export { isWeakVsComp, rerankBuildForComp } from "./buildgen/compRerank";
 export {
   finalizeOvertimeBuys,
   overtimeBuyList,
   overtimeCandidates,
   overtimeSellList,
 } from "./buildgen/overtime";
-export { annotateSlotRelations } from "./buildgen/annotate";
-export { unreliableAdjustedNodes } from "./buildgen/candidates";
+export type { ItemVerdict, VerdictStats } from "./buildgen/verdict";
+export { itemVerdict } from "./buildgen/verdict";
+export type { LabWinState, PhaseTempo, WinState } from "./buildgen/winState";
 export {
+  classifyWinState,
   LAB_EXCESS_MIN,
   LAB_WPBUY_AHEAD,
   LAB_WPBUY_BEHIND,
+  phaseTempo,
   WIN_STATE_GAP,
   WIN_STATE_WR_FLOOR,
-  classifyWinState,
-  phaseTempo,
 } from "./buildgen/winState";
-export type { LabWinState, PhaseTempo, WinState } from "./buildgen/winState";
-export { isWeakVsComp, rerankBuildForComp } from "./buildgen/compRerank";
-export { itemVerdict } from "./buildgen/verdict";
-export type { ItemVerdict, VerdictStats } from "./buildgen/verdict";
+export type { BuildOptions };
+export { SLOT_CAP };
 
 /**
  * Pure: turns one (unlocked) flow response into a phased build. `buyTimes`/`sellTimes`

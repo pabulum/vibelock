@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { touchedItems } from "./patchChanges";
 import type { Item } from "../types";
+import { touchedItems } from "./patchChanges";
 
 const item = (id: number, name: string): Item =>
   ({ id, name, tier: 1, cost: 0, componentIds: [] }) as unknown as Item;

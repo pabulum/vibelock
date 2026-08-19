@@ -7,24 +7,24 @@
 // Fixtures are captured (and projected down to the fields the client reads) by
 // scripts/capture-fixtures.mjs — rerun it to refresh them after an API change.
 
-import patches from "./fixtures/patches.json";
-import rankedSeasons from "./fixtures/rankedSeasons.json";
-import heroes from "./fixtures/heroes.json";
-import items from "./fixtures/items.json";
-import itemStats from "./fixtures/itemStats.json";
+import { setAnalyticsCacheEnabled } from "../lib/idbCache";
+import abilityOrder from "./fixtures/abilityOrder.json";
+import badgeDistribution from "./fixtures/badgeDistribution.json";
+import builds from "./fixtures/builds.json";
+import counterMatrix from "./fixtures/counterMatrix.json";
+import deathMap from "./fixtures/deathMap.json";
 import flowStats from "./fixtures/flowStats.json";
 import heroBuildStats from "./fixtures/heroBuildStats.json";
-import builds from "./fixtures/builds.json";
-import permutationStats from "./fixtures/permutationStats.json";
-import abilityOrder from "./fixtures/abilityOrder.json";
-import counterMatrix from "./fixtures/counterMatrix.json";
+import heroes from "./fixtures/heroes.json";
 import heroLadder from "./fixtures/heroLadder.json";
-import badgeDistribution from "./fixtures/badgeDistribution.json";
+import itemStats from "./fixtures/itemStats.json";
+import items from "./fixtures/items.json";
 import matchMetadata from "./fixtures/matchMetadata.json";
+import patches from "./fixtures/patches.json";
+import permutationStats from "./fixtures/permutationStats.json";
 import playerMetrics from "./fixtures/playerMetrics.json";
+import rankedSeasons from "./fixtures/rankedSeasons.json";
 import wpStats from "./fixtures/wpStats.json";
-import deathMap from "./fixtures/deathMap.json";
-import { setAnalyticsCacheEnabled } from "../lib/idbCache";
 
 const routes: Array<[RegExp, unknown]> = [
   [/^\/v2\/patches$/, patches],

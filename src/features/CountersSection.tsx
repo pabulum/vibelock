@@ -3,12 +3,12 @@
 import "./CountersSection.css";
 import type { Ref } from "react";
 import { CounterPicker, MatchupChip } from "../components/panels";
-import { DraftPanel } from "./DraftPanel";
-import { laneInsight, laneStrengthNote } from "../lib/laneMatchups";
-import type { LaneMatchups } from "../lib/laneMatchups";
-import type { DraftRanking } from "../lib/draft";
 import type { BanAdvice } from "../lib/bans";
+import type { DraftRanking } from "../lib/draft";
+import type { LaneMatchups } from "../lib/laneMatchups";
+import { laneInsight, laneStrengthNote } from "../lib/laneMatchups";
 import type { Hero, HeroMatchups } from "../types";
+import { DraftPanel } from "./DraftPanel";
 
 export function CountersSection(props: {
   matchups: HeroMatchups | null;

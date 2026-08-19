@@ -28,7 +28,10 @@ export function bestImbueTargets(
     for (const { itemId, abilityId } of b.imbueTargets) {
       if (!abilities.has(abilityId)) continue; // drop ids that don't resolve to a known ability
       let inner = counts.get(itemId);
-      if (!inner) counts.set(itemId, (inner = new Map()));
+      if (!inner) {
+        inner = new Map();
+        counts.set(itemId, inner);
+      }
       inner.set(abilityId, (inner.get(abilityId) ?? 0) + 1);
     }
   }
@@ -46,7 +49,8 @@ export function bestImbueTargets(
       }
     }
     if (total < MIN_SAMPLE || topCount / total < MIN_SHARE) continue;
-    const a = abilities.get(topId)!;
+    const a = abilities.get(topId);
+    if (!a) continue;
     out.set(itemId, {
       ability: { id: a.id, name: a.name, image: a.image },
       colorIndex: slotOrder.indexOf(topId),

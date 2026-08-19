@@ -74,14 +74,15 @@ export function SharePanel({
   };
 
   // Reflect the resolved URL in the displayed link.
+  // resolveShareUrl is rebuilt every render, so depending on it would re-fetch forever; it
+  // closes over links/heroSlug, and those are the values this should actually re-run on.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deliberate — see above
   useEffect(() => {
     let live = true;
     resolveShareUrl().then((u) => live && setShareUrl(u));
     return () => {
       live = false;
     };
-    // resolveShareUrl closes over links/heroSlug; re-run when those change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [links.shim, links.app, heroSlug]);
 
   // (Re)paint the card whenever the fundamentals toggle flips. Drawing is async (icon loads);
@@ -150,7 +151,12 @@ export function SharePanel({
       title="Share this build"
       onClose={onClose}
     >
-      <div className="share-holder" ref={holderRef} aria-label="Card preview" />
+      <div
+        className="share-holder"
+        ref={holderRef}
+        role="img"
+        aria-label="Card preview"
+      />
       {!!fundamentals?.length && (
         <label className="share-fun">
           <input

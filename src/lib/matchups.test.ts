@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { must } from "../test/must";
 import type { HeroCounterRow } from "../types";
 import { fitBradleyTerry, heroMatchups, matchupTable } from "./matchups";
 
@@ -40,7 +41,10 @@ describe("fitBradleyTerry", () => {
         ids.length,
     );
     for (const i of ids)
-      expect(pi.get(i)!).toBeCloseTo(truth[i as keyof typeof truth] / gm, 3);
+      expect(must(pi.get(i))).toBeCloseTo(
+        truth[i as keyof typeof truth] / gm,
+        3,
+      );
   });
 });
 

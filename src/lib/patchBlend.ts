@@ -212,7 +212,8 @@ export function blendFlow(
     f: FlowNode | undefined,
     q: FlowNode | undefined,
   ): FlowNode => {
-    const src = (f ?? q)!;
+    const src = f ?? q;
+    if (!src) throw new Error("blendNode needs at least one window");
     const nN = f ? f.wins + f.losses : 0;
     const nP = q ? q.wins + q.losses : 0;
     const adjN = f?.adjusted_win_rate ?? 0;
@@ -271,7 +272,8 @@ export function blendFlow(
     f: FlowEdge | undefined,
     q: FlowEdge | undefined,
   ): FlowEdge => {
-    const src = (f ?? q)!;
+    const src = f ?? q;
+    if (!src) throw new Error("blendEdge needs at least one window");
     const b = beta[src.from_column] ?? 0;
     return {
       from_column: src.from_column,
@@ -358,6 +360,9 @@ export function blendItemStats(
     }
     k = kFromPairs(pairs, v);
   }
+  // Captured as a const: `k` is set on both paths above, but the blend closure below would
+  // otherwise see the `let` widened back to `number | undefined`.
+  const kFinal = k;
 
   const discounts = new Map<number, number>();
   let borrowed = 0;
@@ -366,7 +371,8 @@ export function blendItemStats(
     f: ItemStat | undefined,
     q: ItemStat | undefined,
   ): ItemStat => {
-    const src = (f ?? q)!;
+    const src = f ?? q;
+    if (!src) throw new Error("blendRow needs at least one window");
     const nN = f ? f.wins + f.losses : 0;
     const nP = q ? q.wins + q.losses : 0;
     const rateN = nN > 0 && f ? f.wins / nN : 0;
@@ -375,7 +381,7 @@ export function blendItemStats(
       shared?.discounts.get(src.item_id) ??
       (f && q ? contradictionDiscount(rateN, nN, rateP, nP, p) : 1);
     discounts.set(src.item_id, disc);
-    const m = q ? Math.min(nP, k! * disc) : 0;
+    const m = q ? Math.min(nP, kFinal * disc) : 0;
     const scale = nP > 0 ? m / nP : 0;
     borrowed += m;
     total += nN + m;

@@ -1,8 +1,10 @@
 // The page's smaller display components: brand mark, loading state, skill order grid,
 // per-phase tempo lines, category bar, overtime column, counter picker, matchup chips.
 
-import { useMemo, useState, type Ref } from "react";
-import { type LabWinState, type PhaseTempo } from "../lib/buildGenerator";
+import { type Ref, useMemo, useState } from "react";
+import type { LabWinState, PhaseTempo } from "../lib/buildGenerator";
+import { signedPt } from "../lib/matchups";
+import { IS_MAC } from "../lib/palette";
 import type {
   Ability,
   BuildItem,
@@ -15,8 +17,6 @@ import type {
   SkillBuild,
 } from "../types";
 import { ABILITY_COLORS, SLOT_COLORS } from "./colors";
-import { IS_MAC } from "../lib/palette";
-import { signedPt } from "../lib/matchups";
 import { ItemRow } from "./ItemRow";
 
 // The brand mark: a diamond gem that shows a real item icon (masked to the diamond
@@ -290,6 +290,7 @@ export function CounterPicker({
         const h = heroes.find((x) => x.id === id);
         return (
           <button
+            type="button"
             className="chip"
             key={id}
             onClick={() => onRemove(id)}
@@ -366,6 +367,7 @@ export function SkillOrder({
                   const on = stepId === id;
                   return (
                     <span
+                      // biome-ignore lint/suspicious/noArrayIndexKey: the index IS the identity — pip i is "the i-th ability point", which is what the label renders
                       key={i}
                       className={`pip ${on ? "on" : ""}`}
                       style={on ? { background: color } : undefined}
@@ -403,6 +405,7 @@ export function MatchupChip({
 }) {
   return (
     <button
+      type="button"
       className={`mchip ${tough ? "tough" : "fav"} ${active ? "active" : ""}`}
       onClick={onClick}
       onPointerEnter={onIntent}

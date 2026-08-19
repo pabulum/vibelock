@@ -18,8 +18,9 @@
 import { beforeEach, expect, test } from "vitest";
 
 import { render } from "vitest-browser-react";
-import { installApiMock } from "./apiMock";
 import App from "../App";
+import { installApiMock } from "./apiMock";
+import { must } from "./must";
 
 const api = installApiMock();
 const BAKE = { timeout: 15_000 } as const;
@@ -42,23 +43,23 @@ test("the Soul pace panel renders the population curve without a linked account"
   // The curve is drawn: a band, a median line and the winning-games mean. Without an account there
   // is no "you" line and no per-phase rows, and the panel must still stand up on the population
   // half alone rather than rendering an empty shell.
-  expect(pace!.querySelector(".pacechart svg .pband")).toBeTruthy();
-  expect(pace!.querySelector(".pacechart svg .pmedian")).toBeTruthy();
-  expect(pace!.querySelector(".pacechart svg .pyouline")).toBeNull();
-  expect(pace!.querySelector(".pacerows")).toBeNull();
+  expect(must(pace).querySelector(".pacechart svg .pband")).toBeTruthy();
+  expect(must(pace).querySelector(".pacechart svg .pmedian")).toBeTruthy();
+  expect(must(pace).querySelector(".pacechart svg .pyouline")).toBeNull();
+  expect(must(pace).querySelector(".pacerows")).toBeNull();
 
   // Identity is never colour-alone: the legend names every series that was drawn.
-  const legend = pace!.querySelector(".pacelegend")?.textContent ?? "";
+  const legend = must(pace).querySelector(".pacelegend")?.textContent ?? "";
   expect(legend).toContain("middle half");
   expect(legend).toContain("median");
 
   // The chart carries its own accessible description rather than leaving the SVG unlabelled.
-  const svg = pace!.querySelector(".pacechart svg");
+  const svg = must(pace).querySelector(".pacechart svg");
   expect(svg?.getAttribute("role")).toBe("img");
   expect(svg?.getAttribute("aria-label") ?? "").toMatch(/net worth over time/i);
 
   // The survivorship caveat travels with the curve — it is not optional framing.
-  expect(pace!.textContent).toContain("lasted");
+  expect(must(pace).textContent).toContain("lasted");
 });
 
 test("lane matchups render as their own row, separate from whole-game matchups", async () => {
@@ -70,7 +71,7 @@ test("lane matchups render as their own row, separate from whole-game matchups",
   const { container } = screen;
   const row = container.querySelector(".matchups .lbl.lane");
   expect(row).toBeTruthy();
-  expect(row!.textContent).toContain("Loses lane to");
+  expect(must(row).textContent).toContain("Loses lane to");
 
   const chips = container.querySelectorAll(".lanechip");
   expect(chips.length).toBeGreaterThan(0);

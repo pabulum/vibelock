@@ -188,7 +188,7 @@ export function coreWrScore(
     bonus;
   const popTilt = 1 + CORE_POP_TILT * b.pickRate;
   const costK = Math.max(1, b.item.cost / 1000);
-  return (edge * popTilt) / Math.pow(costK, costPower);
+  return (edge * popTilt) / costK ** costPower;
 }
 
 // --- The universal bypass, made falsifiable (the Headhunter fix) ---

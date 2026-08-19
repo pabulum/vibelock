@@ -8,17 +8,17 @@ import type {
   Item,
   ItemFlowStats,
 } from "../../types";
+import { toCandidate, unreliableAdjustedNodes } from "./candidates";
+import { supersededComponents } from "./lines";
+import { PHASE_META } from "./phaseFill";
 import {
+  buyersLoseSignificantly,
+  lowerConfidenceWinRate,
   MIN_SUPPORT_ABS,
   MIN_SUPPORT_FRAC,
   UNIVERSAL_PICK,
-  buyersLoseSignificantly,
-  lowerConfidenceWinRate,
 } from "./scoring";
-import { toCandidate, unreliableAdjustedNodes } from "./candidates";
-import { supersededComponents } from "./lines";
 import { SELL_FOR_SLOTS_MAX_TIER, sellPriority } from "./slotEconomy";
-import { PHASE_META } from "./phaseFill";
 
 // --- Overtime buy-list ranking (see overtimeBuyList) ---
 const OVERTIME_MIN_TIER = 3; // an overtime buy is an upgrade you spend surplus souls on, never a cheap

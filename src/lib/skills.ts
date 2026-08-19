@@ -38,7 +38,9 @@ export function bestSkillBuild(rows: AbilityOrderRow[]): SkillBuild | null {
  *  Exported for the build-hover, which shows a community build's max order. */
 export function maxOrder(order: number[]): number[] {
   const lastIndex = new Map<number, number>();
-  order.forEach((id, i) => lastIndex.set(id, i));
+  order.forEach((id, i) => {
+    lastIndex.set(id, i);
+  });
   return [...new Set(order)].sort(
     (a, b) => (lastIndex.get(a) ?? 0) - (lastIndex.get(b) ?? 0),
   );

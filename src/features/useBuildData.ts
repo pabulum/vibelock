@@ -1,19 +1,20 @@
 // The build feature: the item-build generator query (split by archetype), the skill-order and
 // community-build queries that hang off it, and the derived state the render reads. Owns the
 // active-archetype selection (deep-linked on the first build, best-win-rate afterwards).
-import { useEffect, useMemo, useRef, useState } from "react";
+
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { queryClient } from "../queryClient";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { TimeWindow } from "../api/deadlock";
 import {
   getAbilityOrder,
   getCommunityBuilds,
   getHeroBuildStats,
 } from "../api/deadlock";
-import type { TimeWindow } from "../api/deadlock";
 import { fetchBuildSet } from "../lib/buildFetch";
 import { matchCommunityBuilds } from "../lib/communityBuilds";
 import { bestImbueTargets } from "../lib/imbue";
 import { bestSkillBuild } from "../lib/skills";
+import { queryClient } from "../queryClient";
 import type { Ability, ArchetypeKey, Hero, ImbueTarget, Item } from "../types";
 
 export function useBuildData(opts: {
@@ -75,10 +76,13 @@ export function useBuildData(opts: {
     queryKey: buildKey,
     enabled: !!hero && !!items,
     placeholderData: keepPreviousData,
-    queryFn: ({ signal }) =>
-      fetchBuildSet({
-        hero: hero!,
-        items: items!,
+    queryFn: ({ signal }) => {
+      // `enabled` above gates this on both being loaded; assert it rather than `!` it away, so a
+      // future edit to the gate fails loudly here instead of dereferencing undefined downstream.
+      if (!hero || !items) throw new Error("build query ran before hero/items");
+      return fetchBuildSet({
+        hero,
+        items,
         rankLabel,
         slice: {
           minBadge,
@@ -91,7 +95,8 @@ export function useBuildData(opts: {
           patchNotes,
         },
         signal,
-      }),
+      });
+    },
   });
 
   // Abandon the previous selection's fan-out. A key change leaves the old build query observer-less
@@ -164,8 +169,9 @@ export function useBuildData(opts: {
     enabled: !!hero,
     placeholderData: keepPreviousData,
     queryFn: async () => {
+      if (!hero) throw new Error("skill-order query ran before hero");
       const base = {
-        heroId: hero!.id,
+        heroId: hero.id,
         minBadge,
         maxBadge,
         ...dataWindow,
@@ -186,7 +192,7 @@ export function useBuildData(opts: {
       if (!skill && canBackfill) {
         skill = bestSkillBuild(
           await getAbilityOrder({
-            heroId: hero!.id,
+            heroId: hero.id,
             minBadge,
             maxBadge,
             ...priorWin,
@@ -206,10 +212,11 @@ export function useBuildData(opts: {
     enabled: !!hero,
     placeholderData: keepPreviousData,
     queryFn: async () => {
+      if (!hero) throw new Error("community query ran before hero");
       const [builds, stats] = await Promise.all([
-        getCommunityBuilds(hero!.id),
+        getCommunityBuilds(hero.id),
         getHeroBuildStats({
-          heroId: hero!.id,
+          heroId: hero.id,
           minBadge,
           maxBadge,
           ...dataWindow,

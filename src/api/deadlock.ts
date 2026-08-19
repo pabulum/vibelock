@@ -7,43 +7,14 @@
 // persistQueryClient (what the old hand-rolled 24h cache did), and every response is validated
 // against its Valibot schema (api/schemas.ts) at parse time.
 
-import * as v from "valibot";
 import { queryOptions } from "@tanstack/react-query";
-import { queryClient } from "../queryClient";
+import * as v from "valibot";
 import { rankFilterUsable } from "../lib/badgeOutage";
-import { rankedOnlyUsable } from "../lib/rankedMode";
 import { cacheGet, cachePut } from "../lib/idbCache";
-import { parsePatchFeed, type PatchFeed } from "../lib/patchFeed";
+import { type PatchFeed, parsePatchFeed } from "../lib/patchFeed";
 import { FLOW_PHASE_COUNT, FLOW_PHASE_INTERVAL_S } from "../lib/phases";
-import {
-  AbilityOrderRowSchema,
-  BadgeDistributionRowSchema,
-  HeroBuildStatRowSchema,
-  HeroBanStatSchema,
-  HeroCounterRowSchema,
-  HeroLadderStatSchema,
-  ItemFlowStatsSchema,
-  ItemPermutationStatsSchema,
-  ItemStatSchema,
-  MatchHistoryRowSchema,
-  MatchMetadataResponseSchema,
-  PlayerRankSchema,
-  parseAs,
-  PlayerHeroStatSchema,
-  PlayerMetricsSchema,
-  RawBuildEnvelopeSchema,
-  RawHeroSchema,
-  RawItemSchema,
-  RawPatchSchema,
-  RawRankedSeasonSchema,
-  SteamPlayerMatchSchema,
-  type RawBuildEnvelope,
-  type RawItem,
-  type RawPatch,
-  type RawRankedSeason,
-  type RawProp,
-  type SteamPlayerMatch,
-} from "./schemas";
+import { rankedOnlyUsable } from "../lib/rankedMode";
+import { queryClient } from "../queryClient";
 import type {
   Ability,
   AbilityOrderRow,
@@ -52,8 +23,8 @@ import type {
   CardStat,
   CommunityBuild,
   Hero,
-  HeroBuildStatRow,
   HeroBanStat,
+  HeroBuildStatRow,
   HeroCounterRow,
   HeroLadderStat,
   Item,
@@ -72,6 +43,35 @@ import type {
   SlotType,
   TextSegment,
 } from "../types";
+import {
+  AbilityOrderRowSchema,
+  BadgeDistributionRowSchema,
+  HeroBanStatSchema,
+  HeroBuildStatRowSchema,
+  HeroCounterRowSchema,
+  HeroLadderStatSchema,
+  ItemFlowStatsSchema,
+  ItemPermutationStatsSchema,
+  ItemStatSchema,
+  MatchHistoryRowSchema,
+  MatchMetadataResponseSchema,
+  PlayerHeroStatSchema,
+  PlayerMetricsSchema,
+  PlayerRankSchema,
+  parseAs,
+  type RawBuildEnvelope,
+  RawBuildEnvelopeSchema,
+  RawHeroSchema,
+  type RawItem,
+  RawItemSchema,
+  type RawPatch,
+  RawPatchSchema,
+  type RawProp,
+  type RawRankedSeason,
+  RawRankedSeasonSchema,
+  type SteamPlayerMatch,
+  SteamPlayerMatchSchema,
+} from "./schemas";
 
 export type { SteamPlayerMatch };
 
@@ -165,7 +165,8 @@ function pump(): void {
     // slots' worth of dead requests ahead of it, seconds each. Queued work for a selection that has
     // since been abandoned is cheap now rather than merely late: its signal is already aborted, so
     // it reaches `fetch` and returns immediately without touching the network (see `acquire`).
-    const next = queues[tier].pop()!;
+    const next = queues[tier].pop();
+    if (!next) break;
     inflight++;
     if (tier === "prefetch") prefetchInflight++;
     next();
@@ -540,11 +541,12 @@ function parseLoc(s: string): TextSegment[] {
   };
 
   let last = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(noSvg))) {
+  let m: RegExpExecArray | null = re.exec(noSvg);
+  while (m) {
     add(noSvg.slice(last, m.index), false);
     add(m[1], true);
     last = re.lastIndex;
+    m = re.exec(noSvg);
   }
   add(noSvg.slice(last), false);
 

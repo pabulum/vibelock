@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { RANKED_MODE_FROM_S, rankedOnlyUsable } from "./rankedMode";
 import { BADGE_OUTAGE_FROM_S, rankFilterUsable } from "./badgeOutage";
+import { RANKED_MODE_FROM_S, rankedOnlyUsable } from "./rankedMode";
 
 const day = (iso: string) => Date.parse(`${iso}T00:00:00Z`) / 1000;
 

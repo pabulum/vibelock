@@ -2,7 +2,7 @@
 // owns the top layer, focus trapping, and Escape; @starting-style CSS (see `dialog.guide` in
 // features/AppModals.css) animates enter/exit. Replaces the old portal + .guide-backdrop overlay.
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { useScrollLock } from "./useScrollLock";
 
@@ -42,6 +42,7 @@ export function ModalShell({
   }, []);
 
   return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: native <dialog> handles Escape itself and the onClick is the backdrop-dismiss coordinate check — the rule treats <dialog> as non-interactive, which it isn't
     <dialog
       ref={ref}
       className={`guide${className ? ` ${className}` : ""}`}

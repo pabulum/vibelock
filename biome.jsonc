@@ -1,0 +1,41 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.8/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": [
+      "**",
+      "!dist",
+      "!package-lock.json",
+      // Captured API responses (scripts/capture-fixtures.mjs rewrites these wholesale) —
+      // reformatting them is churn that shows up as a diff every time fixtures are refreshed.
+      "!src/test/fixtures",
+      // Brand mark and sprite sheet: decorative assets, not source. Linting them only ever
+      // produces noSvgWithoutTitle noise on files that are correctly aria-hidden at use site.
+      "!**/*.svg"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 80,
+    "lineEnding": "lf"
+  },
+  "linter": { "enabled": true, "rules": { "preset": "recommended" } },
+  "assist": {
+    "enabled": true,
+    "actions": { "source": { "organizeImports": "on" } }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "jsxQuoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "always",
+      "quoteProperties": "asNeeded",
+      "bracketSpacing": true,
+      "bracketSameLine": false
+    }
+  }
+}

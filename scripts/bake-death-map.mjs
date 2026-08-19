@@ -454,7 +454,7 @@ const out = {
   mapRadius: zip.radius,
   phases,
 };
-writeFileSync(OUT, JSON.stringify(out) + "\n");
+writeFileSync(OUT, `${JSON.stringify(out)}\n`);
 
 const total = totals.reduce((a, b) => a + b, 0);
 console.log(

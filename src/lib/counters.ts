@@ -42,9 +42,9 @@
 // The shrink+lower-bound is still honest about noise: a thin sample has a wide interval and a low
 // bound, so it self-rejects — we get recall without minting flukes. Thin marks are flagged for the UI.
 
-import type { ItemCounters, Item, ItemStat } from "../types";
+import type { Item, ItemCounters, ItemStat } from "../types";
+import { bucketForTime, PHASE_LABELS, phaseForTime } from "./phases";
 import { GATE_Z } from "./stats";
-import { PHASE_LABELS, bucketForTime, phaseForTime } from "./phases";
 
 // Phase geometry comes from lib/phases — the same constants the flow request is built from. This
 // module used to keep its own copy with a 9-minute Lane boundary, which put an item bought at 9:30

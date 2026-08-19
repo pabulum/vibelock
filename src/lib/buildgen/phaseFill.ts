@@ -12,31 +12,31 @@ import type {
   PairGames,
   SlotType,
 } from "../../types";
-import { significantlyHigher } from "../stats";
 import { PHASE_END_S, PHASE_LABELS, PHASE_TIME_LABELS } from "../phases";
+import { significantlyHigher } from "../stats";
+import { toCandidate, unreliableAdjustedNodes } from "./candidates";
 import {
-  EB_DEFAULT_K,
-  FILL_WR_FLOOR,
-  MIN_SUPPORT_ABS,
-  MIN_SUPPORT_FRAC,
-  SYNERGY_WEIGHT,
-  UNIVERSAL_PICK,
+  buildsFromAny,
+  componentsConsumedByOwned,
+  DOWNPAYMENT_WEIGHT,
+  type LineModel,
+  marginalCost,
+} from "./lines";
+import {
   buyerContrast,
   buyersLoseSignificantly,
   coreWrScore,
   costPowerForSlots,
+  EB_DEFAULT_K,
+  FILL_WR_FLOOR,
   isValuePick,
   lowerConfidenceWinRate,
+  MIN_SUPPORT_ABS,
+  MIN_SUPPORT_FRAC,
   meritWr,
+  SYNERGY_WEIGHT,
+  UNIVERSAL_PICK,
 } from "./scoring";
-import { toCandidate, unreliableAdjustedNodes } from "./candidates";
-import {
-  DOWNPAYMENT_WEIGHT,
-  buildsFromAny,
-  componentsConsumedByOwned,
-  marginalCost,
-  type LineModel,
-} from "./lines";
 import { categorySouls } from "./slotEconomy";
 
 // Derived from lib/phases, which owns the geometry and is the same source the API request is
@@ -376,7 +376,7 @@ export function buildPhase(
         core.push({ ...c, role: "universal" }); // a substitute is by definition over the pick bar
         coreSouls += cost;
         chosen.add(c.item.id);
-        absorb.forEach((id) => claimed.add(id));
+        for (const id of absorb) claimed.add(id);
         swaps.push({ ...rival, role: "situational", swapForId: c.item.id });
         benchedIds.add(rival.item.id);
       } else {
@@ -396,7 +396,7 @@ export function buildPhase(
     core.push({ ...c, role });
     coreSouls += cost;
     chosen.add(c.item.id);
-    absorb.forEach((id) => claimed.add(id));
+    for (const id of absorb) claimed.add(id);
     return true;
   };
 
@@ -525,17 +525,20 @@ export function buildPhase(
   for (;;) {
     if (core.length >= targetItems) break;
     let pick: "weapon" | "vitality" | "spirit" | undefined;
+    let candidate: BuildItem | undefined;
     let bestDeficit = RATIO_SLOT;
     for (const slot of FILL_ORDER) {
-      if (!peek(slot)) continue; // no pick worth building in this category — it sits out
+      const next = peek(slot);
+      if (!next) continue; // no pick worth building in this category — it sits out
       const deficit = fracTarget[slot] - allocated[slot];
       if (deficit >= bestDeficit) {
         bestDeficit = deficit;
         pick = slot;
+        candidate = next;
       }
     }
-    if (!pick) break;
-    const c = peek(pick)!;
+    if (!pick || !candidate) break;
+    const c = candidate;
     cursor[pick]++; // consume it whether or not it seats (a soul/line miss mustn't re-loop forever)
     if (tryAddCore(c)) allocated[pick]++;
   }

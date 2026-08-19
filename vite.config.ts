@@ -1,7 +1,7 @@
-import { defineConfig, type Plugin } from "vitest/config";
-import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import babel from "@rolldown/plugin-babel";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { playwright } from "@vitest/browser-playwright";
+import { defineConfig, type Plugin } from "vitest/config";
 
 // Content-Security-Policy, injected into index.html at *build* time only. We can't ship it as a
 // static <meta> in index.html because Vite's dev server (HMR) relies on inline scripts and eval,

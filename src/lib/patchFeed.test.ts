@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { must } from "../test/must";
 import { excerptOf, parsePatchFeed } from "./patchFeed";
 
 const D = (s: string) => Math.floor(Date.parse(s) / 1000);
@@ -218,7 +219,7 @@ describe("excerptOf", () => {
 
   it("truncates on a word boundary", () => {
     const long = `${"alpha ".repeat(60)}omega`;
-    const out = excerptOf(long)!;
+    const out = must(excerptOf(long));
     expect(out.length).toBeLessThanOrEqual(181);
     expect(out.endsWith("…")).toBe(true);
     expect(out).not.toContain("alph…");

@@ -3,7 +3,6 @@
 // delta, counter portraits, and imbue/lab tags.
 import "./PhaseColumns.css";
 import type { Ref } from "react";
-import { phaseTempo, type LabWinState } from "../lib/buildGenerator";
 import type { WpStats } from "../api/wpStats";
 import { CounterAddRow, ItemRow } from "../components/ItemRow";
 import {
@@ -11,6 +10,8 @@ import {
   OvertimeColumn,
   PhaseTempoLines,
 } from "../components/panels";
+import { type LabWinState, phaseTempo } from "../lib/buildGenerator";
+import type { AdoptionMover } from "../lib/patchMovers";
 import type {
   BuildItem,
   BuildPhase,
@@ -21,7 +22,6 @@ import type {
   ItemCounters,
   ItemRef,
 } from "../types";
-import type { AdoptionMover } from "../lib/patchMovers";
 
 const COUNTER_ADDS_PER_PHASE = 3; // cap on counter-only picks folded into a phase's swaps
 

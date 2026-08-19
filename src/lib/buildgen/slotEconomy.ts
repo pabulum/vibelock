@@ -19,11 +19,11 @@ export function dedupeAcrossPhases(phases: BuildPhase[]): void {
   phases.forEach((p, i) => {
     for (const b of p.core) {
       const cur = bestPhase.get(b.item.id);
-      if (
-        cur === undefined ||
-        b.pickRate >
-          phases[cur].core.find((x) => x.item.id === b.item.id)!.pickRate
-      ) {
+      const held =
+        cur === undefined
+          ? undefined
+          : phases[cur].core.find((x) => x.item.id === b.item.id);
+      if (!held || b.pickRate > held.pickRate) {
         bestPhase.set(b.item.id, i);
       }
     }
@@ -163,7 +163,7 @@ export function markTransient(
  */
 export function capStandingSlots(phases: BuildPhase[], cap: number): number {
   const core = phases.flatMap((p) => p.core);
-  for (const b of core)
+  for (const b of core) {
     // Reason, not kind: the cheap-early sticks markTransient flags are also kind "sold" (same
     // sell-fodder concept), but they're not this function's to clear.
     if (b.transientReason === SOLD_FOR_SLOTS) {
@@ -171,6 +171,7 @@ export function capStandingSlots(phases: BuildPhase[], cap: number): number {
       b.transientKind = undefined;
       b.transientReason = undefined;
     }
+  }
 
   const standing = core.filter((b) => !b.transient);
   let held = standing.length;

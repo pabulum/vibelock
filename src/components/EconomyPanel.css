@@ -97,14 +97,6 @@
   .ecorow.ecohdr {
     padding: 0 0 4px;
   }
-  .ecorow.ecohdr .fpop,
-  .ecorow.ecohdr .fyou {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.11em;
-    color: var(--ink-3);
-  }
   /* Bullet chart: the filled bar is YOUR rate (so it means the same thing as the souls/min bar
      above it), read against a tick at the hero's median. Bar past the tick = above median. */
   .ecorow .fbar {
@@ -145,6 +137,15 @@
     justify-content: flex-end;
     gap: 4px;
     white-space: nowrap;
+  }
+  /* Header variant of those two columns — after the base rules so specificity ascends. */
+  .ecorow.ecohdr .fpop,
+  .ecorow.ecohdr .fyou {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.11em;
+    color: var(--ink-3);
   }
   .ecorow .fyoun {
     font-family: var(--font-mono);

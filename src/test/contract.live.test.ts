@@ -43,6 +43,7 @@ import {
   RawRankedSeasonSchema,
   SteamPlayerMatchSchema,
 } from "../api/schemas";
+import { must } from "./must";
 
 const BASE = "https://api.deadlock-api.com";
 const HERO_ID = 1; // Abrams — same reference hero the fixtures are captured for
@@ -314,7 +315,7 @@ test(
       "no sample account (the /v1/sql probe didn't answer)",
     ).not.toBeNull();
     await check(
-      `/v1/players/hero-stats?account_ids=${sample!.accountId}`,
+      `/v1/players/hero-stats?account_ids=${must(sample).accountId}`,
       rows(PlayerHeroStatSchema),
     );
   },
@@ -328,7 +329,7 @@ test(
       sample,
       "no sample account (the /v1/sql probe didn't answer)",
     ).not.toBeNull();
-    await check(`/v1/players/${sample!.accountId}/rank`, PlayerRankSchema);
+    await check(`/v1/players/${must(sample).accountId}/rank`, PlayerRankSchema);
   },
   TIMEOUT,
 );
@@ -341,7 +342,7 @@ test(
       "no sample account (the /v1/sql probe didn't answer)",
     ).not.toBeNull();
     await check(
-      `/v1/players/${sample!.accountId}/match-history`,
+      `/v1/players/${must(sample).accountId}/match-history`,
       rows(MatchHistoryRowSchema),
     );
   },
@@ -359,7 +360,7 @@ test(
     // request would fall back to fetching from Steam, which is the ~3/hour family — never do that
     // from anything that runs on a timer.
     const { match_info } = await check(
-      `/v1/matches/${sample!.matchId}/metadata?disable_steam=true`,
+      `/v1/matches/${must(sample).matchId}/metadata?disable_steam=true`,
       MatchMetadataResponseSchema,
     );
     // The two fields that have actually drifted: `team` moved from enum names to numbers, and the

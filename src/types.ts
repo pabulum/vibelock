@@ -7,26 +7,26 @@
 
 export type {
   AbilityOrderRow,
-  FlowNode,
   FlowEdge,
+  FlowNode,
   FlowSummary,
-  ItemFlowStats,
-  HeroBuildStatRow,
-  PlayerHeroStat,
-  HeroLadderStat,
-  MetricDistribution,
-  PlayerMetrics,
-  ItemStat,
-  ItemPermutationStats,
-  HeroCounterRow,
   HeroBanStat,
-  MatchGoldSource,
-  MatchStatSample,
-  MatchItemEvent,
+  HeroBuildStatRow,
+  HeroCounterRow,
+  HeroLadderStat,
+  ItemFlowStats,
+  ItemPermutationStats,
+  ItemStat,
   MatchDeath,
-  MatchPlayer,
-  MatchInfo,
+  MatchGoldSource,
   MatchHistoryRow,
+  MatchInfo,
+  MatchItemEvent,
+  MatchPlayer,
+  MatchStatSample,
+  MetricDistribution,
+  PlayerHeroStat,
+  PlayerMetrics,
 } from "./api/schemas";
 
 export interface Hero {
@@ -133,7 +133,11 @@ export interface ItemRef {
  * guaranteed a slot because it's the plurality answer to a near-universal need (see
  * {@link NeedKind}), not because its own pick rate or win rate cleared a gate. */
 export type BuildRole =
-  "universal" | "value" | "situational" | "filler" | "need";
+  | "universal"
+  | "value"
+  | "situational"
+  | "filler"
+  | "need";
 
 export interface BuildItem {
   item: Item;

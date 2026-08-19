@@ -180,11 +180,11 @@ export function EconomyPanel({
             {profile.substituted && dataRankLabel
               ? " (nearest rank with data)"
               : ""}
-            {hasYou ? (
+            {hasYou && lastGame ? (
               <>
                 {" "}
                 · bars and the <em>you</em> column are{" "}
-                <em>your last game{lastGame!.won ? " (won)" : " (lost)"}</em>,
+                <em>your last game{lastGame.won ? " (won)" : " (lost)"}</em>,
                 with a tick marking the median — one game, so it's noisy. More
                 of a source isn't automatically better.
               </>

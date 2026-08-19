@@ -22,9 +22,9 @@
 // carries no MM-DD-YYYY and never will. It is the announcement the ranked season *matched*, and
 // the title rule below is untouched by it.
 
-import { stripHtml } from "./patchChanges";
-import type { NewsItem, Patch, SeasonInterval } from "../types";
 import type { RawPatch } from "../api/schemas";
+import type { NewsItem, Patch, SeasonInterval } from "../types";
+import { stripHtml } from "./patchChanges";
 
 export interface PatchFeed {
   /** Newest-first, one per day, each with a trustworthy 00:00-UTC boundary. */
