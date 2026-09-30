@@ -433,6 +433,9 @@ export const BadgeDistributionRowSchema = v.object({
  * still read as the only ordering signal available for entries with no date in the title —
  * announcements like "Matchmaking Update", which are news but not patch boundaries. */
 export const RawPatchSchema = v.object({
+  /** Which feed the entry came from, "steam" or "forum" — only a Steam post's pub_date is the
+   * moment it describes, which is what lets a named update be a boundary (lib/patchFeed). */
+  source: v.optional(v.string()),
   title: v.optional(v.string()),
   /** The notes body. Forum-feed entries carry only a link-unfurl (empty text); the Steam-feed copy
    * of the same patch carries the real changelog, which lib/patchChanges parses for touched items. */

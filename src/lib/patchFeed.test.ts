@@ -200,6 +200,92 @@ describe("parsePatchFeed — ranked-season boundaries", () => {
     ]);
     expect(patches[1].season?.name).toBe("Beta Season 1");
   });
+
+  it("leaves a scheduled split out until it opens", () => {
+    // The live asset on 2026-09-29 already declared Split 2 for 10-08. Taken as a boundary the day
+    // it appeared, it became the newest "patch": an empty window, and everyone's default view.
+    const split = D("2026-10-08T21:00:00Z");
+    const scheduled = [
+      { name: "Beta Season 1 · Split 2", startTs: split },
+      ...seasons,
+    ];
+    const before = parsePatchFeed(feed, scheduled, D("2026-09-29T22:00:00Z"));
+    expect(before.patches[0].title).toBe("2026-07-30 · Beta Season 1");
+    expect(before.news.some((n) => n.ts === split)).toBe(false);
+
+    const after = parsePatchFeed(feed, scheduled, split);
+    expect(after.patches[0]).toMatchObject({
+      title: "2026-10-08 · Beta Season 1 · Split 2",
+      ts: split,
+    });
+  });
+});
+
+describe("parsePatchFeed — named updates", () => {
+  // The live shape: no date anywhere in the title, and a Steam post stamped as the build shipped.
+  const POSTED = D("2026-09-29T20:25:11Z");
+  const named = {
+    source: "steam",
+    title: "City Never Sleeps",
+    pub_date: "2026-09-29T20:25:11Z",
+    link: "https://store.steampowered.com/news/app/1422450/view/694273194214819790",
+    content:
+      "<p>A massive visual update to the map and neutrals, six new heroes.</p>",
+  };
+  const previous = {
+    source: "steam",
+    title: " Minor Update - 09-16-2026",
+    pub_date: "2026-09-16T20:16:43Z",
+  };
+
+  it("opens a boundary at the Steam post's own moment, not a midnight", () => {
+    const { patches, news } = parsePatchFeed([named, previous]);
+    expect(patches.map((p) => [p.title, p.ts])).toEqual([
+      ["2026-09-29 · City Never Sleeps", POSTED],
+      ["2026-09-16 · Minor Update", D("2026-09-16T00:00:00Z")],
+    ]);
+    expect(news[0]).toMatchObject({
+      title: "City Never Sleeps",
+      ts: POSTED,
+      isPatch: true,
+    });
+  });
+
+  it("trusts only the Steam copy — a Forum pub_date is a re-stamp", () => {
+    const { patches, news } = parsePatchFeed([
+      { ...named, source: "forum", pub_date: "2026-10-05T18:00:00Z" },
+      previous,
+    ]);
+    expect(patches).toHaveLength(1);
+    expect(news[0]).toMatchObject({
+      title: "City Never Sleeps",
+      isPatch: false,
+    });
+  });
+
+  it("absorbs a dated copy of the same release, keeping the post's moment and the fuller notes", () => {
+    // Posted on a Pacific evening, which is already the next day in UTC: the dated copy is filed
+    // under Valve's Pacific date, so that is where it has to be looked for.
+    const evening = { ...named, pub_date: "2026-09-30T02:10:00Z" };
+    const changelog = {
+      source: "forum",
+      title: "09-29-2026 Update",
+      pub_date: "2026-10-05T18:00:00Z",
+      content: `<p>- Toxic Bullets: ${"a longer changelog ".repeat(10)}</p>`,
+    };
+    for (const raw of [
+      [changelog, evening, previous],
+      [evening, changelog, previous],
+    ]) {
+      const { patches } = parsePatchFeed(raw);
+      expect(patches).toHaveLength(2);
+      expect(patches[0]).toMatchObject({
+        title: "2026-09-29 · City Never Sleeps",
+        ts: D("2026-09-30T02:10:00Z"),
+        content: changelog.content,
+      });
+    }
+  });
 });
 
 describe("excerptOf", () => {

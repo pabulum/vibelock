@@ -15,8 +15,10 @@ npm run dev   # http://localhost:5173/vibelock/  (note the /vibelock/ base path)
 
 ## Drive (headless browser)
 
-No Playwright in the repo. Install `playwright-core` in the scratchpad and drive the system
-Chromium:
+Playwright is already a devDependency (the browser smoke tests use it), so there is nothing to
+install. Run the driver script with the repo root as the working directory — e.g. keep it in the
+scratchpad and pipe it in with `node --input-type=module < /path/to/drive.mjs` — so
+`playwright-core` resolves from the repo's `node_modules`. Drive the system Chromium:
 
 ```js
 import { chromium } from "playwright-core";
@@ -36,8 +38,11 @@ const browser = await chromium.launch({
 - Item rows: `.item` (`.muted` = situational/optional, non-muted = core with a role chip
   prefixing the name text: CORE/VALUE/FILLER/PART/SELL). Overtime column: `section.phase.overtime`,
   sell line `.ot-sell`, group headers `h3.grouphdr`.
-- Headless Chromium reports no-hover, so item cards open via the tap path — verify hover-only
-  behavior by inspection or a real browser (see memory: headless-reports-no-hover).
+- The default context reports hover-capable, so item cards take the **hover** path:
+  `locator.hover()` opens one and moving the mouse away closes it (Escape/scroll dismissal is
+  deliberately not wired there). For the tap path, create the page from
+  `browser.newContext({ hasTouch: true, isMobile: true })` and use `locator.tap()`. More detail,
+  including simulating a no-anchor browser: memory `headless-reports-no-hover`.
 
 ## Gotchas
 

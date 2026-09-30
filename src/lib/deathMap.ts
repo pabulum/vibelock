@@ -125,6 +125,22 @@ export function teamSign(team: number): 1 | -1 {
   return team === 1 ? -1 : 1;
 }
 
+/**
+ * The baked layers, if they describe the map this game was played on — else null.
+ *
+ * Every layer (shading, zip-line routes, landmarks, depth norms) describes ONE layout, the one in
+ * play since `mapFrom`. A game from before it was played on a map that has since been rebuilt —
+ * City Never Sleeps moved every zip-line route by hundreds of units — and its deaths drawn over
+ * this one's shading and landmark names would be a confident wrong picture. A bake without the
+ * field predates the first rebuild it would have to mark, so it describes the only layout it knew.
+ */
+export function layoutFor<T extends { mapFrom?: number | null }>(
+  data: T | null,
+  playedAt: number,
+): T | null {
+  return data && playedAt >= (data.mapFrom ?? 0) ? data : null;
+}
+
 /** One of the focus player's deaths, placed for drawing. */
 export interface DeathMark {
   /** Index in the player's death list — stable key, and the order they happened in. */

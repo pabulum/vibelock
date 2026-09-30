@@ -9,7 +9,6 @@
 
 import { queryOptions } from "@tanstack/react-query";
 import * as v from "valibot";
-import { rankFilterUsable } from "../lib/badgeOutage";
 import { cacheGet, cachePut } from "../lib/idbCache";
 import { type PatchFeed, parsePatchFeed } from "../lib/patchFeed";
 import { FLOW_PHASE_COUNT, FLOW_PHASE_INTERVAL_S } from "../lib/phases";
@@ -640,10 +639,7 @@ export interface RankWindow {
   maxBadge?: number;
 }
 
-function applyRank(params: URLSearchParams, q: RankWindow & TimeWindow): void {
-  // Upstream stopped reporting the field this filters on (see lib/badgeOutage — temporary), so a
-  // window that reaches into the outage has to ask for every rank or it gets nothing back at all.
-  if (!rankFilterUsable(q)) return;
+function applyRank(params: URLSearchParams, q: RankWindow): void {
   params.set("min_average_badge", String(q.minBadge));
   if (q.maxBadge !== undefined)
     params.set("max_average_badge", String(q.maxBadge));
@@ -1021,13 +1017,10 @@ export function getPlayerMetrics(
 ): Promise<PlayerMetrics> {
   const params = new URLSearchParams();
   if (q.heroId !== undefined) params.set("hero_ids", String(q.heroId));
-  // Same temporary suppression as applyRank — see lib/badgeOutage.
-  if (rankFilterUsable(q)) {
-    if (q.minBadge !== undefined)
-      params.set("min_average_badge", String(q.minBadge));
-    if (q.maxBadge !== undefined)
-      params.set("max_average_badge", String(q.maxBadge));
-  }
+  if (q.minBadge !== undefined)
+    params.set("min_average_badge", String(q.minBadge));
+  if (q.maxBadge !== undefined)
+    params.set("max_average_badge", String(q.maxBadge));
   if (q.accountIds?.length) params.set("account_ids", q.accountIds.join(","));
   // The ladder side is a population and gets scoped to Ranked; the account-scoped side is one
   // player's own games and deliberately isn't — see applyMode.
@@ -1041,7 +1034,7 @@ export function getPlayerMetrics(
 
 const RawPatchesSchema = v.array(RawPatchSchema);
 const RawRankedSeasonsSchema = v.array(RawRankedSeasonSchema);
-const PATCHES_KEY = ["assets", "patches", "v4"];
+const PATCHES_KEY = ["assets", "patches", "v5"];
 
 const EMPTY_FEED: PatchFeed = { patches: [], news: [] };
 

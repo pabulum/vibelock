@@ -284,7 +284,10 @@ author stamp on exported builds.
 The Lab holds statistics that the live analytics API cannot answer, because they need per-match soul
 trajectories. A nightly GitHub Action samples ~12,000 matches a day across 12 time bins (so the
 sample spans EU/NA/Asia peaks), keeps a rolling 30-day window of gzipped NDJSON shards as release
-assets, and refits a win-probability surface over it.
+assets, and refits a win-probability surface over it. The window never reaches back past the last
+patch that changed the economy: City Never Sleeps (2026-09-29) rebuilt the map and its soul sources,
+so games from before it are dropped rather than blended, and the window refills night by night —
+every statistic below keeps its own sample floor, so a thin week shows less rather than noise.
 
 The surface gives a win probability for any (team soul lead, game time) pair. From it:
 

@@ -29,10 +29,20 @@ import {
   depthInsight,
   depthRead,
   landmarks,
+  layoutFor,
   worldToUnit,
 } from "../lib/deathMap";
 
 const SIZE = 260; // drawing box, px in viewBox units
+
+/** "3 days", or hours while the bake's window is still under a day (a young map layout). */
+function spanOf(days: number): string {
+  const [n, unit] =
+    days >= 1
+      ? [Math.round(days), "day"]
+      : [Math.max(1, Math.round(days * 24)), "hour"];
+  return `${n} ${unit}${n === 1 ? "" : "s"}`;
+}
 
 const mmss = (s: number) =>
   `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -42,6 +52,7 @@ export function DeathMap({
   data,
   heroName,
   won,
+  playedAt,
 }: {
   marks: DeathMark[];
   /** The baked population layer, or null — the map still draws your deaths without it. */
@@ -49,15 +60,21 @@ export function DeathMap({
   heroName: string;
   /** Whether the focus player won. Only used to pick which population to compare depth against. */
   won: boolean;
+  /** When the game started, in Unix seconds — which map layout its deaths belong to. */
+  playedAt: number;
 }) {
   // null = every phase. A filter, not a toggle per series: it re-slices both layers at once so the
   // underlay always describes the same span as the points drawn over it.
   const [phase, setPhase] = useState<number | null>(null);
 
+  // A game from before the baked layout gets its deaths on a bare field (see layoutFor). The phase
+  // buttons still come from `data`: phases are clock time, not geography.
+  const layout = layoutFor(data, playedAt);
+
   const shown = phase === null ? marks : marks.filter((m) => m.phase === phase);
   const lms =
-    data?.frame && data.frame.tier1.length > 0
-      ? landmarks(data.frame, data.halfExtent)
+    layout?.frame && layout.frame.tier1.length > 0
+      ? landmarks(layout.frame, layout.halfExtent)
       : [];
   const cluster = deathCluster(shown);
   const insight = clusterInsight(cluster, shown.length, lms);
@@ -67,7 +84,7 @@ export function DeathMap({
   const depth = depthInsight(
     depthRead(
       marks,
-      (data?.phases ?? []).map((p) =>
+      (layout?.phases ?? []).map((p) =>
         won ? (p.depth?.won ?? null) : (p.depth?.lost ?? null),
       ),
     ),
@@ -77,10 +94,10 @@ export function DeathMap({
   // which is an approximation (each was normalized to its own peak) — acceptable for an underlay
   // whose only job is to show where the map is busy, and re-normalized below so it can't blow out.
   const density = (() => {
-    if (!data) return null;
-    const grids = (phase === null ? data.phases : [data.phases[phase]])
+    if (!layout) return null;
+    const grids = (phase === null ? layout.phases : [layout.phases[phase]])
       .filter(Boolean)
-      .map((p) => decodeDensity(p.grid, data.size, data.halfExtent))
+      .map((p) => decodeDensity(p.grid, layout.size, layout.halfExtent))
       // Predicate, not a plain filter: the averaging below reads .cells/.size off every grid.
       .filter((g): g is DeathDensity => g !== null);
     if (grids.length === 0) return null;
@@ -149,12 +166,12 @@ export function DeathMap({
               a density field shows where the game is played but not what the place looks like.
               Under the density so it never competes with the data. No rotation: the set of three
               routes maps onto itself under the same 180° rotation the rest of the frame uses. */}
-          {data?.ziplines && data.ziplines.length > 0 && (
+          {layout?.ziplines && layout.ziplines.length > 0 && (
             <g className="dmzip">
-              {data.ziplines.map((path) => {
+              {layout.ziplines.map((path) => {
                 const d = path
                   .map(([wx, wy], j) => {
-                    const p = worldToUnit(wx, wy, data.halfExtent);
+                    const p = worldToUnit(wx, wy, layout.halfExtent);
                     return `${j ? "L" : "M"}${(p.u * SIZE).toFixed(1)} ${(p.v * SIZE).toFixed(1)}`;
                   })
                   .join(" ");
@@ -301,7 +318,9 @@ export function DeathMap({
         </svg>
 
         <figcaption className="dmlegend">
-          <span className="lg dens">where deaths happen at this rank</span>
+          {density && (
+            <span className="lg dens">where deaths happen at this rank</span>
+          )}
           <span className="lg you">your deaths</span>
           {shown.some((m) => m.from) && (
             <span className="lg from">killer's position</span>
@@ -310,7 +329,7 @@ export function DeathMap({
           {lms.length > 0 && (
             <span className="lg lm">tier-1 / tier-2 / base</span>
           )}
-          {(data?.ziplines?.length ?? 0) > 0 && (
+          {(layout?.ziplines?.length ?? 0) > 0 && (
             <span className="lg zip">zip-line loop</span>
           )}
         </figcaption>
@@ -323,13 +342,20 @@ export function DeathMap({
           left is the one thing neither can say — that agreeing with the shading is the ordinary
           case, not a finding — plus the provenance every panel carries. */}
       <p className="matchnote">
-        {data && (
+        {layout ? (
           <>
-            Population from {data.days} day{data.days === 1 ? "" : "s"} of
-            ranked play ·{" "}
+            Population from {spanOf(layout.days)} of ranked play · the shading
+            is where deaths are common.
           </>
+        ) : data?.mapFrom ? (
+          <>
+            Played before the map was rebuilt on{" "}
+            {new Date(data.mapFrom * 1000).toISOString().slice(0, 10)}, so there
+            is no population to read it against.
+          </>
+        ) : (
+          "the shading is where deaths are common."
         )}
-        the shading is where deaths are common.
       </p>
     </div>
   );

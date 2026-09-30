@@ -1,5 +1,6 @@
 // The Lab's data file: wp-stats.json, baked nightly by the harvest workflow (scripts/
-// bake-wp-stats.mjs) over the rolling ~30-day match window on the repo's `data` branch.
+// bake-wp-stats.mjs) over the rolling ~30-day match window, cut at the last economy-changing patch
+// (ECONOMY_FROM_S there), on the repo's `data` branch.
 // Unlike everything in deadlock.ts this is not a live analytics query — it's a static
 // artifact refit once per day, so one fetch per session is plenty (staleTime Infinity in
 // the query cache; a failure isn't cached, so a reopen retries).

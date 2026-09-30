@@ -16,24 +16,55 @@
 // half had Eternus at 3%. That is a boundary by exactly the logic that makes a patch one, and it
 // is the split deadlock-api's own tool draws its patch list on ("Before Beta Season 1" /
 // "Beta Season 1"). Seasons the game hasn't defined yet — the next season, a mid-season split —
-// become boundaries here the moment they appear in that asset, with no code change.
+// become boundaries here with no code change, but only once they START: the asset schedules them
+// ahead (on 2026-09-29 it already carried Split 2, opening 10-08), and a boundary in the future is
+// a window with nothing in it — which, as the newest entry, is everyone's default view.
 //
 // So 2026-07-30's "Matchmaking Update" is a boundary after all, but not because of its title: it
 // carries no MM-DD-YYYY and never will. It is the announcement the ranked season *matched*, and
 // the title rule below is untouched by it.
+//
+// A NAMED UPDATE is the one exception the title rule takes. Valve announces its major updates by
+// name, not date — "City Never Sleeps" (2026-09-29: rebuilt map and neutrals, six heroes) — and
+// nothing else in the feed marks one: no date, no category, no tag (Steam's own API tags the minor
+// updates `patchnotes` and this post nothing at all). So they are listed by name in
+// NAMED_UPDATES, and the next one needs a line there. The boundary is the Steam post's own
+// moment, not a midnight: it is the Forum that re-stamps pub_date, while the Steam copy goes up
+// as the build ships — on 2026-09-29 match starts (/v1/sql) fell from ~24/min to ~1/min as the
+// servers cycled at 20:25 UTC, and the post is stamped 20:25:11 — and a midnight key would have
+// filed that day's twenty hours of old-build games under the new map.
 
 import type { RawPatch } from "../api/schemas";
 import type { NewsItem, Patch, SeasonInterval } from "../types";
 import { stripHtml } from "./patchChanges";
 
 export interface PatchFeed {
-  /** Newest-first, one per day, each with a trustworthy 00:00-UTC boundary. */
+  /** Newest-first, one per day, each with a trustworthy boundary: 00:00 UTC of a dated patch, or
+   * the moment a named update or a ranked season went live. */
   patches: Patch[];
   /** Newest-first, patches and undated announcements merged. */
   news: NewsItem[];
 }
 
 const TITLE_DATE = /(\d{2})-(\d{2})-(\d{4})/; // MM-DD-YYYY
+
+/** Major updates Valve names instead of dating, by the exact title of their Steam post. */
+const NAMED_UPDATES = new Set(["City Never Sleeps"]);
+
+/** Valve dates changelogs in Pacific time — " Minor Update - 06-11-2026" went up at 00:59 UTC on
+ * the 12th — so a named update's dated copy, if the Forum ever files one, is keyed by this. */
+const PACIFIC = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Los_Angeles",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+function pacificDayKeyOf(ts: number): string {
+  const part = Object.fromEntries(
+    PACIFIC.formatToParts(ts * 1000).map((p) => [p.type, p.value]),
+  );
+  return `${part.year}-${part.month}-${part.day}`;
+}
 
 /** How much of a body the strip shows before the "read at source" link takes over. */
 const EXCERPT_MAX = 180;
@@ -83,10 +114,12 @@ export function excerptOf(html: string | undefined): string | undefined {
 }
 
 /** Split the raw feed into its patch list and its news list, opening a window boundary at each
- * ranked-season interval as well. Pure — the query layer only fetches. */
+ * ranked-season interval that has started by `nowSec` as well. Pure — the query layer only
+ * fetches, and the clock is a parameter. */
 export function parsePatchFeed(
   raw: RawPatch[],
   seasons: SeasonInterval[] = [],
+  nowSec = Date.now() / 1000,
 ): PatchFeed {
   const byDay = new Map<string, Patch & { newsTitle: string; link?: string }>();
   // `content` rides along only so a season can adopt its announcement's notes below; it is dropped
@@ -103,8 +136,28 @@ export function parsePatchFeed(
       // is; without a parseable one the entry can't be placed on the timeline at all, so drop it.
       const ms = p.pub_date ? Date.parse(p.pub_date) : NaN;
       if (!title || Number.isNaN(ms)) continue;
+      const name = title.trim();
+      if (p.source === "steam" && NAMED_UPDATES.has(name)) {
+        // Filed under its Pacific day, where a dated copy of the same release would land: either
+        // arrival order leaves one entry, at this post's moment, carrying the longer notes.
+        const ts = Math.floor(ms / 1000);
+        const dayKey = pacificDayKeyOf(ts);
+        const dated = byDay.get(dayKey);
+        const notes =
+          dated?.content && dated.content.length > (content?.length ?? 0)
+            ? dated
+            : { content, link: p.link };
+        byDay.set(dayKey, {
+          title: `${dayKey} · ${name}`,
+          newsTitle: name,
+          ts,
+          content: notes.content,
+          link: notes.link,
+        });
+        continue;
+      }
       undated.push({
-        title: title.trim(),
+        title: name,
         ts: Math.floor(ms / 1000),
         isPatch: false,
         link: p.link,
@@ -120,7 +173,8 @@ export function parsePatchFeed(
     if (existing) {
       // Same patch from the other feed: keep whichever copy carries the notes text (Steam), so the
       // changelog is available for the touched-item tag (see lib/patchChanges) — and, now, so the
-      // news excerpt is the real lede rather than the Forum copy's link-unfurl boilerplate.
+      // news excerpt is the real lede rather than the Forum copy's link-unfurl boilerplate. The
+      // entry's boundary stays put, which is what keeps a named update's precise one.
       if (content && content.length > (existing.content?.length ?? 0)) {
         existing.content = content;
         existing.link = p.link;
@@ -159,6 +213,7 @@ export function parsePatchFeed(
   //      even with no story attached to it, so the strip gets a bare entry for it.
   const settled: SeasonInterval[] = [];
   for (const s of seasons) {
+    if (s.startTs > nowSec) continue; // scheduled, not started — see the header
     const onPatch = nearestEntry(dated, s.startTs);
     const announcement = onPatch ? undefined : nearestEntry(undated, s.startTs);
     const startTs = onPatch?.ts ?? announcement?.ts ?? s.startTs;

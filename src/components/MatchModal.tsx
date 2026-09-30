@@ -684,6 +684,7 @@ export function MatchModal({
                 data={deathMap}
                 heroName={heroName(a.focus.hero_id)}
                 won={a.won}
+                playedAt={a.startTime}
               />
             )}
 

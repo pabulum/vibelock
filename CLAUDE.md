@@ -29,11 +29,17 @@ docs/METHODOLOGY.md before touching anything statistical.
   much tighter rate family — never add retries there (see comments in api/deadlock.ts).
 - Build generation: src/lib/buildgen/* modules behind the src/lib/buildGenerator.ts
   facade. Statistical primitives live in src/lib/stats.ts and are unit-tested.
+- **Patch boundaries** (src/lib/patchFeed.ts) come from three places: an MM-DD-YYYY in a
+  /v2/patches title, a ranked season or split once it has *started*, and `NAMED_UPDATES`.
+  Valve names its major updates instead of dating them ("City Never Sleeps"), so the next
+  one needs its Steam post's title added there — nothing in the feed marks it. If it also
+  rebuilds the map or the soul economy, move `MAP_EPOCH_S` (scripts/bake-death-map.mjs) and
+  `ECONOMY_FROM_S` (scripts/bake-wp-stats.mjs) to the same moment.
 - URL is the source of truth for selection state (src/lib/urlState.ts); shared links
   must reproduce the sender's view.
 - **Design system: src/tokens.css** — the whole palette, type scale, and geometry, as
   semantic tokens (`--paper`/`--ink`/`--rule`, `--pos`/`--neg`/`--warn`/`--spirit`,
-  `--accent-ui`, `--r-sm`). Component stylesheets must never reach for a raw hex; light
+  `--accent-ui`). Component stylesheets must never reach for a raw hex; light
   mode is `light-dark()` on those tokens and comes free. The look is a technical document:
   hairline rules instead of cards, **no radii at all** (only `--r-pill`, for portraits; the UA
   reset in App.css zeroes what Firefox puts on form controls), mono (IBM Plex Mono) for

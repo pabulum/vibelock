@@ -60,6 +60,19 @@ const HALF_EXTENT = Number(process.env.HALF_EXTENT || 11520);
 /** Window for the frame query. The landmarks are fixed geometry, so this only needs enough deaths
  * to resolve a mode — hours, not days, and a short window keeps the query cheap. */
 const FRAME_HOURS = Number(process.env.FRAME_HOURS || 6);
+/**
+ * The first moment of the map layout in play: City Never Sleeps (2026-09-29, its Steam post's own
+ * timestamp) rebuilt the map, and every zipline route moved — ~430–550 world units on average, up
+ * to ~1,470. A death from before it was on a different map, so neither window below reaches past
+ * it, and the asset carries it (`mapFrom`) so the client can tell a game from the old layout
+ * apart. The next rebuild moves it. Mirrors nothing in src/ — the client reads it from the asset.
+ */
+const MAP_EPOCH_S = Date.UTC(2026, 8, 29, 20, 25, 11) / 1000;
+const NOW_S = Math.floor(Date.now() / 1000);
+const DEATHS_FROM_S = Math.max(NOW_S - DAYS * 86400, MAP_EPOCH_S);
+const FRAME_FROM_S = Math.max(NOW_S - FRAME_HOURS * 3600, MAP_EPOCH_S);
+/** The window the population actually covers — short of DAYS while the layout is younger. */
+const SPAN_DAYS = Math.round(((NOW_S - DEATHS_FROM_S) / 86400) * 10) / 10;
 
 /** Phase columns, mirroring src/lib/phases.ts (600s × 4). scripts/ shares no code with src/, so
  * this is a literal — the same arrangement as RANKED_MODE_FROM_S in the harvester. */
@@ -180,7 +193,7 @@ SELECT obj, owner, gx, gy, count() AS n FROM (
     arrayMap(t -> t.1, death_details.death_pos) AS dxs,
     arrayMap(t -> t.2, death_details.death_pos) AS dys
    FROM match_player
-   WHERE start_time > now() - INTERVAL ${FRAME_HOURS} HOUR AND match_mode = 'Ranked'
+   WHERE start_time > toDateTime(${FRAME_FROM_S}) AND match_mode = 'Ranked'
   ) ARRAY JOIN gts AS gt, dxs AS dx, dys AS dy
   WHERE dx != 0 OR dy != 0
  )
@@ -326,7 +339,7 @@ FROM (
     arrayMap(t -> t.1, death_details.death_pos) AS dxs,
     arrayMap(t -> t.2, death_details.death_pos) AS dys
   FROM match_player
-  WHERE start_time > now() - INTERVAL ${DAYS} DAY
+  WHERE start_time > toDateTime(${DEATHS_FROM_S})
     AND match_mode = 'Ranked'
 ) ARRAY JOIN gts AS gt, dxs AS dx, dys AS dy
 WHERE gt > 0
@@ -434,7 +447,9 @@ const phases = PHASE_LABELS.map((label, i) => {
 
 const out = {
   generatedAt: new Date().toISOString(),
-  days: DAYS,
+  days: SPAN_DAYS,
+  /** Start of the map layout every layer here describes (MAP_EPOCH_S). */
+  mapFrom: MAP_EPOCH_S,
   size: GRID,
   /** World box the grid covers; a point maps to a cell by ((v + halfExtent) / cell) | 0. */
   halfExtent: HALF_EXTENT,
@@ -458,7 +473,7 @@ writeFileSync(OUT, `${JSON.stringify(out)}\n`);
 
 const total = totals.reduce((a, b) => a + b, 0);
 console.log(
-  `wrote ${OUT}: ${total.toLocaleString()} deaths over ${DAYS}d, ${GRID}×${GRID} grid` +
+  `wrote ${OUT}: ${total.toLocaleString()} deaths over ${SPAN_DAYS}d, ${GRID}×${GRID} grid` +
     (dropped ? `, ${dropped.toLocaleString()} out of bounds` : ""),
 );
 for (const p of phases)

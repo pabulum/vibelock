@@ -11,6 +11,7 @@ import {
   depthInsight,
   depthRead,
   landmarks,
+  layoutFor,
   type MapFrame,
   placeName,
   teamSign,
@@ -260,6 +261,25 @@ describe("teamSign", () => {
     const marks = deathMarks([death(600, 4000, 3000)], H, teamSign(1));
     expect(marks[0].x).toBe(-4000);
     expect(marks[0].y).toBe(-3000);
+  });
+});
+
+describe("layoutFor", () => {
+  // City Never Sleeps' own moment — the first bake to carry the field starts its layout here.
+  const baked = { mapFrom: 1_790_713_511 };
+
+  it("keeps the layers for a game played on the baked layout", () => {
+    expect(layoutFor(baked, 1_790_713_511)).toBe(baked);
+  });
+
+  it("drops them for a game from before the rebuild", () => {
+    expect(layoutFor(baked, 1_790_713_510)).toBeNull();
+  });
+
+  it("trusts a bake without the field — it only ever knew one layout", () => {
+    const old = { mapFrom: undefined };
+    expect(layoutFor(old, 0)).toBe(old);
+    expect(layoutFor(null, 1_790_713_511)).toBeNull();
   });
 });
 

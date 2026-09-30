@@ -25,6 +25,25 @@ const SHARDS_DIR = process.env.SHARDS_DIR || "_data/shards";
 const OUT = process.env.OUT || "_data/wp-stats.json";
 const MIN_ITEM_N = 2000; // ~±1pt excess SE — below this the number is mostly noise
 const MIN_HERO_N = 5000;
+/**
+ * The economy this bake describes starts here. City Never Sleeps (2026-09-29, the Steam post's own
+ * moment) rebuilt the map — new neutral camps, Tough Crates, the Bell Tower hotspot, buff statues
+ * with new permanent stats — so souls/min, where souls come from, and what a soul lead is worth all
+ * moved at once. Earlier matches are SKIPPED, not blended: the window restarts at the patch and
+ * refills as nights land, and every block's own sample floor (MIN_ITEM_N, PACE_MIN_N, FARM_MIN_N,
+ * LANE_MIN_N) keeps the thin first nights from publishing noise. The next economy-changing patch
+ * moves it; bake-death-map.mjs keeps its own copy of the same moment (scripts share no code).
+ */
+const ECONOMY_FROM_S = Number(
+  process.env.ECONOMY_FROM_S || Date.UTC(2026, 8, 29, 20, 25, 11) / 1000,
+);
+/** A shard row's start, from ClickHouse's uncast "YYYY-MM-DD hh:mm:ss" (UTC — see the harvester's
+ * header on why it stays uncast), or unix seconds should that ever change. NaN when absent, which
+ * the epoch check treats as too old. */
+const startS = (m) =>
+  typeof m.start_time === "number"
+    ? m.start_time
+    : Date.parse(`${String(m.start_time).replace(" ", "T")}Z`) / 1000;
 
 const TBINS = [0, 360, 720, 1080, 1440, 1800, 2400, Infinity]; // bin k = [TBINS[k], TBINS[k+1])
 const NB = TBINS.length - 1;
@@ -76,6 +95,9 @@ const pIid = [],
   pLead = [],
   pWon = []; // purchase events
 let nMatches = 0;
+let preEpoch = 0;
+let firstS = Infinity;
+let lastS = -Infinity;
 
 // Soul-economy norms: per-source gold-per-minute distributions, per (hero, rank tier). Populated
 // from the harvester's economy subsample (players carrying `gold_src`); absent players are skipped.
@@ -229,6 +251,13 @@ for (const f of shardFiles) {
       m.players?.length !== 12
     )
       continue;
+    const st = startS(m);
+    if (!(st >= ECONOMY_FROM_S)) {
+      preEpoch++;
+      continue;
+    }
+    firstS = Math.min(firstS, st);
+    lastS = Math.max(lastS, st);
     nMatches++;
     const dur = m.duration_s;
     // team0-minus-team1 net worth on a 30s grid; players' sampled series are ~3min apart
@@ -387,8 +416,17 @@ for (const f of shardFiles) {
   }
 }
 console.log(
-  `${nMatches} matches, ${obsY.length} WP obs, ${pWon.length} purchases from ${shardFiles.length} shards`,
+  `${nMatches} matches, ${obsY.length} WP obs, ${pWon.length} purchases from ${shardFiles.length} shards` +
+    ` (${preEpoch} from before the economy epoch skipped)`,
 );
+// Nothing past the epoch means a misconfigured epoch or a window of stale shards — never a real
+// ladder — and an empty fit would overwrite yesterday's good file with NaNs.
+if (nMatches === 0) {
+  console.error(
+    `FATAL: no harvested match starts at or after ECONOMY_FROM_S (${new Date(ECONOMY_FROM_S * 1000).toISOString()}).`,
+  );
+  process.exit(1);
+}
 
 // --- Per-bin logistic fit (IRLS on [1, lead/sigma]) ---
 
@@ -727,8 +765,9 @@ for (let i = 0; i < NH; i++)
 const out = {
   generatedAt: new Date().toISOString(),
   window: {
-    fromDay: shardFiles[0].slice(0, 10),
-    toDay: shardFiles.at(-1).slice(0, 10),
+    // From the matches actually used, not the shard names: the epoch can cut a shard in half.
+    fromDay: new Date(firstS * 1000).toISOString().slice(0, 10),
+    toDay: new Date(lastS * 1000).toISOString().slice(0, 10),
     matches: nMatches,
     purchases: pWon.length,
   },

@@ -617,6 +617,8 @@ export function deathInsights(d: DeathsSummary, heroName?: string): string[] {
 
 export interface MatchAnalysis {
   matchId: number;
+  /** Unix seconds — which map layout the game was played on (see api/deathMap `mapFrom`). */
+  startTime: number;
   durationS: number;
   focus: MatchPlayer;
   won: boolean;
@@ -652,6 +654,7 @@ export function analyzeMatch(
   );
   return {
     matchId: match.match_id,
+    startTime: match.start_time,
     durationS: match.duration_s,
     focus,
     won: match.winning_team === focus.team,

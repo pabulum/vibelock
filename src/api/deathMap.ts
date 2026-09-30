@@ -52,7 +52,13 @@ const AnchorSchema = v.object({
 
 const DeathMapSchema = v.object({
   generatedAt: v.string(),
+  /** How much play the population covers — fractional, and short of the bake's usual window, while
+   * the map layout is younger than it. */
   days: v.number(),
+  /** Unix seconds the map layout every layer here describes came into play. A game from before it
+   * was played on a map that has since been rebuilt, and gets none of these layers. Nullish because
+   * bakes before 2026-09-29 didn't carry it — and they describe the only layout they knew. */
+  mapFrom: v.nullish(v.number()),
   size: v.number(),
   /** Half-width of the square world box the grid covers. A point maps to a cell by
    * `((v + halfExtent) / cell) | 0`. Square on purpose — see the bake script for why fitting each

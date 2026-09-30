@@ -231,13 +231,16 @@ const captures = [
     file: "patches.json",
     url: `${BASE}/v2/patches`,
     // Title carries the MM-DD-YYYY that keys a patch window; pub_date + link are what the news
-    // strip needs for the entries with no date in their title. `content` stays out — it's the
-    // whole changelog on every row, which would dwarf every other fixture, and both the
-    // touched-item tag and the news excerpt degrade cleanly without it.
+    // strip needs for the entries with no date in their title, and `source` is what lets a named
+    // update's pub_date be a boundary. `content` stays out — it's the whole changelog on every
+    // row, which would dwarf every other fixture, and both the touched-item tag and the news
+    // excerpt degrade cleanly without it.
     project: (rows) =>
       rows
         .slice(0, 40)
-        .map((p) => pick(p, { title: true, pub_date: true, link: true })),
+        .map((p) =>
+          pick(p, { source: true, title: true, pub_date: true, link: true }),
+        ),
   },
   {
     // Ranked-season intervals: the boundaries the patch list is split on (lib/patchFeed). The
@@ -321,8 +324,8 @@ const captures = [
   },
   {
     // Ladder distribution the Match view benchmarks a game against (lib/fundamentals). Unfiltered
-    // by rank on purpose — see the badge outage note in lib/badgeOutage; a rank-filtered capture
-    // would come back empty right now and bake an empty fixture.
+    // by rank: the mock routes by pathname, so this one capture answers every floor the app asks
+    // for, and the pooled ladder is the one slice that can't come back thin.
     file: "playerMetrics.json",
     url: `${BASE}/v1/analytics/player-stats/metrics?hero_ids=${HERO_ID}`,
   },
